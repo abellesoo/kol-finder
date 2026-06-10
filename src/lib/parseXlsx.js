@@ -1,0 +1,105 @@
+import * as XLSX from 'xlsx'
+
+/**
+ * Parse Apify Instagram scraper xlsx.
+ * Returns an array of influencer objects, one per unique ownerUsername.
+ */
+export function parseApifyXlsx(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: null })
+
+        // Group posts by ownerUsername
+        const byOwner = {}
+        for (const row of rows) {
+          const username = row['ownerUsername']
+          if (!username) continue
+          if (!byOwner[username]) {
+            byOwner[username] = {
+              username,
+              fullName: row['ownerFullName'] || '',
+              posts: [],
+            }
+          }
+          byOwner[username].posts.push(row)
+        }
+
+        // Aggregate per influencer
+        const influencers = Object.values(byOwner).map((inf) => {
+          const posts = inf.posts
+          const n = posts.length
+
+          // Engagement
+          const totalLikes = posts.reduce((s, p) => s + (Number(p.likesCount) || 0), 0)
+          const totalComments = posts.reduce((s, p) => s + (Number(p.commentsCount) || 0), 0)
+          const avgLikes = Math.round(totalLikes / n)
+          const avgComments = Math.round(totalComments / n)
+
+          // Content format
+          const videoTypes = ['video', 'clip', 'reel']
+          const videoPosts = posts.filter((p) =>
+            videoTypes.includes((p['type'] || p['productType'] || '').toLowerCase())
+          )
+          const videoRatio = videoPosts.length / n
+
+          // Collect all captions
+          const captions = posts
+            .map((p) => p['caption'] || '')
+            .filter(Boolean)
+            .join(' ')
+
+          // Collect all hashtags
+          const hashtags = []
+          for (const p of posts) {
+            for (let i = 0; i <= 29; i++) {
+              const tag = p[`hashtags/${i}`]
+              if (tag) hashtags.push(tag.toLowerCase())
+            }
+          }
+
+          // Location signals
+          const locationNames = posts
+            .map((p) => p['locationName'])
+            .filter(Boolean)
+            .map((l) => l.toLowerCase())
+
+          // Paid partnership count
+          const paidCount = posts.filter((p) => p['paidPartnership'] === true || p['paidPartnership'] === 'TRUE').length
+
+          // Deduplicated hashtags
+          const uniqueHashtags = [...new Set(hashtags)]
+
+          return {
+            username: inf.username,
+            fullName: inf.fullName,
+            postCount: n,
+            avgLikes,
+            avgComments,
+            totalEngagement: avgLikes + avgComments,
+            videoRatio: Math.round(videoRatio * 100),
+            hasVideos: videoRatio > 0,
+            captions,
+            hashtags: uniqueHashtags.slice(0, 40),
+            locationNames,
+            paidCount,
+            // Raw for AI
+            sampleCaptions: posts.slice(0, 5).map((p) => p['caption'] || '').filter(Boolean),
+          }
+        })
+
+        // Sort by total engagement desc
+        influencers.sort((a, b) => b.totalEngagement - a.totalEngagement)
+        resolve(influencers)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
+}

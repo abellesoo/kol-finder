@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-paper text-ink antialiased;
+  }
+}
+
+@layer components {
+  .score-badge {
+    @apply inline-flex items-center justify-center w-10 h-10 rounded-full font-mono text-sm font-medium;
+  }
+  .score-high {
+    @apply bg-sage text-white;
+  }
+  .score-mid {
+    @apply bg-accent text-white;
+  }
+  .score-low {
+    @apply bg-mist text-ink/50;
+  }
+  .tag {
+    @apply inline-block px-2 py-0.5 rounded text-xs font-mono bg-mist text-ink/70;
+  }
+  .tag-video {
+    @apply bg-accent-dim text-ink;
+  }
+  .tag-hk {
+    @apply bg-green-100 text-green-800;
+  }
+  .tag-bot {
+    @apply bg-red-100 text-red-700;
+  }
+}

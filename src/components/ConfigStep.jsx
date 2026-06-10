@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings, Eye, EyeOff, ChevronRight } from 'lucide-react'
+import { Settings, ChevronRight } from 'lucide-react'
 
 const NICHE_OPTIONS = [
   { id: 'beauty', label: '💄 Beauty & Makeup' },
@@ -11,8 +11,6 @@ const NICHE_OPTIONS = [
 ]
 
 export default function ConfigStep({ fileName, influencerCount, onStart }) {
-  const [apiKey, setApiKey] = useState(import.meta.env.VITE_ANTHROPIC_API_KEY || '')
-  const [showKey, setShowKey] = useState(false)
   const [niches, setNiches] = useState(['beauty', 'skincare'])
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [requireVideo, setRequireVideo] = useState(true)
@@ -24,11 +22,10 @@ export default function ConfigStep({ fileName, influencerCount, onStart }) {
     )
   }
 
-  const canStart = apiKey.trim().length > 0 && niches.length > 0
+  const canStart = niches.length > 0
 
   const handleStart = () => {
     onStart({
-      apiKey: apiKey.trim(),
       niches: niches.map((id) => NICHE_OPTIONS.find((n) => n.id === id)?.label || id),
       locationTarget,
       requireVideo,
@@ -111,7 +108,7 @@ export default function ConfigStep({ fileName, influencerCount, onStart }) {
         </section>
 
         {/* Min engagement */}
-        <section className="mb-8">
+        <section className="mb-10">
           <label className="block text-xs font-mono tracking-widest text-ink/40 uppercase mb-3">
             Minimum avg likes per post
           </label>
@@ -125,31 +122,6 @@ export default function ConfigStep({ fileName, influencerCount, onStart }) {
             />
             <span className="text-xs text-ink/40">{minEngagement === 0 ? 'No minimum' : `≥ ${minEngagement.toLocaleString()} likes`}</span>
           </div>
-        </section>
-
-        {/* API Key */}
-        <section className="mb-10">
-          <label className="block text-xs font-mono tracking-widest text-ink/40 uppercase mb-3">
-            Anthropic API key
-          </label>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-ant-..."
-              className="w-full px-3 py-2.5 pr-10 border border-mist rounded-lg font-mono text-sm bg-white focus:outline-none focus:border-accent"
-            />
-            <button
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
-            >
-              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          <p className="mt-1.5 text-xs text-ink/30 font-mono">
-            Or set VITE_ANTHROPIC_API_KEY in your .env file · Never committed to git
-          </p>
         </section>
 
         <button

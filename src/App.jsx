@@ -40,7 +40,7 @@ export default function App() {
       const batchSize = 5
       for (let i = 0; i < toScore.length; i += batchSize) {
         const batch = toScore.slice(i, i + batchSize)
-        const scored = await scoreInfluencers(batch, cfg, cfg.apiKey)
+        const scored = await scoreInfluencers(batch, cfg)
         allResults.push(...scored)
         setProgress((p) => ({ ...p, done: Math.min(i + batchSize, toScore.length) }))
       }
@@ -81,7 +81,7 @@ export default function App() {
                 {progress.done} / {progress.total} accounts
               </p>
               <p className="text-xs text-ink/30 mt-1">
-                Claude is analysing captions, hashtags, and engagement signals...
+                Analysing captions, hashtags, and engagement signals...
               </p>
             </>
           )}

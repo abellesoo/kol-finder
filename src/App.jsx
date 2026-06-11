@@ -7,20 +7,31 @@ import { scoreInfluencers } from './lib/scoreInfluencers'
 
 export default function App() {
   const [step, setStep] = useState('upload') // upload | config | scoring | results
-  const [file, setFile] = useState(null)
+  const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
   const [results, setResults] = useState([])
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
 
-  const handleFile = async (f) => {
-    setFile(f)
+  const handleFiles = async (files) => {
+    setFileNames(files.map((f) => f.name))
     try {
-      const parsed = await parseApifyXlsx(f)
-      setInfluencers(parsed)
+      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
+      // Merge and deduplicate by username, keeping highest engagement version
+      const merged = {}
+      for (const batch of allParsed) {
+        for (const inf of batch) {
+          const existing = merged[inf.username]
+          if (!existing || inf.totalEngagement > existing.totalEngagement) {
+            merged[inf.username] = inf
+          }
+        }
+      }
+      const deduplicated = Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
+      setInfluencers(deduplicated)
       setStep('config')
     } catch (err) {
-      alert('Failed to parse file: ' + err.message)
+      alert('Failed to parse file(s): ' + err.message)
     }
   }
 
@@ -92,10 +103,10 @@ export default function App() {
 
   return (
     <>
-      {step === 'upload' && <UploadStep onFile={handleFile} />}
+      {step === 'upload' && <UploadStep onFiles={handleFiles} />}
       {step === 'config' && (
         <ConfigStep
-          fileName={file?.name}
+          fileNames={fileNames}
           influencerCount={influencers.length}
           onStart={handleStart}
         />

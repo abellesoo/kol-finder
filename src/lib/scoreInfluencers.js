@@ -12,7 +12,9 @@ const HK_SIGNALS = [
   'causeway bay', 'mong kok', 'tsim sha tsui', 'central', 'admiralty', 'tst', 'cwb',
   '銅鑼灣', '旺角', '尖沙咀', '中環', '灣仔', 'cantonese', '廣東話', '粵語',
 ]
-const TW_SIGNALS = ['台灣', 'taiwan', '台北', 'taipei', '高雄', '台中', 'nt$']
+const TW_SIGNALS = ['台灣', 'taiwan', '台北', 'taipei', '高雄', '台中', 'nt$', '國語', '台語', '繁體', '正體']
+// Putonghua/Mandarin audio or voiceover signals — when paired with traditional Chinese = Taiwan
+const TW_PUTONGHUA_SIGNALS = ['普通話', 'putonghua', '普通話配音', '國語配音', 'mandarin voiceover', '配音', '旁白']
 const SG_SIGNALS = ['singapore', '新加坡', 'sg', 'sgd', 'orchard', 'sentosa']
 const MO_SIGNALS = ['macau', 'macao', '澳門', 'mo']
 
@@ -61,8 +63,19 @@ function scoreLocation(inf, locationTarget) {
   ].join(' ')
 
   const found = textContainsAny(allText, signals)
+  let score = Math.min(10, found.length * 2.5)
+
+  // Taiwan: traditional Chinese + putonghua/voiceover combo strongly indicates Taiwan
+  if (locationTarget === 'Taiwan') {
+    const hasTraditional = textContainsAny(allText, ['繁體', '正體', '國語', '台語']).length > 0
+    const hasPutonghua = textContainsAny(allText, TW_PUTONGHUA_SIGNALS).length > 0
+    if (hasTraditional && hasPutonghua) {
+      score = Math.min(10, score + 4)
+    }
+  }
+
   return {
-    score: Math.min(10, found.length * 2.5),
+    score,
     signals: [...new Set(found)].slice(0, 5),
   }
 }

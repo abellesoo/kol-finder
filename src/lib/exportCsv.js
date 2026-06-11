@@ -1,49 +1,36 @@
-/**
- * Export results to CSV and trigger download.
- */
-export function exportToCsv(results, influencers) {
+export const EXPORT_COLUMNS = [
+  { id: 'username',        label: 'username',         getValue: (r)       => r.username },
+  { id: 'fullName',        label: 'fullName',         getValue: (r, inf)  => inf.fullName || '' },
+  { id: 'instagram_url',   label: 'instagram_url',    getValue: (r)       => `https://instagram.com/${r.username}` },
+  { id: 'overall',         label: 'overall',          getValue: (r)       => r.overall ?? '' },
+  { id: 'niche_score',     label: 'niche_score',      getValue: (r)       => r.scores?.niche ?? '' },
+  { id: 'location_score',  label: 'location_score',   getValue: (r)       => r.scores?.location ?? '' },
+  { id: 'format_score',    label: 'format_score',     getValue: (r)       => r.scores?.contentFormat ?? '' },
+  { id: 'bot_risk_score',  label: 'bot_risk_score',   getValue: (r)       => r.scores?.botRisk ?? '' },
+  { id: 'avg_likes',       label: 'avg_likes',        getValue: (r, inf)  => inf.avgLikes ?? '' },
+  { id: 'avg_comments',    label: 'avg_comments',     getValue: (r, inf)  => inf.avgComments ?? '' },
+  { id: 'post_count',      label: 'post_count',       getValue: (r, inf)  => inf.postCount ?? '' },
+  { id: 'video_ratio',     label: 'video_ratio_%',    getValue: (r, inf)  => inf.videoRatio ?? '' },
+  { id: 'verdict',         label: 'verdict',          getValue: (r)       => `"${(r.verdict || '').replace(/"/g, "'")}"` },
+  { id: 'flags',           label: 'flags',            getValue: (r)       => `"${(r.flags || []).join(', ')}"` },
+  { id: 'location_signals',label: 'location_signals', getValue: (r)       => `"${(r.locationSignals || []).join(', ')}"` },
+  { id: 'niche_signals',   label: 'niche_signals',    getValue: (r)       => `"${(r.nicheSignals || []).join(', ')}"` },
+]
+
+export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)
+
+export function exportToCsv(results, influencers, selectedColumnIds = null) {
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
 
-  const headers = [
-    'username',
-    'fullName',
-    'overall',
-    'niche_score',
-    'location_score',
-    'format_score',
-    'bot_risk_score',
-    'avg_likes',
-    'avg_comments',
-    'post_count',
-    'video_ratio_%',
-    'verdict',
-    'flags',
-    'hk_signals',
-    'niche_signals',
-    'instagram_url',
-  ]
+  const cols = selectedColumnIds
+    ? EXPORT_COLUMNS.filter((c) => selectedColumnIds.includes(c.id))
+    : EXPORT_COLUMNS
 
+  const headers = cols.map((c) => c.label)
   const rows = results.map((r) => {
     const inf = map[r.username] || {}
-    return [
-      r.username,
-      inf.fullName || '',
-      r.overall ?? '',
-      r.scores?.niche ?? '',
-      r.scores?.location ?? '',
-      r.scores?.contentFormat ?? '',
-      r.scores?.botRisk ?? '',
-      inf.avgLikes ?? '',
-      inf.avgComments ?? '',
-      inf.postCount ?? '',
-      inf.videoRatio ?? '',
-      `"${(r.verdict || '').replace(/"/g, "'")}"`,
-      `"${(r.flags || []).join(', ')}"`,
-      `"${(r.hkSignals || []).join(', ')}"`,
-      `"${(r.nicheSignals || []).join(', ')}"`,
-      `https://instagram.com/${r.username}`,
-    ]
+    return cols.map((c) => c.getValue(r, inf))
   })
 
   const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')

@@ -10,7 +10,7 @@ const NICHE_OPTIONS = [
   { id: 'food', label: '🍜 Food & Dining' },
 ]
 
-export default function ConfigStep({ fileName, influencerCount, onStart }) {
+export default function ConfigStep({ fileNames = [], influencerCount, onStart }) {
   const [niches, setNiches] = useState(['beauty', 'skincare'])
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [requireVideo, setRequireVideo] = useState(true)
@@ -39,8 +39,15 @@ export default function ConfigStep({ fileName, influencerCount, onStart }) {
         <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Step 2 of 3</p>
         <h1 className="text-3xl font-semibold text-ink mb-1">Configure your search</h1>
         <p className="text-ink/50 text-sm mb-8">
-          Found <span className="font-mono font-medium text-ink">{influencerCount}</span> unique accounts in{' '}
-          <span className="font-mono text-accent">{fileName}</span>
+          Found <span className="font-mono font-medium text-ink">{influencerCount}</span> unique accounts
+          {fileNames.length > 0 && (
+            <> from{' '}
+              {fileNames.length === 1
+                ? <span className="font-mono text-accent">{fileNames[0]}</span>
+                : <span className="font-mono text-accent">{fileNames.length} files</span>
+              }
+            </>
+          )}
         </p>
 
         {/* Niche */}

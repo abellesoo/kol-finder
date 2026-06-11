@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter } from 'lucide-react'
-import { exportToCsv } from '../lib/exportCsv'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns } from 'lucide-react'
+import { exportToCsv, EXPORT_COLUMNS, DEFAULT_COLUMNS } from '../lib/exportCsv'
 
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
@@ -21,12 +21,77 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
+function ColumnPicker({ selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const toggle = (id) => {
+    onChange(selected.includes(id) ? selected.filter((c) => c !== id) : [...selected, id])
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/60 hover:border-ink/30 hover:text-ink transition-all"
+      >
+        <Columns size={15} />
+        Columns
+        {selected.length < EXPORT_COLUMNS.length && (
+          <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+            {selected.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-mist rounded-xl shadow-lg z-10 p-3">
+          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Export columns</p>
+          <div className="space-y-1">
+            {EXPORT_COLUMNS.map((col) => (
+              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(col.id)}
+                  onChange={() => toggle(col.id)}
+                  className="accent-accent"
+                />
+                <span className="font-mono text-xs text-ink/70">{col.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
+            <button
+              onClick={() => onChange(DEFAULT_COLUMNS)}
+              className="text-xs text-ink/40 hover:text-ink transition-colors"
+            >
+              Select all
+            </button>
+            <button
+              onClick={() => onChange([])}
+              className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ResultsStep({ results, influencers, config }) {
   const [sortKey, setSortKey] = useState('overall')
   const [sortDir, setSortDir] = useState('desc')
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
+  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_COLUMNS)
 
   // Build enriched list
   const infMap = useMemo(() => {
@@ -94,13 +159,16 @@ export default function ResultsStep({ results, influencers, config }) {
             {enriched.length - highCount - midCount} low score
           </p>
         </div>
-        <button
-          onClick={() => exportToCsv(filtered, influencers)}
-          className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
-        >
-          <Download size={15} />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          <button
+            onClick={() => exportToCsv(filtered, influencers, selectedColumns)}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
+          >
+            <Download size={15} />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

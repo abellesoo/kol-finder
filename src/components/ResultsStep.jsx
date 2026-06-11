@@ -1,6 +1,72 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info } from 'lucide-react'
 import { exportToCsv, EXPORT_COLUMNS, DEFAULT_COLUMNS } from '../lib/exportCsv'
+
+const COLUMN_INFO = {
+  overall: {
+    title: 'Overall Score (0–100)',
+    lines: [
+      'A weighted combination of all four sub-scores:',
+      '· Niche fit × 3.5',
+      '· Location match × 3.0',
+      '· Content format × 2.0',
+      '· Bot risk (authenticity) × 1.5',
+      'Higher = stronger KOL candidate for your search.',
+    ],
+  },
+  niche: {
+    title: 'Niche Score (0–10)',
+    lines: [
+      "How well the account's content matches your target niches.",
+      'Scans captions, hashtags, and display name for niche keywords.',
+      '· 8–10 = very strong niche match',
+      '· 5–7 = some relevant content',
+      '· 0–4 = little or no niche signal',
+    ],
+  },
+  location: {
+    title: 'Location Score (0–10)',
+    lines: [
+      'How likely the account is based in your target location.',
+      'Scans captions, hashtags, and tagged locations for local signals',
+      '(place names, local brands, currency, language markers).',
+      'For Taiwan: traditional Chinese + putonghua/voiceover signals',
+      'give an additional boost.',
+      '· 8–10 = strong local presence',
+      '· 4–7 = some signals',
+      '· 0–3 = weak or no local signal',
+    ],
+  },
+}
+
+function InfoTooltip({ column }) {
+  const [visible, setVisible] = useState(false)
+  const info = COLUMN_INFO[column]
+  if (!info) return null
+  return (
+    <span className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+      <button
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onClick={() => setVisible((v) => !v)}
+        className="text-ink/30 hover:text-accent transition-colors ml-0.5"
+      >
+        <Info size={11} />
+      </button>
+      {visible && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-ink text-white text-xs rounded-xl px-4 py-3 shadow-xl z-20 pointer-events-none">
+          <p className="font-semibold mb-1.5 text-white/90">{info.title}</p>
+          {info.lines.map((line, i) => (
+            <p key={i} className={`leading-relaxed ${line.startsWith('·') ? 'text-white/60 pl-1' : 'text-white/75'}`}>
+              {line}
+            </p>
+          ))}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-ink" />
+        </div>
+      )}
+    </span>
+  )
+}
 
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
@@ -208,13 +274,13 @@ export default function ResultsStep({ results, influencers, config }) {
         <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider">
           <span>Account</span>
           <button onClick={() => toggleSort('overall')} className="flex items-center gap-1 hover:text-ink">
-            Overall <SortIcon k="overall" />
+            Overall <SortIcon k="overall" /><InfoTooltip column="overall" />
           </button>
           <button onClick={() => toggleSort('niche')} className="flex items-center gap-1 hover:text-ink">
-            Niche <SortIcon k="niche" />
+            Niche <SortIcon k="niche" /><InfoTooltip column="niche" />
           </button>
           <button onClick={() => toggleSort('location')} className="flex items-center gap-1 hover:text-ink">
-            Location <SortIcon k="location" />
+            Location <SortIcon k="location" /><InfoTooltip column="location" />
           </button>
           <button onClick={() => toggleSort('engagement')} className="flex items-center gap-1 hover:text-ink">
             Engagement <SortIcon k="engagement" />

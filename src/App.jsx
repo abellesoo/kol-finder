@@ -2,10 +2,12 @@ import { useState } from 'react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
+import KolLookup from './components/KolLookup'
 import { parseApifyXlsx } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 
 export default function App() {
+  const [mode, setMode] = useState('finder') // finder | lookup
   const [step, setStep] = useState('upload') // upload | config | scoring | results
   const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
@@ -103,20 +105,49 @@ export default function App() {
 
   return (
     <>
-      {step === 'upload' && <UploadStep onFiles={handleFiles} />}
-      {step === 'config' && (
-        <ConfigStep
-          fileNames={fileNames}
-          influencerCount={influencers.length}
-          onStart={handleStart}
-        />
-      )}
-      {step === 'results' && (
-        <ResultsStep
-          results={results}
-          influencers={influencers}
-          config={config}
-        />
+      {/* Top nav */}
+      <div className="border-b border-mist px-6 py-3 flex items-center">
+        <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">KOL Finder</span>
+        <div className="ml-auto flex items-center gap-1 bg-mist/60 rounded-lg p-1">
+          <button
+            onClick={() => setMode('finder')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+              mode === 'finder' ? 'bg-white text-ink shadow-sm' : 'text-ink/40 hover:text-ink'
+            }`}
+          >
+            Finder
+          </button>
+          <button
+            onClick={() => setMode('lookup')}
+            className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+              mode === 'lookup' ? 'bg-white text-ink shadow-sm' : 'text-ink/40 hover:text-ink'
+            }`}
+          >
+            Profile Lookup
+          </button>
+        </div>
+      </div>
+
+      {mode === 'lookup' ? (
+        <KolLookup />
+      ) : (
+        <>
+          {step === 'upload' && <UploadStep onFiles={handleFiles} />}
+          {step === 'config' && (
+            <ConfigStep
+              fileNames={fileNames}
+              influencerCount={influencers.length}
+              onStart={handleStart}
+            />
+          )}
+          {step === 'results' && (
+            <ResultsStep
+              results={results}
+              influencers={influencers}
+              config={config}
+            />
+          )}
+        </>
       )}
     </>
   )

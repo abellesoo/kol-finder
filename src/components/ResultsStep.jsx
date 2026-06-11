@@ -40,28 +40,38 @@ const COLUMN_INFO = {
 }
 
 function InfoTooltip({ column }) {
-  const [visible, setVisible] = useState(false)
+  const [pos, setPos] = useState(null)
+  const btnRef = useRef(null)
   const info = COLUMN_INFO[column]
   if (!info) return null
+
+  const show = () => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 8, left: r.left + r.width / 2 })
+  }
+
   return (
-    <span className="relative inline-flex items-center" onClick={(e) => e.stopPropagation()}>
+    <span className="inline-flex items-center" onClick={(e) => e.stopPropagation()}>
       <button
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-        onClick={() => setVisible((v) => !v)}
+        ref={btnRef}
+        onMouseEnter={show}
+        onMouseLeave={() => setPos(null)}
         className="text-ink/30 hover:text-accent transition-colors ml-0.5"
       >
         <Info size={11} />
       </button>
-      {visible && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-ink text-white text-xs rounded-xl px-4 py-3 shadow-xl z-20 pointer-events-none">
+      {pos && (
+        <div
+          className="fixed w-64 bg-ink text-white text-xs rounded-xl px-4 py-3 shadow-xl z-50 pointer-events-none -translate-x-1/2"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-ink" />
           <p className="font-semibold mb-1.5 text-white/90">{info.title}</p>
           {info.lines.map((line, i) => (
             <p key={i} className={`leading-relaxed ${line.startsWith('·') ? 'text-white/60 pl-1' : 'text-white/75'}`}>
               {line}
             </p>
           ))}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-ink" />
         </div>
       )}
     </span>

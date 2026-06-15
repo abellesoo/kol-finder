@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KOL Finder — System Flow</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0c0c0c;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      color: #e0e0e0;
+    }
+
+    /* ── HEADER ── */
+    header {
+      padding: 13px 28px;
+      border-bottom: 1px solid #1c1c1c;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      background: #0c0c0c;
+    }
+
+    .logo {
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #3a3a3a;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .divider-dot {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: #2a2a2a;
+    }
+
+    .page-title {
+      font-size: 12px;
+      color: #4a4a4a;
+      letter-spacing: 0.04em;
+    }
+
+    .hint {
+      margin-left: auto;
+      font-size: 11px;
+      color: #2e2e2e;
+      font-family: 'SF Mono', monospace;
+    }
+
+    /* ── LAYOUT ── */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── CHART ── */
+    .chart-container {
+      flex: 1;
+      overflow: auto;
+      padding: 44px 48px 60px;
+    }
+
+    .chart-area {
+      position: relative;
+      width: 820px;
+      height: 810px;
+    }
+
+    .chart-svg {
+      position: absolute;
+      inset: 0;
+      width: 820px;
+      height: 810px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── MODE LABELS ── */
+    .mode-label {
+      position: absolute;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #2e2e2e;
+      font-family: 'SF Mono', monospace;
+      top: 14px;
+      z-index: 1;
+    }
+
+    /* ── NODES ── */
+    .node {
+      position: absolute;
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 7px 11px;
+      transition: filter 0.12s ease, transform 0.12s ease;
+      z-index: 2;
+      user-select: none;
+    }
+
+    .node:hover  { filter: brightness(1.1); transform: translateY(-1px); }
+    .node.active { outline: 2px solid rgba(255,255,255,0.28); outline-offset: 3px; }
+
+    .node-label {
+      font-size: 12px;
+      font-weight: 650;
+      color: #111;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    .node-sublabel {
+      font-size: 9.5px;
+      color: rgba(0,0,0,0.42);
+      margin-top: 3px;
+      line-height: 1.35;
+    }
+
+    /* colour palette matching Figma */
+    .t-input   { background: #A2DDD0; } /* teal */
+    .t-skill   { background: #F0A896; } /* salmon */
+    .t-process { background: #EDA082; } /* salmon darker */
+    .t-config  { background: #B0C4EE; } /* periwinkle */
+    .t-sub     { background: #F2C290; } /* amber */
+    .t-output  { background: #A6BEEF; } /* blue */
+
+    .t-api {
+      background: #3E6FDB;
+      border-radius: 20px;
+      cursor: default;
+    }
+    .t-api .node-label  { color: #fff; font-size: 10.5px; }
+    .t-api .node-sublabel { display: none; }
+    .t-api:hover { filter: none; transform: none; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 375px;
+      flex-shrink: 0;
+      border-left: 1px solid #181818;
+      overflow-y: auto;
+      background: #0c0c0c;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #242424;
+      font-size: 12px;
+      text-align: center;
+      padding: 40px;
+      gap: 12px;
+      line-height: 1.5;
+    }
+
+    /* detail card */
+    .detail-header {
+      padding: 16px 24px 15px;
+      flex-shrink: 0;
+    }
+
+    .detail-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(0,0,0,0.8);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      letter-spacing: -0.01em;
+    }
+
+    .detail-body {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      flex: 1;
+    }
+
+    .section-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: #323232;
+      font-family: 'SF Mono', monospace;
+      margin-bottom: 7px;
+    }
+
+    .section-text {
+      font-size: 13px;
+      line-height: 1.68;
+      color: #7a7a7a;
+    }
+
+    .output-pill {
+      display: inline-block;
+      background: #151515;
+      border: 1px solid #252525;
+      border-radius: 5px;
+      padding: 5px 11px;
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: #555;
+      margin-top: 2px;
+      word-break: break-word;
+    }
+
+    .weights-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .weight-chip {
+      background: #141414;
+      border: 1px solid #202020;
+      border-radius: 7px;
+      padding: 9px 11px;
+      font-size: 11px;
+      font-family: 'SF Mono', monospace;
+      color: #505050;
+    }
+
+    .weight-chip strong {
+      display: block;
+      color: #909090;
+      font-size: 12px;
+      margin-bottom: 2px;
+      font-weight: 600;
+    }
+
+    /* scrollbar */
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
+    .chart-container::-webkit-scrollbar { width: 6px; height: 6px; }
+    .chart-container::-webkit-scrollbar-track { background: transparent; }
+    .chart-container::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">KOL Finder</span>
+  <div class="divider-dot"></div>
+  <span class="page-title">System Flow</span>
+  <a href="https://abellesoo.github.io/kol-finder/" target="_blank" style="margin-left:auto;font-size:11px;color:#3a3a3a;font-family:'SF Mono',monospace;text-decoration:none;letter-spacing:0.04em;" onmouseover="this.style.color='#888'" onmouseout="this.style.color='#3a3a3a'">↗ live site</a>
+  <span class="hint">click a node →</span>
+</header>
+
+<div class="main">
+
+  <!-- ── CHART ── -->
+  <div class="chart-container">
+    <div class="chart-area" id="chart"></div>
+  </div>
+
+  <!-- ── SIDEBAR ── -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-empty">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2.5"/>
+        <line x1="8" y1="8" x2="16" y2="8"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+        <line x1="8" y1="16" x2="12" y2="16"/>
+      </svg>
+      Click any node<br>to see details
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────────────────────────────
+
+const nodes = [
+  // ── FINDER MODE ──────────────────────────────────────────────
+  {
+    id: 'xlsx', label: 'XLSX Files',
+    sub: 'Apify Instagram export · multi-file',
+    type: 'input', x: 125, y: 40, w: 172, h: 54,
+  },
+  {
+    id: 'parse', label: 'parseApifyXlsx',
+    sub: 'Group by username · aggregate stats',
+    type: 'skill', x: 125, y: 140, w: 172, h: 54,
+  },
+  {
+    id: 'dedup', label: 'Deduplicate & Sort',
+    sub: 'Keep highest engagement per user',
+    type: 'process', x: 125, y: 240, w: 172, h: 54,
+  },
+  {
+    id: 'config', label: 'Config Step',
+    sub: 'niches · location · min likes · video',
+    type: 'config', x: 125, y: 340, w: 172, h: 54,
+  },
+  {
+    id: 'batch', label: 'Filter + Batch Score',
+    sub: '5 accounts per batch',
+    type: 'process', x: 125, y: 435, w: 172, h: 54,
+  },
+  // sub-nodes fan out below batch
+  { id: 'n_niche',   label: 'scoreNiche',    sub: 'keyword match',      type: 'sub', x: 8,   y: 537, w: 108, h: 44 },
+  { id: 'n_loc',     label: 'scoreLocation', sub: 'signal words',       type: 'sub', x: 124, y: 537, w: 108, h: 44 },
+  { id: 'n_content', label: 'scoreContent',  sub: 'video ratio',        type: 'sub', x: 240, y: 537, w: 108, h: 44 },
+  { id: 'n_bot',     label: 'scoreBotRisk',  sub: 'comment/like ratio', type: 'sub', x: 356, y: 537, w: 108, h: 44 },
+  {
+    id: 'weighted', label: 'Weighted Score',
+    sub: 'niche×3.5 + loc×3.0 + format×2.0 + bot×1.5',
+    type: 'process', x: 125, y: 630, w: 172, h: 54,
+  },
+  {
+    id: 'results', label: 'Results Table',
+    sub: 'Sort · Filter · Export CSV',
+    type: 'output', x: 125, y: 730, w: 172, h: 54,
+  },
+
+  // ── PROFILE LOOKUP MODE ───────────────────────────────────────
+  {
+    id: 'username', label: '@username',
+    sub: 'or instagram.com/username',
+    type: 'input', x: 516, y: 40, w: 172, h: 54,
+  },
+  {
+    id: 'scraper', label: 'startReelScraper',
+    sub: 'Trigger Apify actor run',
+    type: 'skill', x: 516, y: 140, w: 172, h: 54,
+  },
+  {
+    id: 'apify_api', label: 'Apify API', sub: '',
+    type: 'api', x: 710, y: 151, w: 84, h: 30,
+  },
+  {
+    id: 'poll', label: 'Poll getRun',
+    sub: 'Every 3s until SUCCEEDED',
+    type: 'process', x: 516, y: 248, w: 172, h: 54,
+  },
+  {
+    id: 'dataset', label: 'getDatasetItems',
+    sub: 'Fetch all scraped reels',
+    type: 'skill', x: 516, y: 348, w: 172, h: 54,
+  },
+  {
+    id: 'compute', label: 'computeStats',
+    sub: 'Filter to last 90 days',
+    type: 'process', x: 516, y: 448, w: 172, h: 54,
+  },
+  {
+    id: 'dashboard', label: 'Profile Dashboard',
+    sub: 'Median likes · views · hidden count',
+    type: 'output', x: 516, y: 553, w: 172, h: 54,
+  },
+]
+
+// edges: from node id → to node id
+const edges = [
+  // finder vertical chain
+  { from: 'xlsx',    to: 'parse' },
+  { from: 'parse',   to: 'dedup' },
+  { from: 'dedup',   to: 'config' },
+  { from: 'config',  to: 'batch' },
+  // fan out
+  { from: 'batch',   to: 'n_niche' },
+  { from: 'batch',   to: 'n_loc' },
+  { from: 'batch',   to: 'n_content' },
+  { from: 'batch',   to: 'n_bot' },
+  // fan in
+  { from: 'n_niche',   to: 'weighted' },
+  { from: 'n_loc',     to: 'weighted' },
+  { from: 'n_content', to: 'weighted' },
+  { from: 'n_bot',     to: 'weighted' },
+  { from: 'weighted', to: 'results' },
+  // lookup chain
+  { from: 'username', to: 'scraper' },
+  { from: 'scraper',  to: 'apify_api', style: 'api' },
+  { from: 'scraper',  to: 'poll' },
+  { from: 'poll',     to: 'dataset' },
+  { from: 'dataset',  to: 'compute' },
+  { from: 'compute',  to: 'dashboard' },
+]
+
+// ─────────────────────────────────────────────────────────────────
+// NODE DETAIL CONTENT
+// ─────────────────────────────────────────────────────────────────
+
+const details = {
+  xlsx: {
+    title: 'XLSX Files',
+    colorType: 'input',
+    what: 'One or more Excel files exported from an Apify Instagram scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, paidPartnership, and productType.',
+    output: 'Raw post rows, one per Instagram post',
+    notes: 'Multiple files are accepted. Identical usernames across files are merged; the version with the highest totalEngagement wins.',
+  },
+  parse: {
+    title: 'parseApifyXlsx',
+    colorType: 'skill',
+    what: 'Reads the XLSX using the xlsx library, groups rows by ownerUsername, and aggregates per influencer: avgLikes, avgComments, videoRatio, up to 40 deduplicated hashtags, 5 sample captions, locationNames, and a count of paid-partnership posts.',
+    output: 'Array of influencer objects sorted by totalEngagement desc',
+    notes: 'Video detection checks the "type" or "productType" column for "video", "clip", or "reel".',
+  },
+  dedup: {
+    title: 'Deduplicate & Sort',
+    colorType: 'process',
+    what: 'When multiple XLSX files are uploaded, the same account may appear in more than one. Deduplication keeps the version with the highest totalEngagement (avgLikes + avgComments). The final list is sorted descending by that metric.',
+    output: 'Clean, deduplicated influencer array',
+  },
+  config: {
+    title: 'Config Step',
+    colorType: 'config',
+    what: 'Before scoring, the user sets four parameters: target niches (beauty, skincare, lifestyle, fashion, health, food), target location (Hong Kong, Taiwan, Singapore, or Macau), a minimum average-likes threshold, and whether to require video content.',
+    output: 'Config object: { niches, locationTarget, minEngagement, requireVideo }',
+  },
+  batch: {
+    title: 'Filter + Batch Score',
+    colorType: 'process',
+    what: 'Influencers below the minimum engagement threshold are removed first. Remaining accounts are scored in batches of 5, with the progress bar updated after each batch. Batching keeps the UI responsive even with hundreds of accounts.',
+    output: 'Progress state + final scored results array',
+  },
+  n_niche: {
+    title: 'scoreNiche',
+    colorType: 'sub',
+    what: 'Keyword-matches the influencer\'s hashtags, captions, and full name against a curated niche dictionary (English + Traditional Chinese terms). Each hit scores 1.5 points, capped at 10. Also returns the matched signal words for display.',
+    output: '{ score: 0–10, signals: string[] }',
+  },
+  n_loc: {
+    title: 'scoreLocation',
+    colorType: 'sub',
+    what: 'Scans hashtags, captions, and locationNames for region-specific signals — e.g. "香港", "causeway bay", "旺角" for HK; "台灣", "taipei" for Taiwan. For Taiwan, pairing traditional Chinese with Putonghua voiceover signals adds a +4 boost. Capped at 10.',
+    output: '{ score: 0–10, signals: string[] }',
+  },
+  n_content: {
+    title: 'scoreContentFormat',
+    colorType: 'sub',
+    what: 'If the user requires video, the score equals videoRatio × 10 (share of posts that are reels or clips). If video is not required, a neutral score of 7 is used so it doesn\'t penalise static-content creators.',
+    output: '{ score: 0–10 }',
+  },
+  n_bot: {
+    title: 'scoreBotRisk',
+    colorType: 'sub',
+    what: 'Checks the comment-to-like ratio. Very high likes with near-zero comments is a bot signal. Scores 2–9: accounts with >5k likes and <0.5% comment ratio score 2 (suspicious); healthy ratios (≥2%) score 9. A score ≤3 appends a "bot-risk" flag.',
+    output: '{ score: 0–10 }',
+  },
+  weighted: {
+    title: 'Weighted Score',
+    colorType: 'process',
+    what: 'Combines the four sub-scores into a single integer using fixed weights. Also generates a human-readable verdict ("Strong HK signals, good niche fit") and a flag array (e.g. "hk-based", "video-creator", "bot-risk", "cantonese-speaker").',
+    output: '{ overall, scores, verdict, flags[], locationSignals, nicheSignals }',
+    weights: true,
+  },
+  results: {
+    title: 'Results Table',
+    colorType: 'output',
+    what: 'Displays all scored influencers in a sortable, filterable table. Columns show username, overall score, niche, location, content format, and bot-risk sub-scores, plus flags and matched signals. Users can download the full dataset as a CSV.',
+    output: 'Interactive table + CSV export via exportCsv.js',
+  },
+  username: {
+    title: '@username Input',
+    colorType: 'input',
+    what: 'The user types an Instagram handle (with or without @) or a full instagram.com URL. The extractUsername() helper strips URL prefixes and the @ symbol to produce a clean handle for the API call.',
+    output: 'Cleaned username string',
+  },
+  scraper: {
+    title: 'startReelScraper',
+    colorType: 'skill',
+    what: 'POSTs to the Apify API using the VITE_APIFY_API_KEY (baked into the bundle at build time by Vite). Starts an Instagram Reels scraper actor for the given username and returns a run object containing the run ID used for polling.',
+    output: '{ id: string, status: "READY" | "RUNNING" }',
+    notes: 'The API key is stored in .env as VITE_APIFY_API_KEY and injected at build time — it is visible in the client bundle.',
+  },
+  poll: {
+    title: 'Poll getRun',
+    colorType: 'process',
+    what: 'Calls getRun(run.id) every 3 seconds in a while loop until the status is no longer READY or RUNNING. If the run ends in any status other than SUCCEEDED (e.g. FAILED, ABORTED), an error is thrown and shown to the user.',
+    output: 'Completed run object with defaultDatasetId',
+  },
+  dataset: {
+    title: 'getDatasetItems',
+    colorType: 'skill',
+    what: 'Fetches the full result set from the Apify dataset using the defaultDatasetId from the completed run. Returns an array of reel post objects with fields: timestamp, likesCount, videoViewCount, caption, and url.',
+    output: 'Post objects array from Apify dataset',
+  },
+  compute: {
+    title: 'computeStats',
+    colorType: 'process',
+    what: 'Filters posts to the last 90 days, then computes: median likes (skipping hidden-like posts where likesCount === -1), median video view count, and a count of posts with hidden likes. Returns up to 20 most recent posts for the list view.',
+    output: '{ total, hiddenCount, avgLikes, avgViews, posts[] }',
+  },
+  dashboard: {
+    title: 'Profile Dashboard',
+    colorType: 'output',
+    what: 'Renders three stat cards (median likes, median views, hidden-like count) and a scrollable table of up to 20 recent reels with per-post like and view counts plus dates. Each row links out to the reel on Instagram.',
+    output: 'Profile analytics UI (real-time, single account)',
+  },
+}
+
+// ─────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────
+
+const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]))
+
+function cx(n) { return n.x + n.w / 2 }
+function cy(n) { return n.y + n.h / 2 }
+
+function edgePoints(e) {
+  const s = nodeMap[e.from]
+  const t = nodeMap[e.to]
+  // horizontal (API badge): right edge of source → left edge of target
+  if (e.style === 'api') {
+    return { x1: s.x + s.w, y1: cy(s), x2: t.x, y2: cy(t) }
+  }
+  // default: bottom-center of source → top-center of target
+  return { x1: cx(s), y1: s.y + s.h, x2: cx(t), y2: t.y }
+}
+
+function buildPath(e) {
+  const { x1, y1, x2, y2 } = edgePoints(e)
+  if (e.style === 'api') return `M ${x1} ${y1} L ${x2} ${y2}`
+  if (Math.abs(x1 - x2) < 2) return `M ${x1} ${y1} L ${x2} ${y2}` // straight vertical
+  const midY = (y1 + y2) / 2
+  return `M ${x1} ${y1} C ${x1} ${midY} ${x2} ${midY} ${x2} ${y2}`
+}
+
+const typeClass = {
+  input: 't-input', skill: 't-skill', process: 't-process',
+  config: 't-config', sub: 't-sub', output: 't-output', api: 't-api',
+}
+
+const headerBg = {
+  input: '#A2DDD0', skill: '#F0A896', process: '#EDA082',
+  config: '#B0C4EE', sub: '#F2C290', output: '#A6BEEF',
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────────────────────────
+
+function render() {
+  const chart = document.getElementById('chart')
+
+  // Mode labels
+  ;[
+    { text: '— Finder Mode',         left: 125 },
+    { text: '— Profile Lookup Mode', left: 516 },
+  ].forEach(({ text, left }) => {
+    const el = document.createElement('div')
+    el.className = 'mode-label'
+    el.style.left = left + 'px'
+    el.textContent = text
+    chart.appendChild(el)
+  })
+
+  // SVG layer
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(ns, 'svg')
+  svg.classList.add('chart-svg')
+  svg.setAttribute('viewBox', '0 0 820 810')
+
+  // Marker definitions
+  svg.innerHTML = `
+    <defs>
+      <marker id="arr"      markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#2c2c2c"/>
+      </marker>
+      <marker id="arr-api"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#1e3a7a"/>
+      </marker>
+    </defs>
+  `
+
+  // Vertical separator between modes
+  const sep = document.createElementNS(ns, 'line')
+  sep.setAttribute('x1', '472'); sep.setAttribute('y1', '28')
+  sep.setAttribute('x2', '472'); sep.setAttribute('y2', '620')
+  sep.setAttribute('stroke', '#181818')
+  sep.setAttribute('stroke-width', '1')
+  sep.setAttribute('stroke-dasharray', '5 5')
+  svg.appendChild(sep)
+
+  // Edges
+  edges.forEach(e => {
+    const path = document.createElementNS(ns, 'path')
+    path.setAttribute('d', buildPath(e))
+    path.setAttribute('fill', 'none')
+    if (e.style === 'api') {
+      path.setAttribute('stroke', '#1e3a7a')
+      path.setAttribute('stroke-width', '1.5')
+      path.setAttribute('stroke-dasharray', '4 3')
+      path.setAttribute('marker-end', 'url(#arr-api)')
+    } else {
+      path.setAttribute('stroke', '#282828')
+      path.setAttribute('stroke-width', '1.5')
+      path.setAttribute('marker-end', 'url(#arr)')
+    }
+    svg.appendChild(path)
+  })
+
+  chart.appendChild(svg)
+
+  // Node divs
+  nodes.forEach(n => {
+    const el = document.createElement('div')
+    el.id = 'node-' + n.id
+    el.className = 'node ' + typeClass[n.type]
+    el.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.w}px;height:${n.h}px`
+    el.innerHTML = `
+      <div class="node-label">${n.label}</div>
+      ${n.sub ? `<div class="node-sublabel">${n.sub}</div>` : ''}
+    `
+    if (n.type !== 'api') el.addEventListener('click', () => showDetail(n.id))
+    chart.appendChild(el)
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SIDEBAR
+// ─────────────────────────────────────────────────────────────────
+
+let activeId = null
+
+function showDetail(id) {
+  const d = details[id]
+  if (!d) return
+
+  if (activeId) document.getElementById('node-' + activeId)?.classList.remove('active')
+  activeId = id
+  document.getElementById('node-' + id).classList.add('active')
+
+  const bg = headerBg[d.colorType] ?? '#EDA082'
+
+  const sidebar = document.getElementById('sidebar')
+  sidebar.innerHTML = `
+    <div class="detail-header" style="background:${bg}">
+      <div class="detail-title">${d.title}</div>
+    </div>
+    <div class="detail-body">
+      <div>
+        <div class="section-label">What it does</div>
+        <div class="section-text">${d.what}</div>
+      </div>
+      ${d.output ? `
+      <div>
+        <div class="section-label">Output</div>
+        <div class="output-pill">${d.output}</div>
+      </div>` : ''}
+      ${d.weights ? `
+      <div>
+        <div class="section-label">Score weights</div>
+        <div class="weights-grid">
+          <div class="weight-chip"><strong>Niche</strong>× 3.5</div>
+          <div class="weight-chip"><strong>Location</strong>× 3.0</div>
+          <div class="weight-chip"><strong>Format</strong>× 2.0</div>
+          <div class="weight-chip"><strong>Bot Risk</strong>× 1.5</div>
+        </div>
+      </div>` : ''}
+      ${d.notes ? `
+      <div>
+        <div class="section-label">Notes</div>
+        <div class="section-text">${d.notes}</div>
+      </div>` : ''}
+    </div>
+  `
+}
+
+render()
+</script>
+</body>
+</html>

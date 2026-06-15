@@ -106,26 +106,34 @@ export default function App() {
   return (
     <>
       {/* Top nav */}
-      <div className="border-b border-mist px-6 py-3 flex items-center">
+      <div className="border-b border-mist px-6 py-3 flex items-center gap-4">
         <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">KOL Finder</span>
-        <div className="ml-auto flex items-center gap-1 bg-mist/60 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-mist/60 rounded-lg p-1">
           <button
             onClick={() => setMode('finder')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-              mode === 'finder' ? 'bg-white text-ink shadow-sm' : 'text-ink/40 hover:text-ink'
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+              mode === 'finder' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
             }`}
           >
             Finder
           </button>
           <button
             onClick={() => setMode('lookup')}
-            className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-              mode === 'lookup' ? 'bg-white text-ink shadow-sm' : 'text-ink/40 hover:text-ink'
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+              mode === 'lookup' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
             }`}
           >
             Profile Lookup
           </button>
         </div>
+        <a
+          href="/kol-finder/flowchart.html"
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto text-xs text-ink/30 hover:text-ink/60 transition-colors font-mono"
+        >
+          how it works ↗
+        </a>
       </div>
 
       {mode === 'lookup' ? (

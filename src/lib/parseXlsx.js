@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { computeStats } from './computeStats'
 
 /**
  * Parse Apify Instagram scraper xlsx.
@@ -85,6 +86,9 @@ export function parseApifyXlsx(file) {
           // Deduplicated hashtags
           const uniqueHashtags = [...new Set(hashtags)]
 
+          // XLSX-derived live stats (90-day window, same logic as Apify live fetch)
+          const xlsxStats = computeStats(posts)
+
           return {
             username: inf.username,
             fullName: inf.fullName,
@@ -94,6 +98,10 @@ export function parseApifyXlsx(file) {
             totalEngagement: avgLikes + avgComments,
             followerCount,
             engagementRate,
+            xlsxMedianLikes: xlsxStats.medianLikes,
+            xlsxMedianViews: xlsxStats.medianViews,
+            xlsxHiddenCount: xlsxStats.hiddenCount,
+            xlsxRecentCount: xlsxStats.total,
             videoRatio: Math.round(videoRatio * 100),
             hasVideos: videoRatio > 0,
             captions,

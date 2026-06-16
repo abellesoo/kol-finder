@@ -360,9 +360,9 @@ export default function ResultsStep({ results, influencers, config }) {
             Engagement <SortIcon k="engagement" /><InfoTooltip column="engagement" />
           </button>
           <span>Format</span>
-          <span className="text-accent/70">Med. Likes ↯</span>
-          <span className="text-accent/70">Med. Views ↯</span>
-          <span className="text-accent/70">Hidden ↯</span>
+          <span>Med. Likes</span>
+          <span>Med. Views</span>
+          <span>Hidden</span>
         </div>
 
         {/* Rows */}
@@ -434,44 +434,59 @@ export default function ResultsStep({ results, influencers, config }) {
                 <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
               </div>
 
-              {/* Live: Median Likes */}
-              {(() => {
-                const s = liveStats[r.username]
-                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
-                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
-                return (
-                  <p className="font-mono text-sm text-ink">
-                    {s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'}
-                  </p>
-                )
-              })()}
+              {/* Median Likes — XLSX (instant) + live (after fetch) */}
+              <div>
+                <p className="font-mono text-sm text-ink">
+                  {r.xlsxMedianLikes !== null && r.xlsxMedianLikes !== undefined
+                    ? r.xlsxMedianLikes.toLocaleString() : '—'}
+                </p>
+                {(() => {
+                  const s = liveStats[r.username]
+                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
+                  if (!s) return null
+                  return (
+                    <p className="font-mono text-xs text-accent">
+                      {s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'} live
+                    </p>
+                  )
+                })()}
+              </div>
 
-              {/* Live: Median Views */}
-              {(() => {
-                const s = liveStats[r.username]
-                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
-                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
-                return (
-                  <p className="font-mono text-sm text-ink">
-                    {s.medianViews !== null ? s.medianViews.toLocaleString() : '—'}
-                  </p>
-                )
-              })()}
+              {/* Median Views — XLSX + live */}
+              <div>
+                <p className="font-mono text-sm text-ink">
+                  {r.xlsxMedianViews !== null && r.xlsxMedianViews !== undefined
+                    ? r.xlsxMedianViews.toLocaleString() : '—'}
+                </p>
+                {(() => {
+                  const s = liveStats[r.username]
+                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
+                  if (!s) return null
+                  return (
+                    <p className="font-mono text-xs text-accent">
+                      {s.medianViews !== null ? s.medianViews.toLocaleString() : '—'} live
+                    </p>
+                  )
+                })()}
+              </div>
 
-              {/* Live: Hidden Likes */}
-              {(() => {
-                const s = liveStats[r.username]
-                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
-                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
-                return (
-                  <div>
-                    <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
-                    {s.total > 0 && (
-                      <p className="font-mono text-xs text-ink/30">of {s.total}</p>
-                    )}
-                  </div>
-                )
-              })()}
+              {/* Hidden — XLSX + live */}
+              <div>
+                <div>
+                  <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
+                  {r.xlsxRecentCount > 0 && (
+                    <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>
+                  )}
+                </div>
+                {(() => {
+                  const s = liveStats[r.username]
+                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
+                  if (!s) return null
+                  return (
+                    <p className="font-mono text-xs text-accent">{s.hiddenCount} live</p>
+                  )
+                })()}
+              </div>
             </div>
 
             {/* Expanded detail */}

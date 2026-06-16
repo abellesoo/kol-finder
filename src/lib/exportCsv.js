@@ -15,9 +15,12 @@ export const EXPORT_COLUMNS = [
   { id: 'flags',           label: 'flags',            getValue: (r)       => `"${(r.flags || []).join(', ')}"` },
   { id: 'location_signals',  label: 'location_signals',  getValue: (r)            => `"${(r.locationSignals || []).join(', ')}"` },
   { id: 'niche_signals',     label: 'niche_signals',     getValue: (r)            => `"${(r.nicheSignals || []).join(', ')}"` },
-  { id: 'live_median_likes', label: 'live_median_likes', getValue: (r, inf, live) => live?.medianLikes ?? '' },
-  { id: 'live_median_views', label: 'live_median_views', getValue: (r, inf, live) => live?.medianViews ?? '' },
-  { id: 'live_hidden_likes', label: 'live_hidden_likes', getValue: (r, inf, live) => live?.hiddenCount ?? '' },
+  { id: 'xlsx_median_likes', label: 'xlsx_median_likes', getValue: (r, inf)        => inf.xlsxMedianLikes ?? '' },
+  { id: 'xlsx_median_views', label: 'xlsx_median_views', getValue: (r, inf)        => inf.xlsxMedianViews ?? '' },
+  { id: 'xlsx_hidden_likes', label: 'xlsx_hidden_likes', getValue: (r, inf)        => inf.xlsxHiddenCount ?? '' },
+  { id: 'live_median_likes', label: 'live_median_likes', getValue: (r, inf, live)  => live?.medianLikes ?? '' },
+  { id: 'live_median_views', label: 'live_median_views', getValue: (r, inf, live)  => live?.medianViews ?? '' },
+  { id: 'live_hidden_likes', label: 'live_hidden_likes', getValue: (r, inf, live)  => live?.hiddenCount ?? '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)

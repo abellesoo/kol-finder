@@ -526,20 +526,27 @@ export default function ResultsStep({ results, influencers, config }) {
                 })()}
               </div>
 
-              {/* Hidden — XLSX + live */}
+              {/* Hidden — live (all scraped posts) with XLSX fallback */}
               <div>
-                <div>
-                  <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
-                  {r.xlsxRecentCount > 0 && (
-                    <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>
-                  )}
-                </div>
                 {(() => {
                   const s = liveStats[r.username]
                   if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (!s) return null
+                  if (s) return (
+                    <>
+                      <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
+                      {s.totalScraped > 0 && (
+                        <p className="font-mono text-xs text-ink/30">of {s.totalScraped} posts</p>
+                      )}
+                    </>
+                  )
+                  // Fallback to XLSX while live hasn't loaded yet
                   return (
-                    <p className="font-mono text-xs text-accent">{s.hiddenCount} live</p>
+                    <>
+                      <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
+                      {r.xlsxRecentCount > 0 && (
+                        <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>
+                      )}
+                    </>
                   )
                 })()}
               </div>

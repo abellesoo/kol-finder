@@ -19,7 +19,8 @@ export function computeStats(items) {
     (item) => item.timestamp && new Date(item.timestamp) >= cutoff
   )
 
-  const hiddenCount = recent.filter(
+  // Hidden count across ALL scraped posts (not date-filtered) for full account picture
+  const hiddenCount = items.filter(
     (p) => p.likesCount === -1 || p.likesCount == null
   ).length
 
@@ -37,6 +38,7 @@ export function computeStats(items) {
 
   return {
     total: recent.length,
+    totalScraped: items.length,
     hiddenCount,
     medianLikes,
     medianViews,

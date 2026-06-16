@@ -55,7 +55,7 @@ export async function fetchBatchStats(usernames, onProgress) {
 
   for (let i = 0; i < usernames.length; i += CHUNK) {
     const chunk = usernames.slice(i, i + CHUNK)
-    const run = await startReelScraper(chunk, 30)
+    const run = await startReelScraper(chunk, 100)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
 

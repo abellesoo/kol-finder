@@ -18,24 +18,6 @@ export async function startReelScraper(usernames, resultsLimit = 100) {
   return data
 }
 
-async function startProfileScraper(usernames) {
-  try {
-    const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
-    const res = await fetch(
-      `${BASE}/acts/apify~instagram-profile-scraper/runs?token=${TOKEN}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames }),
-      }
-    )
-    if (!res.ok) return null
-    const { data } = await res.json()
-    return data
-  } catch {
-    return null
-  }
-}
 
 export async function getRun(runId) {
   const res = await fetch(`${BASE}/actor-runs/${runId}?token=${TOKEN}`)
@@ -76,32 +58,13 @@ export async function fetchBatchStats(usernames, onProgress) {
   for (let i = 0; i < usernames.length; i += CHUNK) {
     const chunk = usernames.slice(i, i + CHUNK)
 
-    // Run reel scraper and profile scraper in parallel
-    const [reelRun, profileRun] = await Promise.all([
-      startReelScraper(chunk, 100),
-      startProfileScraper(chunk),
-    ])
+    const run = await startReelScraper(chunk, 30)
+    const completed = await pollUntilDone(run)
+    const items = await getDatasetItems(completed.defaultDatasetId)
 
-    const [reelCompleted, profileCompleted] = await Promise.all([
-      pollUntilDone(reelRun),
-      profileRun ? pollUntilDone(profileRun).catch(() => null) : Promise.resolve(null),
-    ])
-
-    const [reelItems, profileItems] = await Promise.all([
-      getDatasetItems(reelCompleted.defaultDatasetId),
-      profileCompleted ? getDatasetItems(profileCompleted.defaultDatasetId).catch(() => []) : Promise.resolve([]),
-    ])
-
-    // Build follower count map from profile scrape
-    const followerMap = {}
-    for (const p of profileItems) {
-      const u = p.username || p.ownerUsername
-      if (u) followerMap[u] = p.followersCount ?? p.followersCountByCurrency ?? p.edge_followed_by?.count ?? null
-    }
-
-    // Group reel items by ownerUsername
+    // Group items by ownerUsername
     const byUser = {}
-    for (const item of reelItems) {
+    for (const item of items) {
       const u = item.ownerUsername
       if (!u) continue
       if (!byUser[u]) byUser[u] = []
@@ -109,10 +72,7 @@ export async function fetchBatchStats(usernames, onProgress) {
     }
 
     for (const username of chunk) {
-      const stats = computeStats(byUser[username] || [])
-      // Prefer profile scraper follower count; fall back to what computeStats found in reel items
-      if (followerMap[username] != null) stats.followerCount = followerMap[username]
-      statsMap[username] = stats
+      statsMap[username] = computeStats(byUser[username] || [])
     }
 
     if (onProgress) onProgress(Math.min(i + CHUNK, usernames.length), usernames.length)

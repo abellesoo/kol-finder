@@ -24,14 +24,13 @@ function computeStats(items) {
   const recent = items.filter(
     (item) => item.timestamp && new Date(item.timestamp) >= cutoff
   )
-  const withLikes = recent.filter(
-    (p) => typeof p.likesCount === 'number' && p.likesCount >= 0
-  )
   const hiddenCount = recent.filter(
     (p) => p.likesCount === -1 || p.likesCount == null
   ).length
 
-  const avgLikes = median(withLikes.map((p) => p.likesCount))
+  // Include hidden-like posts in median as 0 (conservative assumption)
+  const withLikes = recent.filter((p) => typeof p.likesCount === 'number')
+  const avgLikes = median(withLikes.map((p) => Math.max(p.likesCount, 0)))
 
   const withViews = recent.filter(
     (p) => typeof p.videoViewCount === 'number' && p.videoViewCount > 0

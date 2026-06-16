@@ -34,11 +34,22 @@ export function parseApifyXlsx(file) {
           const posts = inf.posts
           const n = posts.length
 
-          // Engagement
-          const totalLikes = posts.reduce((s, p) => s + (Number(p.likesCount) || 0), 0)
+          // Engagement — hidden likes (likesCount === -1) treated as 0, not excluded
+          const totalLikes = posts.reduce((s, p) => {
+            const v = Number(p.likesCount)
+            return s + (isNaN(v) || v < 0 ? 0 : v)
+          }, 0)
           const totalComments = posts.reduce((s, p) => s + (Number(p.commentsCount) || 0), 0)
           const avgLikes = Math.round(totalLikes / n)
           const avgComments = Math.round(totalComments / n)
+
+          // Follower count — take first non-zero value across posts
+          const followerCount =
+            posts.map((p) => Number(p['ownerFollowersCount'])).find((f) => f > 0) ?? null
+
+          // Engagement rate = (avgLikes + avgComments) / followers × 100
+          const engagementRate =
+            followerCount ? parseFloat(((avgLikes + avgComments) / followerCount * 100).toFixed(2)) : null
 
           // Content format
           const videoTypes = ['video', 'clip', 'reel']
@@ -81,6 +92,8 @@ export function parseApifyXlsx(file) {
             avgLikes,
             avgComments,
             totalEngagement: avgLikes + avgComments,
+            followerCount,
+            engagementRate,
             videoRatio: Math.round(videoRatio * 100),
             hasVideos: videoRatio > 0,
             captions,

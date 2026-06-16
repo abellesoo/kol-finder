@@ -11,7 +11,7 @@ const COLUMN_INFO = {
       '· Location match × 3.0',
       '· Content format × 2.0',
       '· Bot risk (authenticity) × 1.5',
-      'Higher = stronger KOL candidate for your search.',
+      'Higher = stronger seeding candidate for your search.',
     ],
   },
   niche: {
@@ -35,6 +35,19 @@ const COLUMN_INFO = {
       '· 8–10 = strong local presence',
       '· 4–7 = some signals',
       '· 0–3 = weak or no local signal',
+    ],
+  },
+  engagement: {
+    title: 'Engagement Rate',
+    lines: [
+      'ER = (avg likes + avg comments) ÷ followers × 100',
+      'Measures what % of followers engage per post on average.',
+      'Hidden like counts are treated as 0 (conservative).',
+      'Industry benchmarks:',
+      '· >3% = excellent',
+      '· 1–3% = good',
+      '· <1% = low',
+      'Shows raw avg likes if follower count is unavailable.',
     ],
   },
 }
@@ -293,7 +306,7 @@ export default function ResultsStep({ results, influencers, config }) {
             Location <SortIcon k="location" /><InfoTooltip column="location" />
           </button>
           <button onClick={() => toggleSort('engagement')} className="flex items-center gap-1 hover:text-ink">
-            Engagement <SortIcon k="engagement" />
+            Engagement <SortIcon k="engagement" /><InfoTooltip column="engagement" />
           </button>
           <span>Format</span>
         </div>
@@ -348,8 +361,17 @@ export default function ResultsStep({ results, influencers, config }) {
 
               {/* Engagement */}
               <div>
-                <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
-                <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
+                {r.engagementRate != null ? (
+                  <>
+                    <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
+                    <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
+                    <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
+                  </>
+                )}
               </div>
 
               {/* Format */}

@@ -295,7 +295,7 @@ export default function ResultsStep({ results, influencers, config }) {
             </button>
           )}
           <button
-            onClick={() => exportToCsv(filtered, influencers, selectedColumns)}
+            onClick={() => exportToCsv(filtered, influencers, selectedColumns, liveStats)}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
           >
             <Download size={15} />

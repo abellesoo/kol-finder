@@ -13,13 +13,16 @@ export const EXPORT_COLUMNS = [
   { id: 'video_ratio',     label: 'video_ratio_%',    getValue: (r, inf)  => inf.videoRatio ?? '' },
   { id: 'verdict',         label: 'verdict',          getValue: (r)       => `"${(r.verdict || '').replace(/"/g, "'")}"` },
   { id: 'flags',           label: 'flags',            getValue: (r)       => `"${(r.flags || []).join(', ')}"` },
-  { id: 'location_signals',label: 'location_signals', getValue: (r)       => `"${(r.locationSignals || []).join(', ')}"` },
-  { id: 'niche_signals',   label: 'niche_signals',    getValue: (r)       => `"${(r.nicheSignals || []).join(', ')}"` },
+  { id: 'location_signals',  label: 'location_signals',  getValue: (r)            => `"${(r.locationSignals || []).join(', ')}"` },
+  { id: 'niche_signals',     label: 'niche_signals',     getValue: (r)            => `"${(r.nicheSignals || []).join(', ')}"` },
+  { id: 'live_median_likes', label: 'live_median_likes', getValue: (r, inf, live) => live?.medianLikes ?? '' },
+  { id: 'live_median_views', label: 'live_median_views', getValue: (r, inf, live) => live?.medianViews ?? '' },
+  { id: 'live_hidden_likes', label: 'live_hidden_likes', getValue: (r, inf, live) => live?.hiddenCount ?? '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)
 
-export function exportToCsv(results, influencers, selectedColumnIds = null) {
+export function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}) {
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
 
@@ -30,7 +33,8 @@ export function exportToCsv(results, influencers, selectedColumnIds = null) {
   const headers = cols.map((c) => c.label)
   const rows = results.map((r) => {
     const inf = map[r.username] || {}
-    return cols.map((c) => c.getValue(r, inf))
+    const live = liveStats[r.username]
+    return cols.map((c) => c.getValue(r, inf, live))
   })
 
   const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
@@ -38,7 +42,7 @@ export function exportToCsv(results, influencers, selectedColumnIds = null) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `kol-results-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `seeding-results-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }

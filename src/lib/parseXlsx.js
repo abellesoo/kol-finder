@@ -1,5 +1,4 @@
 import * as XLSX from 'xlsx'
-import { computeStats } from './computeStats'
 
 /**
  * Parse Apify Instagram scraper xlsx.
@@ -86,8 +85,32 @@ export function parseApifyXlsx(file) {
           // Deduplicated hashtags
           const uniqueHashtags = [...new Set(hashtags)]
 
-          // XLSX-derived live stats (90-day window, same logic as Apify live fetch)
-          const xlsxStats = computeStats(posts)
+          // XLSX-derived median stats — computed across all posts in the file
+          // (no date filter: user controls the export period in Apify)
+          const xlsxLikeValues = posts.map((p) => {
+            const v = Number(p['likesCount'])
+            return isNaN(v) || v < 0 ? 0 : v
+          })
+          const xlsxViewValues = posts
+            .map((p) => Number(p['videoViewCount']))
+            .filter((v) => v > 0)
+          const xlsxHiddenCount = posts.filter(
+            (p) => p['likesCount'] === -1 || p['likesCount'] == null
+          ).length
+
+          const xlsxSortedLikes = [...xlsxLikeValues].sort((a, b) => a - b)
+          const xlsxMidL = Math.floor(xlsxSortedLikes.length / 2)
+          const xlsxMedianLikes = xlsxSortedLikes.length === 0 ? null
+            : xlsxSortedLikes.length % 2 === 0
+              ? Math.round((xlsxSortedLikes[xlsxMidL - 1] + xlsxSortedLikes[xlsxMidL]) / 2)
+              : xlsxSortedLikes[xlsxMidL]
+
+          const xlsxSortedViews = [...xlsxViewValues].sort((a, b) => a - b)
+          const xlsxMidV = Math.floor(xlsxSortedViews.length / 2)
+          const xlsxMedianViews = xlsxSortedViews.length === 0 ? null
+            : xlsxSortedViews.length % 2 === 0
+              ? Math.round((xlsxSortedViews[xlsxMidV - 1] + xlsxSortedViews[xlsxMidV]) / 2)
+              : xlsxSortedViews[xlsxMidV]
 
           return {
             username: inf.username,
@@ -98,10 +121,10 @@ export function parseApifyXlsx(file) {
             totalEngagement: avgLikes + avgComments,
             followerCount,
             engagementRate,
-            xlsxMedianLikes: xlsxStats.medianLikes,
-            xlsxMedianViews: xlsxStats.medianViews,
-            xlsxHiddenCount: xlsxStats.hiddenCount,
-            xlsxRecentCount: xlsxStats.total,
+            xlsxMedianLikes,
+            xlsxMedianViews,
+            xlsxHiddenCount,
+            xlsxRecentCount: posts.length,
             videoRatio: Math.round(videoRatio * 100),
             hasVideos: videoRatio > 0,
             captions,

@@ -475,7 +475,12 @@ export default function ResultsStep({ results, influencers, config }) {
               {/* Followers */}
               <div>
                 <p className="font-mono text-sm text-ink">
-                  {r.followerCount != null ? r.followerCount.toLocaleString() : '—'}
+                  {(() => {
+                    const live = liveStats[r.username]?.followerCount
+                    const xlsx = r.followerCount
+                    const val = live ?? xlsx
+                    return val != null ? val.toLocaleString() : '—'
+                  })()}
                 </p>
               </div>
 

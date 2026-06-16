@@ -31,11 +31,16 @@ export function computeStats(items) {
   )
   const medianViews = median(withViews.map((p) => p.videoViewCount))
 
+  // Follower count — take first non-zero value across items
+  const followerCount =
+    items.map((p) => Number(p.ownerFollowersCount ?? p.followersCount ?? 0)).find((f) => f > 0) ?? null
+
   return {
     total: recent.length,
     hiddenCount,
     medianLikes,
     medianViews,
+    followerCount,
     posts: [...recent]
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, 20),

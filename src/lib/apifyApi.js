@@ -3,7 +3,26 @@ import { computeStats } from './computeStats'
 const BASE = 'https://api.apify.com/v2'
 const TOKEN = import.meta.env.VITE_APIFY_API_KEY
 
-export async function startReelScraper(usernames, resultsLimit = 100) {
+async function startInstagramScraper(usernames, resultsLimit = 30) {
+  const res = await fetch(
+    `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usernames,
+        resultsType: 'posts',
+        resultsLimit,
+      }),
+    }
+  )
+  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
+  const { data } = await res.json()
+  return data
+}
+
+// Kept for KolLookup (single-profile mode)
+export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
   const res = await fetch(
     `${BASE}/acts/apify~instagram-reel-scraper/runs?token=${TOKEN}`,
@@ -18,7 +37,6 @@ export async function startReelScraper(usernames, resultsLimit = 100) {
   return data
 }
 
-
 export async function getRun(runId) {
   const res = await fetch(`${BASE}/actor-runs/${runId}?token=${TOKEN}`)
   if (!res.ok) throw new Error(`Failed to get run (${res.status})`)
@@ -28,7 +46,7 @@ export async function getRun(runId) {
 
 export async function getDatasetItems(datasetId) {
   const res = await fetch(
-    `${BASE}/datasets/${datasetId}/items?token=${TOKEN}&limit=500&clean=true`
+    `${BASE}/datasets/${datasetId}/items?token=${TOKEN}&limit=2000&clean=true`
   )
   if (!res.ok) throw new Error(`Failed to fetch dataset (${res.status})`)
   return res.json()
@@ -47,9 +65,8 @@ async function pollUntilDone(run) {
 }
 
 /**
- * Scrape a list of usernames in chunks of 50 and return a map of
- * username → computeStats result. Calls onProgress(done, total) after each chunk.
- * Runs a parallel profile scrape to get follower counts.
+ * Scrape a list of usernames using the general instagram-scraper which returns
+ * both post data (for median likes/views) and profile data (for follower count).
  */
 export async function fetchBatchStats(usernames, onProgress) {
   const CHUNK = 50
@@ -58,21 +75,40 @@ export async function fetchBatchStats(usernames, onProgress) {
   for (let i = 0; i < usernames.length; i += CHUNK) {
     const chunk = usernames.slice(i, i + CHUNK)
 
-    const run = await startReelScraper(chunk, 30)
+    const run = await startInstagramScraper(chunk, 30)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
 
-    // Group items by ownerUsername
+    // Separate profile-level items from post-level items
+    // instagram-scraper returns a mix: profile objects have followersCount,
+    // post objects have ownerUsername + engagement data
+    const followerMap = {}
     const byUser = {}
+
     for (const item of items) {
+      // Profile item — has followersCount directly
+      if (item.followersCount != null && item.username) {
+        followerMap[item.username] = item.followersCount
+        continue
+      }
+
+      // Post item
       const u = item.ownerUsername
       if (!u) continue
+
+      // Capture follower count embedded in post items if present
+      if (item.ownerFollowersCount != null && followerMap[u] == null) {
+        followerMap[u] = item.ownerFollowersCount
+      }
+
       if (!byUser[u]) byUser[u] = []
       byUser[u].push(item)
     }
 
     for (const username of chunk) {
-      statsMap[username] = computeStats(byUser[username] || [])
+      const stats = computeStats(byUser[username] || [])
+      if (followerMap[username] != null) stats.followerCount = followerMap[username]
+      statsMap[username] = stats
     }
 
     if (onProgress) onProgress(Math.min(i + CHUNK, usernames.length), usernames.length)

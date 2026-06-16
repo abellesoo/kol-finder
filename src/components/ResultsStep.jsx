@@ -1,5 +1,5 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, Zap } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
 import { exportToCsv, EXPORT_COLUMNS, DEFAULT_COLUMNS } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 
@@ -175,6 +175,17 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
+const CACHE_KEY = 'kol_live_stats_v1'
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+
+function readCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') } catch { return {} }
+}
+
+function writeCache(cache) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
+}
+
 export default function ResultsStep({ results, influencers, config }) {
   const [sortKey, setSortKey] = useState('overall')
   const [sortDir, setSortDir] = useState('desc')
@@ -182,7 +193,16 @@ export default function ResultsStep({ results, influencers, config }) {
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_COLUMNS)
-  const [liveStats, setLiveStats] = useState({}) // username → computeStats result
+  const [liveStats, setLiveStats] = useState(() => {
+    // Pre-populate from cache on first render
+    const cache = readCache()
+    const now = Date.now()
+    const valid = {}
+    for (const [u, entry] of Object.entries(cache)) {
+      if (now - entry.ts < CACHE_TTL_MS) valid[u] = entry.stats
+    }
+    return valid
+  })
   const [liveStatus, setLiveStatus] = useState('idle') // idle | loading | done | error
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
@@ -236,22 +256,45 @@ export default function ResultsStep({ results, influencers, config }) {
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
 
-  const handleFetchLive = async () => {
-    const usernames = filtered.map((r) => r.username)
+  const handleFetchLive = useCallback(async (usernames, { force = false } = {}) => {
+    const cache = readCache()
+    const now = Date.now()
+    const toFetch = force
+      ? usernames
+      : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS)
+
+    if (toFetch.length === 0) {
+      setLiveStatus('done')
+      return
+    }
+
     setLiveStatus('loading')
-    setLiveProgress({ done: 0, total: usernames.length })
+    setLiveProgress({ done: 0, total: toFetch.length })
     setLiveError(null)
     try {
-      const statsMap = await fetchBatchStats(usernames, (done, total) => {
+      const statsMap = await fetchBatchStats(toFetch, (done, total) => {
         setLiveProgress({ done, total })
       })
+      // Persist to cache
+      const updated = { ...readCache() }
+      for (const [u, stats] of Object.entries(statsMap)) {
+        updated[u] = { stats, ts: Date.now() }
+      }
+      writeCache(updated)
       setLiveStats((prev) => ({ ...prev, ...statsMap }))
       setLiveStatus('done')
     } catch (err) {
       setLiveError(err.message)
       setLiveStatus('error')
     }
-  }
+  }, [])
+
+  // Auto-fetch on load — skips accounts already in cache
+  useEffect(() => {
+    if (results.length > 0) {
+      handleFetchLive(results.map((r) => r.username))
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
@@ -272,34 +315,34 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
         <div className="flex items-center gap-2">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
-          {liveStatus === 'idle' || liveStatus === 'error' ? (
-            <button
-              onClick={handleFetchLive}
-              className="flex items-center gap-2 px-4 py-2 border border-accent text-accent rounded-lg text-sm hover:bg-accent hover:text-white transition-all"
-            >
-              <Zap size={15} />
-              Fetch Live Stats
-            </button>
-          ) : liveStatus === 'loading' ? (
+          {liveStatus === 'loading' ? (
             <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
               <Loader2 size={15} className="animate-spin" />
-              {liveProgress.done}/{liveProgress.total} accounts
+              Fetching live stats {liveProgress.done}/{liveProgress.total}
             </div>
-          ) : (
+          ) : liveStatus === 'error' ? (
             <button
-              onClick={handleFetchLive}
+              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
+            >
+              <RefreshCw size={15} />
+              Retry live stats
+            </button>
+          ) : liveStatus === 'done' ? (
+            <button
+              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
               className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
             >
-              <Zap size={15} />
+              <RefreshCw size={15} />
               Refresh
             </button>
-          )}
+          ) : null}
           <button
             onClick={() => exportToCsv(filtered, influencers, selectedColumns, liveStats)}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
           >
             <Download size={15} />
-            Export CSV
+            Export XLSX
           </button>
         </div>
       </div>
@@ -345,7 +388,7 @@ export default function ResultsStep({ results, influencers, config }) {
       {/* Table */}
       <div className="border border-mist rounded-xl overflow-x-auto">
         {/* Table header */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[900px]">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[1000px]">
           <span>Account</span>
           <button onClick={() => toggleSort('overall')} className="flex items-center gap-1 hover:text-ink">
             Overall <SortIcon k="overall" /><InfoTooltip column="overall" />
@@ -359,6 +402,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <button onClick={() => toggleSort('engagement')} className="flex items-center gap-1 hover:text-ink">
             Engagement <SortIcon k="engagement" /><InfoTooltip column="engagement" />
           </button>
+          <span>Followers</span>
           <span>Format</span>
           <span>Med. Likes</span>
           <span>Med. Views</span>
@@ -375,7 +419,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <div key={r.username}>
             {/* Main row */}
             <div
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[900px]"
+              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[1000px]"
               onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
             >
               {/* Account */}
@@ -426,6 +470,13 @@ export default function ResultsStep({ results, influencers, config }) {
                     <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
                   </>
                 )}
+              </div>
+
+              {/* Followers */}
+              <div>
+                <p className="font-mono text-sm text-ink">
+                  {r.followerCount != null ? r.followerCount.toLocaleString() : '—'}
+                </p>
               </div>
 
               {/* Format */}

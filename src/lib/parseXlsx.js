@@ -92,7 +92,12 @@ export function parseApifyXlsx(file) {
             return isNaN(v) || v < 0 ? 0 : v
           })
           const xlsxViewValues = posts
-            .map((p) => Number(p['videoViewCount']))
+            .map((p) => {
+              const v = Number(
+                p['videoViewCount'] ?? p['videoPlayCount'] ?? p['igPlayCount'] ?? p['playsCount'] ?? p['views']
+              )
+              return isNaN(v) ? 0 : v
+            })
             .filter((v) => v > 0)
           const xlsxHiddenCount = posts.filter(
             (p) => p['likesCount'] === -1 || p['likesCount'] == null

@@ -107,7 +107,7 @@ export default function App() {
     <>
       {/* Top nav */}
       <div className="border-b border-mist px-6 py-3 flex items-center gap-4">
-        <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">KOL Finder</span>
+        <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">Seeding Tool</span>
         <div className="flex items-center gap-1 bg-mist/60 rounded-lg p-1">
           <button
             onClick={() => setMode('finder')}
@@ -115,7 +115,7 @@ export default function App() {
               mode === 'finder' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
             }`}
           >
-            Finder
+            Seeder
           </button>
           <button
             onClick={() => setMode('lookup')}

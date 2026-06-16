@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx'
+
 export const EXPORT_COLUMNS = [
   { id: 'username',        label: 'username',         getValue: (r)       => r.username },
   { id: 'fullName',        label: 'fullName',         getValue: (r, inf)  => inf.fullName || '' },
@@ -7,14 +9,15 @@ export const EXPORT_COLUMNS = [
   { id: 'location_score',  label: 'location_score',   getValue: (r)       => r.scores?.location ?? '' },
   { id: 'format_score',    label: 'format_score',     getValue: (r)       => r.scores?.contentFormat ?? '' },
   { id: 'bot_risk_score',  label: 'bot_risk_score',   getValue: (r)       => r.scores?.botRisk ?? '' },
+  { id: 'follower_count',  label: 'follower_count',   getValue: (r, inf)  => inf.followerCount ?? '' },
   { id: 'avg_likes',       label: 'avg_likes',        getValue: (r, inf)  => inf.avgLikes ?? '' },
   { id: 'avg_comments',    label: 'avg_comments',     getValue: (r, inf)  => inf.avgComments ?? '' },
   { id: 'post_count',      label: 'post_count',       getValue: (r, inf)  => inf.postCount ?? '' },
   { id: 'video_ratio',     label: 'video_ratio_%',    getValue: (r, inf)  => inf.videoRatio ?? '' },
-  { id: 'verdict',         label: 'verdict',          getValue: (r)       => `"${(r.verdict || '').replace(/"/g, "'")}"` },
-  { id: 'flags',           label: 'flags',            getValue: (r)       => `"${(r.flags || []).join(', ')}"` },
-  { id: 'location_signals',  label: 'location_signals',  getValue: (r)            => `"${(r.locationSignals || []).join(', ')}"` },
-  { id: 'niche_signals',     label: 'niche_signals',     getValue: (r)            => `"${(r.nicheSignals || []).join(', ')}"` },
+  { id: 'verdict',         label: 'verdict',          getValue: (r)       => r.verdict || '' },
+  { id: 'flags',           label: 'flags',            getValue: (r)       => (r.flags || []).join(', ') },
+  { id: 'location_signals',  label: 'location_signals',  getValue: (r)            => (r.locationSignals || []).join(', ') },
+  { id: 'niche_signals',     label: 'niche_signals',     getValue: (r)            => (r.nicheSignals || []).join(', ') },
   { id: 'xlsx_median_likes', label: 'xlsx_median_likes', getValue: (r, inf)        => inf.xlsxMedianLikes ?? '' },
   { id: 'xlsx_median_views', label: 'xlsx_median_views', getValue: (r, inf)        => inf.xlsxMedianViews ?? '' },
   { id: 'xlsx_hidden_likes', label: 'xlsx_hidden_likes', getValue: (r, inf)        => inf.xlsxHiddenCount ?? '' },
@@ -34,18 +37,14 @@ export function exportToCsv(results, influencers, selectedColumnIds = null, live
     : EXPORT_COLUMNS
 
   const headers = cols.map((c) => c.label)
-  const rows = results.map((r) => {
+  const dataRows = results.map((r) => {
     const inf = map[r.username] || {}
     const live = liveStats[r.username]
     return cols.map((c) => c.getValue(r, inf, live))
   })
 
-  const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `seeding-results-${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Results')
+  XLSX.writeFile(wb, `seeding-results-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }

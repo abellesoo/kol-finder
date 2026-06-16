@@ -19,18 +19,22 @@ export async function startReelScraper(usernames, resultsLimit = 100) {
 }
 
 async function startProfileScraper(usernames) {
-  const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
-  const res = await fetch(
-    `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ directUrls, resultsType: 'details', resultsLimit: 1 }),
-    }
-  )
-  if (!res.ok) return null // non-fatal — follower count is best-effort
-  const { data } = await res.json()
-  return data
+  try {
+    const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
+    const res = await fetch(
+      `${BASE}/acts/apify~instagram-profile-scraper/runs?token=${TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernames }),
+      }
+    )
+    if (!res.ok) return null
+    const { data } = await res.json()
+    return data
+  } catch {
+    return null
+  }
 }
 
 export async function getRun(runId) {
@@ -89,11 +93,10 @@ export async function fetchBatchStats(usernames, onProgress) {
     ])
 
     // Build follower count map from profile scrape
-    // apify/instagram-scraper returns followersCount at top level
     const followerMap = {}
     for (const p of profileItems) {
       const u = p.username || p.ownerUsername
-      if (u) followerMap[u] = p.followersCount ?? p.followersCountByCurrency ?? null
+      if (u) followerMap[u] = p.followersCount ?? p.followersCountByCurrency ?? p.edge_followed_by?.count ?? null
     }
 
     // Group reel items by ownerUsername

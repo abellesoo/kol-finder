@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, Zap } from 'lucide-react'
 import { exportToCsv, EXPORT_COLUMNS, DEFAULT_COLUMNS } from '../lib/exportCsv'
+import { fetchBatchStats } from '../lib/apifyApi'
 
 const COLUMN_INFO = {
   overall: {
@@ -181,6 +182,10 @@ export default function ResultsStep({ results, influencers, config }) {
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_COLUMNS)
+  const [liveStats, setLiveStats] = useState({}) // username → computeStats result
+  const [liveStatus, setLiveStatus] = useState('idle') // idle | loading | done | error
+  const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
+  const [liveError, setLiveError] = useState(null)
 
   // Build enriched list
   const infMap = useMemo(() => {
@@ -231,6 +236,23 @@ export default function ResultsStep({ results, influencers, config }) {
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
 
+  const handleFetchLive = async () => {
+    const usernames = filtered.map((r) => r.username)
+    setLiveStatus('loading')
+    setLiveProgress({ done: 0, total: usernames.length })
+    setLiveError(null)
+    try {
+      const statsMap = await fetchBatchStats(usernames, (done, total) => {
+        setLiveProgress({ done, total })
+      })
+      setLiveStats((prev) => ({ ...prev, ...statsMap }))
+      setLiveStatus('done')
+    } catch (err) {
+      setLiveError(err.message)
+      setLiveStatus('error')
+    }
+  }
+
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
       {/* Header */}
@@ -250,6 +272,28 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
         <div className="flex items-center gap-2">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          {liveStatus === 'idle' || liveStatus === 'error' ? (
+            <button
+              onClick={handleFetchLive}
+              className="flex items-center gap-2 px-4 py-2 border border-accent text-accent rounded-lg text-sm hover:bg-accent hover:text-white transition-all"
+            >
+              <Zap size={15} />
+              Fetch Live Stats
+            </button>
+          ) : liveStatus === 'loading' ? (
+            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
+              <Loader2 size={15} className="animate-spin" />
+              {liveProgress.done}/{liveProgress.total} accounts
+            </div>
+          ) : (
+            <button
+              onClick={handleFetchLive}
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
+            >
+              <Zap size={15} />
+              Refresh
+            </button>
+          )}
           <button
             onClick={() => exportToCsv(filtered, influencers, selectedColumns)}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
@@ -291,10 +335,17 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
       </div>
 
+      {/* Live stats error */}
+      {liveStatus === 'error' && (
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
+          Live fetch failed: {liveError}
+        </div>
+      )}
+
       {/* Table */}
-      <div className="border border-mist rounded-xl overflow-hidden">
+      <div className="border border-mist rounded-xl overflow-x-auto">
         {/* Table header */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[900px]">
           <span>Account</span>
           <button onClick={() => toggleSort('overall')} className="flex items-center gap-1 hover:text-ink">
             Overall <SortIcon k="overall" /><InfoTooltip column="overall" />
@@ -309,6 +360,9 @@ export default function ResultsStep({ results, influencers, config }) {
             Engagement <SortIcon k="engagement" /><InfoTooltip column="engagement" />
           </button>
           <span>Format</span>
+          <span className="text-accent/70">Med. Likes ↯</span>
+          <span className="text-accent/70">Med. Views ↯</span>
+          <span className="text-accent/70">Hidden ↯</span>
         </div>
 
         {/* Rows */}
@@ -321,7 +375,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <div key={r.username}>
             {/* Main row */}
             <div
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
+              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[900px]"
               onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
             >
               {/* Account */}
@@ -379,6 +433,45 @@ export default function ResultsStep({ results, influencers, config }) {
                 <p className="font-mono text-xs text-ink">{r.videoRatio ?? 0}% video</p>
                 <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
               </div>
+
+              {/* Live: Median Likes */}
+              {(() => {
+                const s = liveStats[r.username]
+                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
+                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
+                return (
+                  <p className="font-mono text-sm text-ink">
+                    {s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'}
+                  </p>
+                )
+              })()}
+
+              {/* Live: Median Views */}
+              {(() => {
+                const s = liveStats[r.username]
+                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
+                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
+                return (
+                  <p className="font-mono text-sm text-ink">
+                    {s.medianViews !== null ? s.medianViews.toLocaleString() : '—'}
+                  </p>
+                )
+              })()}
+
+              {/* Live: Hidden Likes */}
+              {(() => {
+                const s = liveStats[r.username]
+                if (liveStatus === 'loading' && !s) return <Loader2 size={13} className="animate-spin text-ink/20" />
+                if (!s) return <span className="font-mono text-xs text-ink/20">—</span>
+                return (
+                  <div>
+                    <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
+                    {s.total > 0 && (
+                      <p className="font-mono text-xs text-ink/30">of {s.total}</p>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Expanded detail */}

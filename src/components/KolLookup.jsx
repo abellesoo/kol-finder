@@ -1,51 +1,12 @@
 import { useState, useCallback } from 'react'
 import { Search, Loader2, Heart, Eye, EyeOff, ExternalLink, AlertCircle } from 'lucide-react'
 import { startReelScraper, getRun, getDatasetItems } from '../lib/apifyApi'
+import { computeStats } from '../lib/computeStats'
 
 function extractUsername(input) {
   const trimmed = input.trim().replace(/^@/, '')
   const match = trimmed.match(/instagram\.com\/([^/?#]+)/)
   return match ? match[1] : trimmed
-}
-
-function median(arr) {
-  if (arr.length === 0) return null
-  const sorted = [...arr].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
-    : sorted[mid]
-}
-
-function computeStats(items) {
-  const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - 3)
-
-  const recent = items.filter(
-    (item) => item.timestamp && new Date(item.timestamp) >= cutoff
-  )
-  const hiddenCount = recent.filter(
-    (p) => p.likesCount === -1 || p.likesCount == null
-  ).length
-
-  // Include hidden-like posts in median as 0 (conservative assumption)
-  const withLikes = recent.filter((p) => typeof p.likesCount === 'number')
-  const avgLikes = median(withLikes.map((p) => Math.max(p.likesCount, 0)))
-
-  const withViews = recent.filter(
-    (p) => typeof p.videoViewCount === 'number' && p.videoViewCount > 0
-  )
-  const avgViews = median(withViews.map((p) => p.videoViewCount))
-
-  return {
-    total: recent.length,
-    hiddenCount,
-    avgLikes,
-    avgViews,
-    posts: [...recent]
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 20),
-  }
 }
 
 export default function KolLookup() {
@@ -186,11 +147,11 @@ export default function KolLookup() {
                 </p>
               </div>
               <p className="text-2xl font-semibold text-ink">
-                {stats.avgLikes !== null ? stats.avgLikes.toLocaleString() : '—'}
+                {stats.medianLikes !== null ? stats.medianLikes.toLocaleString() : '—'}
               </p>
               {stats.hiddenCount > 0 && (
                 <p className="text-xs text-ink/30 mt-1 font-mono">
-                  excl. {stats.hiddenCount} hidden
+                  {stats.hiddenCount} counted as 0
                 </p>
               )}
             </div>
@@ -203,7 +164,7 @@ export default function KolLookup() {
                 </p>
               </div>
               <p className="text-2xl font-semibold text-ink">
-                {stats.avgViews !== null ? stats.avgViews.toLocaleString() : '—'}
+                {stats.medianViews !== null ? stats.medianViews.toLocaleString() : '—'}
               </p>
             </div>
 
@@ -219,7 +180,7 @@ export default function KolLookup() {
             </div>
           </div>
 
-          {stats.avgLikes === null && stats.total > 0 && (
+          {stats.medianLikes === null && stats.total > 0 && (
             <div className="mb-5 px-4 py-3 bg-mist/50 rounded-xl text-xs text-ink/50">
               All like counts are hidden for this account — Instagram does not expose this
               data publicly.

@@ -9,14 +9,28 @@ function Section({ label, title, children }) {
   )
 }
 
-function ScoreRow({ name, range, description }) {
+function ScoreRow({ name, range, description, formula }) {
   return (
     <div className="flex gap-4 py-3 border-b border-mist/60 last:border-0">
       <div className="w-36 shrink-0">
         <p className="font-mono text-sm font-medium text-ink">{name}</p>
         <p className="font-mono text-xs text-ink/40">{range}</p>
       </div>
-      <p className="text-sm text-ink/70 leading-relaxed">{description}</p>
+      <div className="flex-1">
+        {formula && (
+          <p className="font-mono text-xs text-accent bg-accent/8 px-2 py-1 rounded mb-2 leading-relaxed">{formula}</p>
+        )}
+        <p className="text-sm text-ink/70 leading-relaxed">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function DataRow({ source, fields }) {
+  return (
+    <div className="flex gap-3 py-2 border-b border-mist/50 last:border-0 text-sm">
+      <span className="w-28 shrink-0 font-mono text-xs text-ink/50 pt-0.5">{source}</span>
+      <span className="text-ink/70 leading-relaxed">{fields}</span>
     </div>
   )
 }
@@ -31,10 +45,10 @@ export default function InstructionsPage() {
         <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">About this tool</p>
         <h1 className="text-2xl font-semibold text-ink mb-4">KOL Finder — Seeding Tool</h1>
         <p className="text-ink/70 leading-relaxed mb-3">
-          This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche, location, and content format. It works by analysing the posts of accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
+          This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche and how actively engaged their audience is. It works by analysing posts from accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
         </p>
         <p className="text-ink/70 leading-relaxed mb-3">
-          Accounts are sourced by running an Apify Instagram scraper against a competitor's tagged posts, then exporting the results and uploading them here. The tool scores each account across four dimensions and produces a ranked table you can filter, review, and export directly to Excel.
+          Accounts are sourced by running an Apify Instagram scraper against a competitor's tagged posts, then exporting the results and uploading them here. The tool scores each account across two dimensions — Engagement and Relevancy — and produces a ranked table you can filter, review, and export directly to Excel.
         </p>
         <p className="text-ink/70 leading-relaxed">
           The main benefit over working from a raw Apify export is that all the cleanup, deduplication, and ranking happens automatically. Instead of a messy spreadsheet that still needs manual sorting, you get a prioritised shortlist of MIs, KOLs, and KOCs — ordered by fit rather than scrape order — that's ready to hand off or act on directly.
@@ -49,11 +63,11 @@ export default function InstructionsPage() {
           {[
             {
               n: 1,
-              text: <>Open the <a href="https://console.apify.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Apify Console</a> and navigate to the <strong>Instagram Hashtag Scraper</strong> or <strong>Instagram Scraper</strong> actor. You want the scraper that accepts post URLs as input (not a username-based scraper).</>,
+              text: <>Open the <a href="https://console.apify.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Apify Console</a> and navigate to the <strong>Instagram Scraper</strong> actor (apify/instagram-scraper). You want the actor that accepts post URLs as direct input.</>,
             },
             {
               n: 2,
-              text: <>In the <strong>Start URLs</strong> or <strong>Direct URLs</strong> input field, paste the links to your competitor's tagged Instagram posts. These are the posts where real users have tagged or mentioned the competitor's brand — typically found under a branded hashtag or the brand's tagged section on their profile.</>,
+              text: <>In the <strong>Direct URLs</strong> input field, paste the links to your competitor's tagged Instagram posts. These are posts where real users have tagged or mentioned the competitor's brand — typically found under a branded hashtag or the brand's tagged section on their profile.</>,
             },
             {
               n: 3,
@@ -73,7 +87,7 @@ export default function InstructionsPage() {
             },
             {
               n: 7,
-              text: <>Back in this tool, go to <strong>Step 1</strong> and upload the exported .xlsx file. The tool will parse all the accounts in the file, deduplicate them, and move you to the scoring configuration screen automatically. Once on the Results page, you can click <strong>Refresh</strong> to fetch live engagement stats — but note that each Refresh triggers an Apify scrape that charges the Markato account (see the cost note above).</>,
+              text: <>Back in this tool, go to <strong>Step 1</strong> and upload the exported .xlsx file. The tool will parse all accounts, deduplicate them, and move you to the scoring configuration screen automatically. On the Results page you can click <strong>Fetch Live Stats</strong> to pull real-time median likes and views — this upgrades the Engagement Score with more accurate data, but triggers an Apify scrape that incurs cost (see the cost note below).</>,
             },
           ].map(({ n, text }) => (
             <li key={n} className="flex gap-4">
@@ -90,64 +104,113 @@ export default function InstructionsPage() {
       <div className="mb-10 px-5 py-4 border border-amber-200 bg-amber-50 rounded-xl">
         <p className="font-mono text-xs tracking-widest text-amber-600/70 uppercase mb-2">Important — Apify costs</p>
         <p className="text-sm text-ink/70 leading-relaxed mb-2">
-          The <strong>Refresh</strong> button on the Results screen triggers a live Apify scrape that charges the Markato Apify account. Each run scrapes the 10 most recent posts for every account in your results — at approximately <strong>$0.01 per account</strong>, a typical run of 300–400 accounts costs around $3–4. Use Refresh sparingly.
+          The <strong>Fetch Live Stats</strong> button on the Results screen triggers a live Apify scrape that charges the Markato Apify account. Each run scrapes the 10 most recent posts for every account in your results — at approximately <strong>$0.01 per account</strong>, a typical run of 300–400 accounts costs around $3–4. Use it sparingly.
         </p>
         <p className="text-sm text-ink/70 leading-relaxed">
-          To avoid unnecessary charges, the tool caches live scrape results for <strong>7 days</strong>. Re-uploading the same dataset within that window will reload your previously fetched stats without triggering a new scrape. Only click Refresh when you need genuinely updated figures.
+          To avoid unnecessary charges, the tool caches live scrape results for <strong>7 days</strong>. Re-uploading the same dataset within that window will reload your previously fetched stats without triggering a new scrape. Only click Fetch Live Stats when you need genuinely updated figures.
         </p>
       </div>
 
       {/* Scoring Methodology */}
       <Section label="Scoring methodology" title="How accounts are scored">
-        <p className="text-sm text-ink/60 leading-relaxed mb-5">
-          Each account receives an <strong>Overall Score out of 100</strong>, computed as an equal 50/50 blend of Engagement Score and Relevancy Score. These two signals — how actively engaged the audience is, and how closely the content matches your target niche — together determine the overall priority ranking.
-        </p>
 
+        {/* Formula summary */}
+        <div className="bg-mist/30 border border-mist rounded-xl px-5 py-4 mb-6">
+          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Formula</p>
+          <div className="space-y-1 font-mono text-sm text-ink/80">
+            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= (Engagement Score + Relevancy Score) × 5</p>
+            <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 3) <span className="text-ink/40 text-xs">· before live fetch</span></p>
+            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 5 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
+          </div>
+        </div>
+
+        {/* Data sources */}
+        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Data sources</p>
+        <div className="border border-mist rounded-xl px-4 py-1 mb-6">
+          <DataRow
+            source="Apify export"
+            fields="avgLikes, avgComments, engagementRate, followerCount, videoRatio, hashtags, captions, locationNames — all available immediately on upload, no additional scraping needed."
+          />
+          <DataRow
+            source="Live scrape"
+            fields="medianLikes, medianViews — fetched on demand via Fetch Live Stats. Replaces the export-based Engagement Score estimate. Posts from the last 3 months are used; falls back to all 10 scraped posts if no recent content exists."
+          />
+        </div>
+
+        {/* Score breakdown */}
+        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Score breakdown</p>
         <div className="border border-mist rounded-xl px-4 py-1 mb-6">
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
-            description="Equal weighting of Engagement Score and Relevancy Score: (engagement + relevancy) × 5. Accounts scoring 70 or above are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to prioritise who to review first, not as a definitive pass/fail."
+            formula="(engagement + relevancy) × 5"
+            description="Equal 50/50 blend of the two sub-scores below. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail."
           />
           <ScoreRow
             name="Engagement Score"
             range="0 – 10"
-            description="Two-stage formula. Before Fetch Live Stats: log(1 + avgLikes + avgComments×3) — computed from export data; comments weighted 3× as a proxy for replies. After Fetch Live Stats: log(1 + medianLikes + medianViews×0.5) — the score is upgraded per account as live data arrives; median is a more robust measure than the export average, and views are weighted 0.5× since they are a lower-intent action than likes. The Overall Score updates automatically once live data is loaded."
+            formula="Before live: log(1 + avgLikes + avgComments×3)   |   After live: log(1 + medianLikes + medianViews×0.5)"
+            description="Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn't automatically swamp a 1k-like account. Before live stats are fetched, comments are weighted 3× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes and views — median is more robust than average against outlier viral posts. Views are weighted 0.5× since they require less intent than a like. Photo-only accounts contribute 0 for views, which is correct. The Overall Score updates in real time as live data arrives per account."
           />
           <ScoreRow
             name="Relevancy Score"
             range="0 – 10"
-            description="Baseline 5. Adds 1 per keyword hit in your target niches (scanned from hashtags, captions, and display name). Deducts 1 per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness content will score lower than a pure-niche account. Capped at 0–10."
+            formula="5 + (hits in target niches) − (off-niche categories with hits)"
+            description="Starts at a neutral baseline of 5, reflecting that any account in the dataset has already shown some affinity with the competitor's content. Adds 1 point per keyword match found in the account's hashtags, captions, and display name, using niche-specific keyword lists (e.g. 'skincare', '護膚', 'makeup', '化妝'). Deducts 1 point per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness signals scores lower than a pure-niche account. Score is capped at 0–10."
           />
           <ScoreRow
             name="Location Score"
             range="0 – 10 · informational"
-            description="Measures how likely the account is based in your target location. Scans hashtags, captions, and tagged location names for location-specific signals — place names, local landmarks, local retailers, and language markers. Each signal found adds 2.5 points, capped at 10. For Taiwan, accounts combining traditional Chinese language signals with Mandarin voiceover indicators receive an additional boost. Not included in the Overall Score — use it to filter or sort separately."
+            formula="min(10, location signal hits × 2.5)"
+            description="Not included in the Overall Score — shown as an informational column for filtering and sorting. Scans hashtags, captions, and tagged location names for location-specific signals: place names, local landmarks, local retailers, and language markers. Each unique signal found adds 2.5 points, capped at 10. For Taiwan specifically, accounts that combine traditional Chinese language signals (繁體, 正體, 國語) with Mandarin voiceover indicators (普通話, 配音) receive an additional +4 boost, as this combination is a strong regional marker."
           />
           <ScoreRow
             name="Bot Risk Score"
             range="0 – 10 · informational"
-            description="An authenticity indicator based on the comment-to-like ratio. Accounts with very high likes but near-zero comments are flagged as suspicious. A ratio below 0.5% on accounts with over 5,000 avg likes scores 2 (high risk); above 2% scores 9 (low risk). Higher = more authentic. Not included in the Overall Score."
+            formula="based on comments ÷ likes ratio"
+            description="Not included in the Overall Score — informational only. Measures authenticity using the comment-to-like ratio. Genuine engagement typically produces a ratio of 1–2%+. Rules: ratio < 0.5% with avg likes > 5,000 → score 2 (high bot risk); ratio < 1% with avg likes > 1,000 → score 4; ratio ≥ 2% → score 9; ratio ≥ 1% → score 7; otherwise score 5. Higher score = more authentic. Accounts scoring 2–3 are flagged as 'bot-risk' in the flags column."
           />
+        </div>
+
+        {/* Column guide */}
+        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Column guide</p>
+        <div className="border border-mist rounded-xl px-4 py-1 mb-6">
           <ScoreRow
-            name="Engagement Rate"
+            name="Eng. Rate"
             range="% · from export"
-            description="The percentage of followers who liked or commented on a post, averaged across all posts in the Apify export. Calculated as (average likes + average comments) ÷ follower count × 100. Available without clicking Fetch Live Stats."
+            formula="(avgLikes + avgComments) ÷ followerCount × 100"
+            description="Standard engagement rate from the original Apify export, computed per account across all posts. Available without live stats. Useful for comparing accounts relative to their follower size — a 500-follower account with 10% ER is more engaged than a 100k-follower account with 0.5% ER."
           />
           <ScoreRow
-            name="Median Likes"
-            range="Live data"
-            description="The median like count across the 10 most recent posts or reels fetched live for this account. Posts from the last 3 months are used as the primary source, so the figure reflects recent activity. For accounts that post infrequently and have no content within that window, the calculation uses all 10 scraped posts instead, ensuring a value is always shown as long as the scraper returned any data for that account."
+            name="Med. Likes"
+            range="Live · from scrape"
+            description="Median like count across the 10 most recent posts fetched live. Median is used instead of average to avoid viral-post skew. Requires Fetch Live Stats."
           />
           <ScoreRow
-            name="Median Views"
-            range="Live data"
-            description="The median video view count across the 10 most recent posts or reels fetched live for this account. Only video content (Reels and clips) contributes to this figure — accounts that post photos only will show a blank. The same 3-month recency window and fallback logic applies as for Median Likes."
+            name="Med. Views"
+            range="Live · from scrape"
+            description="Median video view count across the 10 most recent Reels or clips fetched live. Photo-only accounts show a dash. Requires Fetch Live Stats."
+          />
+          <ScoreRow
+            name="Scraped Post"
+            range="link · from export"
+            description="URL of the most recent post found in the original Apify export for this account. Opens the post directly on Instagram."
+          />
+          <ScoreRow
+            name="Post Likes / Comments / Plays"
+            range="from export"
+            description="Raw like count, comment count, and play/view count of that most recent scraped post. Useful for a quick sanity check on the account's typical performance before clicking through."
+          />
+          <ScoreRow
+            name="Scraped Caption"
+            range="from export"
+            description="Caption text of the most recent scraped post. Helpful for a quick read on content style and language without leaving the tool."
           />
         </div>
 
         <p className="text-xs text-ink/40 font-mono">
-          Scores are computed from the Apify export data using hashtags, captions, location tags, and engagement metrics. No external data sources are used.
+          All scores are computed locally in your browser from the uploaded export file. No data is sent to any external server except Apify (for the optional live stats fetch).
         </p>
       </Section>
 

@@ -86,17 +86,23 @@ export async function fetchBatchStats(usernames, onProgress) {
     const byUser = {}
 
     for (const item of items) {
-      // Profile item — has followersCount directly
-      if (item.followersCount != null && item.username) {
-        followerMap[item.username] = item.followersCount
+      // Post items always have a timestamp or likesCount; pure profile items do not
+      const isPost = item.timestamp != null || item.likesCount !== undefined
+
+      if (!isPost) {
+        // Profile-only item
+        const u = item.username
+        if (u && item.followersCount != null) followerMap[u] = item.followersCount
         continue
       }
 
-      // Post item
-      const u = item.ownerUsername
+      // Post item — try multiple field names for owner
+      const u = item.ownerUsername || item.username || item.owner?.username
       if (!u) continue
 
-      // Capture follower count embedded in post items if present
+      if (item.followersCount != null && followerMap[u] == null) {
+        followerMap[u] = item.followersCount
+      }
       if (item.ownerFollowersCount != null && followerMap[u] == null) {
         followerMap[u] = item.ownerFollowersCount
       }

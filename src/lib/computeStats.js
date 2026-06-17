@@ -24,10 +24,11 @@ export function computeStats(items) {
     (p) => p.likesCount === -1 || p.likesCount == null
   ).length
 
-  const withLikes = recent.filter((p) => typeof p.likesCount === 'number')
+  const postsForMedian = recent.length > 0 ? recent : items
+  const withLikes = postsForMedian.filter((p) => typeof p.likesCount === 'number')
   const medianLikes = median(withLikes.map((p) => Math.max(p.likesCount, 0)))
 
-  const withViews = recent.filter(
+  const withViews = postsForMedian.filter(
     (p) => typeof p.videoViewCount === 'number' && p.videoViewCount > 0
   )
   const medianViews = median(withViews.map((p) => p.videoViewCount))

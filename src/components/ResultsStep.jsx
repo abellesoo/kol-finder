@@ -338,7 +338,7 @@ export default function ResultsStep({ results, influencers, config }) {
             </button>
           ) : null}
           <button
-            onClick={() => exportToCsv(filtered, influencers, selectedColumns, liveStats)}
+            onClick={() => exportToCsv(filtered, influencers, selectedColumns, liveStats).catch(console.error)}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
           >
             <Download size={15} />
@@ -490,39 +490,23 @@ export default function ResultsStep({ results, influencers, config }) {
                 <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
               </div>
 
-              {/* Median Likes — XLSX (instant) + live (after fetch) */}
+              {/* Median Likes — live only */}
               <div>
-                <p className="font-mono text-sm text-ink">
-                  {r.xlsxMedianLikes !== null && r.xlsxMedianLikes !== undefined
-                    ? r.xlsxMedianLikes.toLocaleString() : '—'}
-                </p>
                 {(() => {
                   const s = liveStats[r.username]
                   if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (!s) return null
-                  return (
-                    <p className="font-mono text-xs text-accent">
-                      {s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'} live
-                    </p>
-                  )
+                  if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
+                  return <p className="font-mono text-sm text-ink">{s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'}</p>
                 })()}
               </div>
 
-              {/* Median Views — XLSX + live */}
+              {/* Median Views — live only */}
               <div>
-                <p className="font-mono text-sm text-ink">
-                  {r.xlsxMedianViews !== null && r.xlsxMedianViews !== undefined
-                    ? r.xlsxMedianViews.toLocaleString() : '—'}
-                </p>
                 {(() => {
                   const s = liveStats[r.username]
                   if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (!s) return null
-                  return (
-                    <p className="font-mono text-xs text-accent">
-                      {s.medianViews !== null ? s.medianViews.toLocaleString() : '—'} live
-                    </p>
-                  )
+                  if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
+                  return <p className="font-mono text-sm text-ink">{s.medianViews !== null ? s.medianViews.toLocaleString() : '—'}</p>
                 })()}
               </div>
 

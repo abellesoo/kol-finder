@@ -1,22 +1,18 @@
 import { computeStats } from './computeStats'
 
-const BASE = 'https://api.apify.com/v2'
-const TOKEN = import.meta.env.VITE_APIFY_API_KEY
+// Public URL of the Cloudflare Worker proxy — not a secret.
+// In production this is set via VITE_PROXY_URL in GitHub Actions.
+// For local dev either point at the deployed worker or run `wrangler dev`
+// in the /worker directory (listens on http://localhost:8787 by default).
+const PROXY = (import.meta.env.VITE_PROXY_URL || 'http://localhost:8787').replace(/\/$/, '')
 
 async function startInstagramScraper(usernames, resultsLimit = 30) {
   const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
-  const res = await fetch(
-    `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        directUrls,
-        resultsType: 'posts',
-        resultsLimit,
-      }),
-    }
-  )
+  const res = await fetch(`${PROXY}/start-run/instagram-scraper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
+  })
   if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
   const { data } = await res.json()
   return data
@@ -25,39 +21,40 @@ async function startInstagramScraper(usernames, resultsLimit = 30) {
 // Used for KolLookup (single-profile mode)
 export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
-  const res = await fetch(
-    `${BASE}/acts/apify~instagram-reel-scraper/runs?token=${TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: list, resultsLimit }),
-    }
-  )
+  const res = await fetch(`${PROXY}/start-run/reel-scraper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: list, resultsLimit }),
+  })
   if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
   const { data } = await res.json()
   return data
 }
 
 export async function getRun(runId) {
-  const res = await fetch(`${BASE}/actor-runs/${runId}?token=${TOKEN}`)
+  const res = await fetch(`${PROXY}/run-status/${runId}`)
   if (!res.ok) throw new Error(`Failed to get run (${res.status})`)
   const { data } = await res.json()
   return data
 }
 
 export async function getDatasetItems(datasetId) {
-  const res = await fetch(
-    `${BASE}/datasets/${datasetId}/items?token=${TOKEN}&limit=2000&clean=true`
-  )
+  const res = await fetch(`${PROXY}/dataset/${datasetId}`)
   if (!res.ok) throw new Error(`Failed to fetch dataset (${res.status})`)
   return res.json()
 }
 
+// Poll with backoff: 3s → 5s → 8s → 10s (cap)
+const POLL_DELAYS = [3000, 5000, 8000, 10000]
+
 async function pollUntilDone(run) {
   let runData = run
+  let attempt = 0
   while (runData.status === 'READY' || runData.status === 'RUNNING') {
-    await new Promise((r) => setTimeout(r, 3000))
-    runData = await getRun(run.id)
+    const delay = POLL_DELAYS[Math.min(attempt, POLL_DELAYS.length - 1)]
+    await new Promise((r) => setTimeout(r, delay))
+    attempt++
+    runData = await getRun(runData.id)
   }
   if (runData.status !== 'SUCCEEDED') {
     throw new Error(`Actor run ${runData.status.toLowerCase()}`)
@@ -83,7 +80,6 @@ export async function fetchBatchStats(usernames, onProgress) {
     const followerMap = {}
     const byUser = {}
     for (const item of items) {
-      // Profile-level item (no timestamp) — extract follower count
       if (item.followersCount != null && item.username && item.timestamp == null) {
         followerMap[item.username] = item.followersCount
         continue

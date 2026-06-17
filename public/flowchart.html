@@ -484,14 +484,14 @@ const details = {
   scraper: {
     title: 'startReelScraper',
     colorType: 'skill',
-    what: 'POSTs to the Apify API using the VITE_APIFY_API_KEY (baked into the bundle at build time by Vite). Starts an Instagram Reels scraper actor for the given username and returns a run object containing the run ID used for polling.',
+    what: 'POSTs to the Cloudflare Worker proxy (VITE_PROXY_URL/start-run/reel-scraper), which forwards the request to the Apify API server-side. The Apify key is stored as a Cloudflare Worker secret — it never reaches the browser bundle.',
     output: '{ id: string, status: "READY" | "RUNNING" }',
-    notes: 'The API key is stored in .env as VITE_APIFY_API_KEY and injected at build time — it is visible in the client bundle.',
+    notes: 'Browser → Cloudflare Worker (kol-finder-proxy) → Apify. The Worker enforces CORS so only abellesoo.github.io and localhost can call it.',
   },
   poll: {
     title: 'Poll getRun',
     colorType: 'process',
-    what: 'Calls getRun(run.id) every 3 seconds in a while loop until the status is no longer READY or RUNNING. If the run ends in any status other than SUCCEEDED (e.g. FAILED, ABORTED), an error is thrown and shown to the user.',
+    what: 'Calls the Worker proxy (VITE_PROXY_URL/run-status/:runId) in a backoff loop until the run is no longer READY or RUNNING. Delays follow 3s → 5s → 8s → 10s (capped). If the run ends in any status other than SUCCEEDED (e.g. FAILED, ABORTED), an error is thrown and shown to the user.',
     output: 'Completed run object with defaultDatasetId',
   },
   dataset: {

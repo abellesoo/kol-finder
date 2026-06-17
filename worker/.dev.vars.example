@@ -1,0 +1,4 @@
+# Copy this file to .dev.vars and fill in the value.
+# .dev.vars is gitignored — never commit it.
+# This file is only needed if you run `wrangler dev` locally.
+APIFY_API_KEY=your_apify_key_here

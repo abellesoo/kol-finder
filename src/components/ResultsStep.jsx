@@ -7,22 +7,33 @@ const COLUMN_INFO = {
   overall: {
     title: 'Overall Score (0–100)',
     lines: [
-      'A weighted combination of all four sub-scores:',
-      '· Niche fit × 3.5',
-      '· Location match × 3.0',
-      '· Content format × 2.0',
-      '· Bot risk (authenticity) × 1.5',
-      'Higher = stronger seeding candidate for your search.',
+      '50% Engagement Score + 50% Relevancy Score.',
+      'Each sub-score is 0–10; combined and scaled to 0–100.',
+      '· 70+ = strong match',
+      '· 45–69 = possible',
+      '· <45 = low fit',
     ],
   },
-  niche: {
-    title: 'Niche Score (0–10)',
+  relevancy: {
+    title: 'Relevancy Score (0–10)',
     lines: [
-      "How well the account's content matches your target niches.",
-      'Scans captions, hashtags, and display name for niche keywords.',
-      '· 8–10 = very strong niche match',
+      'Baseline 5. Adds 1 per keyword hit in your target niches.',
+      'Deducts 1 per off-niche category that also has keyword hits.',
+      'Scans captions, hashtags, and display name.',
+      '· 8–10 = strong niche match',
       '· 5–7 = some relevant content',
-      '· 0–4 = little or no niche signal',
+      '· 0–4 = off-niche or diluted content mix',
+    ],
+  },
+  engagement_score: {
+    title: 'Engagement Score (0–10)',
+    lines: [
+      'log(1 + Likes + Comments×3)',
+      'Comments are weighted 3× as a proxy for replies.',
+      'Instagram does not expose repost counts.',
+      '· ~4 = micro-influencer (~50 avg likes)',
+      '· ~6–7 = mid-tier (~500–1000 avg likes)',
+      '· ~9–10 = large account (10k+ avg likes)',
     ],
   },
   location: {
@@ -112,19 +123,19 @@ function InfoTooltip({ column }) {
 
 // Columns shown in the table. exportIds maps each to EXPORT_COLUMNS ids for the xlsx.
 const TABLE_COLUMNS = [
-  { id: 'overall',          label: 'Overall',      width: '1fr', sortKey: 'overall',    infoKey: 'overall',          exportIds: ['overall'] },
-  { id: 'niche_score',      label: 'Niche',        width: '1fr', sortKey: 'niche',      infoKey: 'niche',            exportIds: ['niche_score'] },
-  { id: 'location_score',   label: 'Location',     width: '1fr', sortKey: 'location',   infoKey: 'location',         exportIds: ['location_score'] },
-  { id: 'engagement',       label: 'Eng. Rate',    width: '1fr', sortKey: 'engagement', infoKey: 'engagement',       exportIds: ['engagement_rate'] },
-  { id: 'follower_count',   label: 'Followers',    width: '1fr',                                                     exportIds: ['follower_count'] },
-  { id: 'format',           label: 'Format',       width: '1fr',                                                     exportIds: ['video_ratio'] },
-  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                       exportIds: ['live_median_likes'] },
-  { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                       exportIds: ['live_median_views'] },
-  { id: 'sample_post_url',        label: 'Scraped Post',     width: '1fr',  exportIds: ['sample_post_url'] },
-  { id: 'scraped_post_likes',    label: 'Post Likes',       width: '1fr',  exportIds: ['scraped_post_likes'] },
-  { id: 'scraped_post_comments', label: 'Post Comments',    width: '1fr',  exportIds: ['scraped_post_comments'] },
-  { id: 'scraped_post_plays',    label: 'Post Plays',       width: '1fr',  exportIds: ['scraped_post_plays'] },
-  { id: 'sample_caption',        label: 'Scraped Caption',  width: '2fr',  exportIds: ['sample_caption'] },
+  { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
+  { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
+  { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
+  { id: 'location_score',        label: 'Location',        width: '1fr', sortKey: 'location',     infoKey: 'location',         exportIds: ['location_score'] },
+  { id: 'engagement',            label: 'Eng. Rate',       width: '1fr', sortKey: 'engagement',   infoKey: 'engagement',       exportIds: ['engagement_rate'] },
+  { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
+  { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', infoKey: 'live_median_likes',                         exportIds: ['live_median_likes'] },
+  { id: 'live_median_views',     label: 'Med. Views',      width: '1fr', infoKey: 'live_median_views',                         exportIds: ['live_median_views'] },
+  { id: 'sample_post_url',       label: 'Scraped Post',    width: '1fr',                                                       exportIds: ['sample_post_url'] },
+  { id: 'scraped_post_likes',    label: 'Post Likes',      width: '1fr',                                                       exportIds: ['scraped_post_likes'] },
+  { id: 'scraped_post_comments', label: 'Post Comments',   width: '1fr',                                                       exportIds: ['scraped_post_comments'] },
+  { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
+  { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
 ]
 
 // Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
@@ -282,14 +293,16 @@ export default function ResultsStep({ results, influencers, config }) {
     }
     list = [...list].sort((a, b) => {
       const av = sortKey === 'overall' ? a.overall
-        : sortKey === 'niche' ? (a.scores?.niche ?? 0)
+        : sortKey === 'relevancy' ? (a.scores?.relevancy ?? 0)
+        : sortKey === 'eng_score' ? (a.scores?.engagement ?? 0)
         : sortKey === 'location' ? (a.scores?.location ?? 0)
-        : sortKey === 'engagement' ? a.totalEngagement
+        : sortKey === 'engagement' ? (a.engagementRate ?? a.totalEngagement ?? 0)
         : a.overall
       const bv = sortKey === 'overall' ? b.overall
-        : sortKey === 'niche' ? (b.scores?.niche ?? 0)
+        : sortKey === 'relevancy' ? (b.scores?.relevancy ?? 0)
+        : sortKey === 'eng_score' ? (b.scores?.engagement ?? 0)
         : sortKey === 'location' ? (b.scores?.location ?? 0)
-        : sortKey === 'engagement' ? b.totalEngagement
+        : sortKey === 'engagement' ? (b.engagementRate ?? b.totalEngagement ?? 0)
         : b.overall
       return sortDir === 'desc' ? bv - av : av - bv
     })
@@ -459,8 +472,8 @@ export default function ResultsStep({ results, influencers, config }) {
           switch (col.id) {
             case 'overall':
               return <ScoreBadge score={r.overall} />
-            case 'niche_score':
-              return <MiniBar value={r.scores?.niche ?? 0} color="bg-rose/70" />
+            case 'relevancy_score':
+              return <MiniBar value={r.scores?.relevancy ?? 0} color="bg-rose/70" />
             case 'location_score':
               return <MiniBar value={r.scores?.location ?? 0} color="bg-sage/70" />
             case 'engagement':
@@ -483,13 +496,8 @@ export default function ResultsStep({ results, influencers, config }) {
               const val = (s?.followerCount ?? r.followerCount)
               return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
             }
-            case 'format':
-              return (
-                <div>
-                  <p className="font-mono text-xs text-ink">{r.videoRatio ?? 0}% video</p>
-                  <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
-                </div>
-              )
+            case 'engagement_score':
+              return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
             case 'live_median_likes':
               if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
               if (!s) return <p className="font-mono text-sm text-ink/30">—</p>

@@ -100,39 +100,39 @@ export default function InstructionsPage() {
       {/* Scoring Methodology */}
       <Section label="Scoring methodology" title="How accounts are scored">
         <p className="text-sm text-ink/60 leading-relaxed mb-5">
-          Each account receives an <strong>Overall Score out of 100</strong>, calculated as a weighted sum of four sub-scores. Niche fit carries the most weight, followed by location, content format, and authenticity. The weights are: Niche × 3.5, Location × 3.0, Format × 2.0, Bot Risk × 1.5.
+          Each account receives an <strong>Overall Score out of 100</strong>, computed as an equal 50/50 blend of Engagement Score and Relevancy Score. These two signals — how actively engaged the audience is, and how closely the content matches your target niche — together determine the overall priority ranking.
         </p>
 
         <div className="border border-mist rounded-xl px-4 py-1 mb-6">
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
-            description="A weighted composite of the four sub-scores below. Niche fit is the strongest signal (×3.5), followed by location (×3.0), content format (×2.0), and authenticity/bot risk (×1.5). Accounts scoring 70 or above are flagged as strong matches; 45–69 as possible; below 45 as low fit. The score is intended as a triage tool — use it to prioritise who to review first, not as a definitive pass/fail."
+            description="Equal weighting of Engagement Score and Relevancy Score: (engagement + relevancy) × 5. Accounts scoring 70 or above are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to prioritise who to review first, not as a definitive pass/fail."
           />
           <ScoreRow
-            name="Niche Score"
+            name="Engagement Score"
             range="0 – 10"
-            description="Measures how closely the account's content matches the niches you selected at setup. The tool scans each account's hashtags, recent captions, and display name for niche-specific keywords (e.g. 'skincare', '護膚', 'makeup', '化妝'). Each keyword match adds to the score, capped at 10. An account with many relevant keyword hits across its content will score closer to 10; one with little or no matching content will score near 0."
+            description="log(1 + Likes + Comments×3). Comments are weighted 3× as a proxy for replies, since they signal active conversation rather than passive scrolling. Instagram does not expose repost counts, so that term is omitted. Natural log compresses large numbers: ~4 for micro-influencers (~50 avg likes), ~6–7 for mid-tier (~500–1,000 avg likes), ~9–10 for large accounts (10,000+ avg likes)."
+          />
+          <ScoreRow
+            name="Relevancy Score"
+            range="0 – 10"
+            description="Baseline 5. Adds 1 per keyword hit in your target niches (scanned from hashtags, captions, and display name). Deducts 1 per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness content will score lower than a pure-niche account. Capped at 0–10."
           />
           <ScoreRow
             name="Location Score"
-            range="0 – 10"
-            description="Measures how likely the account is based in your target location. The tool scans hashtags, captions, and tagged location names for location-specific signals — for example, place names, local landmarks, local retailers, and language markers. Each signal found adds 2.5 points, capped at 10. For Taiwan, accounts that combine traditional Chinese language signals with Mandarin voiceover indicators receive an additional boost, as this combination is a strong regional marker."
-          />
-          <ScoreRow
-            name="Format Score"
-            range="0 – 10"
-            description="Reflects how much of the account's output is video content (Reels, clips). If you enabled 'Require Video' in the scoring configuration, this score equals the account's video post percentage multiplied by 10 — so an account where 80% of posts are videos scores 8. If video is not required, all accounts receive a neutral score of 7 regardless of their format mix."
+            range="0 – 10 · informational"
+            description="Measures how likely the account is based in your target location. Scans hashtags, captions, and tagged location names for location-specific signals — place names, local landmarks, local retailers, and language markers. Each signal found adds 2.5 points, capped at 10. For Taiwan, accounts combining traditional Chinese language signals with Mandarin voiceover indicators receive an additional boost. Not included in the Overall Score — use it to filter or sort separately."
           />
           <ScoreRow
             name="Bot Risk Score"
-            range="0 – 10"
-            description="An authenticity indicator based on the ratio of comments to likes. Genuine engagement typically produces a comment-to-like ratio of around 1–2% or higher. Accounts with very high like counts but near-zero comments are flagged as suspicious: a ratio below 0.5% on accounts with over 5,000 average likes scores 2 (high risk), while a ratio above 2% scores 9 (low risk, likely authentic). A higher Bot Risk Score means lower bot suspicion — it is an authenticity score, not a risk score."
+            range="0 – 10 · informational"
+            description="An authenticity indicator based on the comment-to-like ratio. Accounts with very high likes but near-zero comments are flagged as suspicious. A ratio below 0.5% on accounts with over 5,000 avg likes scores 2 (high risk); above 2% scores 9 (low risk). Higher = more authentic. Not included in the Overall Score."
           />
           <ScoreRow
             name="Engagement Rate"
             range="% · from export"
-            description="The percentage of followers who liked or commented on a post, averaged across all posts in the Apify export. Calculated as (average likes + average comments) ÷ follower count × 100. A higher rate indicates a more actively engaged audience relative to account size. This figure comes from the original export data, not from the live scrape, so it is available without clicking Fetch Live Stats."
+            description="The percentage of followers who liked or commented on a post, averaged across all posts in the Apify export. Calculated as (average likes + average comments) ÷ follower count × 100. Available without clicking Fetch Live Stats."
           />
           <ScoreRow
             name="Median Likes"

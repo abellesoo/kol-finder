@@ -13,7 +13,6 @@ const HK_SIGNALS = [
   '銅鑼灣', '旺角', '尖沙咀', '中環', '灣仔', 'cantonese', '廣東話', '粵語',
 ]
 const TW_SIGNALS = ['台灣', 'taiwan', '台北', 'taipei', '高雄', '台中', 'nt$', '國語', '台語', '繁體', '正體']
-// Putonghua/Mandarin audio or voiceover signals — when paired with traditional Chinese = Taiwan
 const TW_PUTONGHUA_SIGNALS = ['普通話', 'putonghua', '普通話配音', '國語配音', 'mandarin voiceover', '配音', '旁白']
 const SG_SIGNALS = ['singapore', '新加坡', 'sg', 'sgd', 'orchard', 'sentosa']
 const MO_SIGNALS = ['macau', 'macao', '澳門', 'mo']
@@ -30,28 +29,43 @@ function textContainsAny(text, keywords) {
   return keywords.filter((kw) => lower.includes(kw.toLowerCase()))
 }
 
-function scoreNiche(inf, targetNiches) {
+// Engagement Score: log(1 + Likes + Replies×3 + Reposts×2)
+// Instagram has no native repost metric — avgComments used as Replies, reposts treated as 0
+function scoreEngagement(inf) {
+  const likes = inf.avgLikes || 0
+  const comments = inf.avgComments || 0
+  const raw = Math.log(1 + likes + comments * 3)
+  return { score: parseFloat(Math.min(10, raw).toFixed(2)) }
+}
+
+// Relevancy Score: baseline 5, +1 per keyword hit in target niches, -1 per off-niche category match
+function scoreRelevancy(inf, targetNiches) {
   const allText = [
     ...inf.hashtags,
     ...inf.sampleCaptions,
     inf.fullName || '',
   ].join(' ')
 
+  const targetLabels = new Set(
+    targetNiches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0])
+  )
+
   let hits = 0
+  let deductions = 0
   const signals = []
 
-  for (const niche of targetNiches) {
-    const label = niche.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0]
-    const keywords = NICHE_KEYWORDS[label] || []
+  for (const [nicheLabel, keywords] of Object.entries(NICHE_KEYWORDS)) {
     const found = textContainsAny(allText, keywords)
-    hits += found.length
-    signals.push(...found)
+    if (targetLabels.has(nicheLabel)) {
+      hits += found.length
+      signals.push(...found)
+    } else if (found.length > 0) {
+      deductions += 1
+    }
   }
 
-  return {
-    score: Math.min(10, hits * 1.5),
-    signals: [...new Set(signals)].slice(0, 5),
-  }
+  const score = Math.max(0, Math.min(10, 5 + hits - deductions))
+  return { score, signals: [...new Set(signals)].slice(0, 5) }
 }
 
 function scoreLocation(inf, locationTarget) {
@@ -65,7 +79,6 @@ function scoreLocation(inf, locationTarget) {
   const found = textContainsAny(allText, signals)
   let score = Math.min(10, found.length * 2.5)
 
-  // Taiwan: traditional Chinese + putonghua/voiceover combo strongly indicates Taiwan
   if (locationTarget === 'Taiwan') {
     const hasTraditional = textContainsAny(allText, ['繁體', '正體', '國語', '台語']).length > 0
     const hasPutonghua = textContainsAny(allText, TW_PUTONGHUA_SIGNALS).length > 0
@@ -80,18 +93,11 @@ function scoreLocation(inf, locationTarget) {
   }
 }
 
-function scoreContentFormat(inf, requireVideo) {
-  if (!requireVideo) return { score: 7 }
-  const ratio = inf.videoRatio || 0
-  return { score: Math.round(ratio * 10) }
-}
-
 function scoreBotRisk(inf) {
   const likes = inf.avgLikes || 0
   const comments = inf.avgComments || 0
   const ratio = likes > 0 ? comments / likes : 0
 
-  // Very high likes, near-zero comments → suspicious
   if (likes > 5000 && ratio < 0.005) return { score: 2 }
   if (ratio < 0.01 && likes > 1000) return { score: 4 }
   if (ratio >= 0.02) return { score: 9 }
@@ -99,11 +105,11 @@ function scoreBotRisk(inf) {
   return { score: 5 }
 }
 
-function buildFlags(inf, nicheScore, locationScore, contentScore, botScore, config) {
+function buildFlags(inf, relevancyScore, locationScore, botScore, config) {
   const flags = []
   if (locationScore.score >= 5) flags.push(`${config.locationTarget.toLowerCase().replace(' ', '-')}-based`)
   if ((inf.videoRatio || 0) >= 0.5) flags.push('video-creator')
-  if (nicheScore.score >= 6) {
+  if (relevancyScore.score >= 7) {
     const niches = config.niches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0])
     if (niches.some((n) => ['beauty', 'makeup'].includes(n))) flags.push('beauty-niche')
     if (niches.some((n) => n === 'skincare')) flags.push('skincare-niche')
@@ -122,40 +128,37 @@ function buildFlags(inf, nicheScore, locationScore, contentScore, botScore, conf
 
 export async function scoreInfluencers(influencers, config) {
   return influencers.map((inf) => {
-    const niche = scoreNiche(inf, config.niches)
+    const engagement = scoreEngagement(inf)
+    const relevancy = scoreRelevancy(inf, config.niches)
     const location = scoreLocation(inf, config.locationTarget)
-    const contentFormat = scoreContentFormat(inf, config.requireVideo)
     const botRisk = scoreBotRisk(inf)
 
-    const overall = Math.round(
-      niche.score * 3.5 +
-      location.score * 3.0 +
-      contentFormat.score * 2.0 +
-      botRisk.score * 1.5
-    )
+    // Overall = 50% Engagement Score + 50% Relevancy Score (each 0–10, total 0–100)
+    const overall = Math.round((engagement.score + relevancy.score) * 5)
 
-    const flags = buildFlags(inf, niche, location, contentFormat, botRisk, config)
+    const flags = buildFlags(inf, relevancy, location, botRisk, config)
 
     const verdictParts = []
     if (location.score >= 6) verdictParts.push(`Strong ${config.locationTarget} signals`)
     else if (location.score >= 3) verdictParts.push(`Some ${config.locationTarget} signals`)
     else verdictParts.push(`Weak ${config.locationTarget} presence`)
-    if (niche.score >= 6) verdictParts.push('good niche fit')
+    if (relevancy.score >= 7) verdictParts.push('strong niche fit')
+    else if (relevancy.score >= 5) verdictParts.push('some niche relevancy')
     if (botRisk.score <= 3) verdictParts.push('possible bot activity')
 
     return {
       username: inf.username,
       scores: {
-        niche: Math.round(niche.score),
+        relevancy: parseFloat(relevancy.score.toFixed(1)),
+        engagement: engagement.score,
         location: Math.round(location.score),
-        contentFormat: Math.round(contentFormat.score),
         botRisk: Math.round(botRisk.score),
       },
       overall,
       verdict: verdictParts.join(', ') + '.',
       flags,
       locationSignals: location.signals,
-      nicheSignals: niche.signals,
+      nicheSignals: relevancy.signals,
     }
   })
 }

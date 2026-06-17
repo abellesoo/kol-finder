@@ -4,7 +4,7 @@ import { saveAs } from 'file-saver'
 // Priority columns shown first; remaining data columns follow
 const PRIORITY_IDS = [
   'username', 'fullName', 'instagram_url', 'follower_count',
-  'live_median_likes', 'live_median_views', 'sample_post_url',
+  'live_median_likes', 'live_median_views', 'sample_post_url', 'bio', 'sample_caption',
   'approve', 'reachout_status', 'remarks',
 ]
 
@@ -32,10 +32,9 @@ export const EXPORT_COLUMNS = [
   { id: 'location_signals',  label: 'location_signals',   getValue: (r)            => (r.locationSignals || []).join(', ') },
   { id: 'niche_signals',     label: 'niche_signals',      getValue: (r)            => (r.nicheSignals || []).join(', ') },
   { id: 'live_hidden_likes', label: 'hidden_likes',        getValue: (r, inf, live) => live?.hiddenCount ?? '' },
-  { id: 'sample_post_url',  label: 'sample_post_url',    getValue: (r, inf, live) => {
-    const post = live?.posts?.[0]
-    return post?.url || (post?.shortCode ? `https://www.instagram.com/p/${post.shortCode}/` : '')
-  }},
+  { id: 'sample_post_url',  label: 'sample_post_url',    getValue: (r, inf)       => inf.samplePostUrl || '' },
+  { id: 'bio',              label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
+  { id: 'sample_caption',   label: 'sample_caption',     getValue: (r, inf)       => inf.sampleCaption || '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)

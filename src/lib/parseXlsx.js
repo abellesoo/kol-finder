@@ -117,9 +117,19 @@ export function parseApifyXlsx(file) {
               ? Math.round((xlsxSortedViews[xlsxMidV - 1] + xlsxSortedViews[xlsxMidV]) / 2)
               : xlsxSortedViews[xlsxMidV]
 
+          // Bio — take first non-empty value across posts
+          const bio = posts.map((p) => p['ownerBiography'] || p['biography'] || '').find(Boolean) || ''
+
+          // Most recent post URL (Apify exports newest first)
+          const samplePostUrl = posts.map((p) => p['url'] || (p['shortCode'] ? `https://www.instagram.com/p/${p['shortCode']}/` : null)).find(Boolean) || ''
+
+          // Most recent post caption
+          const sampleCaption = posts.map((p) => p['caption'] || '').find(Boolean) || ''
+
           return {
             username: inf.username,
             fullName: inf.fullName,
+            bio,
             postCount: n,
             avgLikes,
             avgComments,
@@ -136,6 +146,8 @@ export function parseApifyXlsx(file) {
             hashtags: uniqueHashtags.slice(0, 40),
             locationNames,
             paidCount,
+            samplePostUrl,
+            sampleCaption,
             // Raw for AI
             sampleCaptions: posts.slice(0, 5).map((p) => p['caption'] || '').filter(Boolean),
           }

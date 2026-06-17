@@ -4,13 +4,14 @@ const BASE = 'https://api.apify.com/v2'
 const TOKEN = import.meta.env.VITE_APIFY_API_KEY
 
 async function startInstagramScraper(usernames, resultsLimit = 30) {
+  const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
   const res = await fetch(
     `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        usernames,
+        directUrls,
         resultsType: 'posts',
         resultsLimit,
       }),

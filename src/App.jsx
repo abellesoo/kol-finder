@@ -3,11 +3,12 @@ import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
 import KolLookup from './components/KolLookup'
+import InstructionsPage from './components/InstructionsPage'
 import { parseApifyXlsx } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 
 export default function App() {
-  const [mode, setMode] = useState('finder') // finder | lookup
+  const [mode, setMode] = useState('finder') // finder | lookup | instructions
   const [step, setStep] = useState('upload') // upload | config | scoring | results
   const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
@@ -125,6 +126,14 @@ export default function App() {
           >
             Profile Lookup
           </button>
+          <button
+            onClick={() => setMode('instructions')}
+            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+              mode === 'instructions' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
+            }`}
+          >
+            Instructions
+          </button>
         </div>
         <a
           href="/kol-finder/flowchart.html"
@@ -136,7 +145,9 @@ export default function App() {
         </a>
       </div>
 
-      {mode === 'lookup' ? (
+      {mode === 'instructions' ? (
+        <InstructionsPage />
+      ) : mode === 'lookup' ? (
         <KolLookup />
       ) : (
         <>

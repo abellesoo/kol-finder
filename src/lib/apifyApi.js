@@ -76,7 +76,7 @@ export async function fetchBatchStats(usernames, onProgress) {
   }
 
   await Promise.all(chunks.map(async (chunk) => {
-    const run = await startInstagramScraper(chunk, 30)
+    const run = await startInstagramScraper(chunk, 10)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
 

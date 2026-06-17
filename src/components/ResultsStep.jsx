@@ -519,11 +519,11 @@ export default function ResultsStep({ results, influencers, config }) {
                 </a>
               ) : <p className="font-mono text-sm text-ink/30">—</p>
             case 'scraped_post_likes':
-              return <p className="font-mono text-sm text-ink">{inf.samplePostLikes != null ? inf.samplePostLikes.toLocaleString() : '—'}</p>
+              return <p className="font-mono text-sm text-ink">{r.samplePostLikes != null ? r.samplePostLikes.toLocaleString() : '—'}</p>
             case 'scraped_post_comments':
-              return <p className="font-mono text-sm text-ink">{inf.samplePostComments != null ? inf.samplePostComments.toLocaleString() : '—'}</p>
+              return <p className="font-mono text-sm text-ink">{r.samplePostComments != null ? r.samplePostComments.toLocaleString() : '—'}</p>
             case 'scraped_post_plays':
-              return <p className="font-mono text-sm text-ink">{inf.samplePostPlays != null ? inf.samplePostPlays.toLocaleString() : '—'}</p>
+              return <p className="font-mono text-sm text-ink">{r.samplePostPlays != null ? r.samplePostPlays.toLocaleString() : '—'}</p>
             case 'bio':
               return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
             case 'sample_caption':

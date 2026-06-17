@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
-import { exportToCsv, EXPORT_COLUMNS, DEFAULT_COLUMNS } from '../lib/exportCsv'
+import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 
 const COLUMN_INFO = {
@@ -92,6 +92,29 @@ function InfoTooltip({ column }) {
   )
 }
 
+// Columns shown in the table. exportIds maps each to EXPORT_COLUMNS ids for the xlsx.
+const TABLE_COLUMNS = [
+  { id: 'overall',          label: 'Overall',      width: '1fr', sortKey: 'overall',    infoKey: 'overall',    exportIds: ['overall'] },
+  { id: 'niche_score',      label: 'Niche',        width: '1fr', sortKey: 'niche',      infoKey: 'niche',      exportIds: ['niche_score'] },
+  { id: 'location_score',   label: 'Location',     width: '1fr', sortKey: 'location',   infoKey: 'location',   exportIds: ['location_score'] },
+  { id: 'engagement',       label: 'Engagement',   width: '1fr', sortKey: 'engagement', infoKey: 'engagement', exportIds: ['avg_likes', 'avg_comments'] },
+  { id: 'follower_count',   label: 'Followers',    width: '1fr',                                               exportIds: ['follower_count'] },
+  { id: 'format',           label: 'Format',       width: '1fr',                                               exportIds: ['video_ratio', 'post_count', 'format_score'] },
+  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr',                                               exportIds: ['live_median_likes'] },
+  { id: 'live_median_views',label: 'Med. Views',   width: '1fr',                                               exportIds: ['live_median_views'] },
+  { id: 'live_hidden_likes',label: 'Hidden',       width: '1fr',                                               exportIds: ['live_hidden_likes'] },
+  { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                               exportIds: ['sample_post_url'] },
+  { id: 'bio',              label: 'Bio',          width: '2fr',                                               exportIds: ['bio'] },
+  { id: 'sample_caption',   label: 'Caption',      width: '2fr',                                               exportIds: ['sample_caption'] },
+]
+
+// These export columns are always included regardless of table column selection
+const ALWAYS_EXPORT_IDS = [
+  'username', 'fullName', 'instagram_url',
+  'approve', 'reachout_status', 'remarks',
+  'verdict', 'flags', 'niche_signals', 'location_signals', 'bot_risk_score',
+]
+
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
   return <span className={`score-badge ${cls}`}>{score}</span>
@@ -133,7 +156,7 @@ function ColumnPicker({ selected, onChange }) {
       >
         <Columns size={15} />
         Columns
-        {selected.length < EXPORT_COLUMNS.length && (
+        {selected.length < TABLE_COLUMNS.length && (
           <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
@@ -141,9 +164,9 @@ function ColumnPicker({ selected, onChange }) {
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-mist rounded-xl shadow-lg z-10 p-3">
-          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Export columns</p>
+          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Show / export columns</p>
           <div className="space-y-1">
-            {EXPORT_COLUMNS.map((col) => (
+            {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
                 <input
                   type="checkbox"
@@ -157,7 +180,7 @@ function ColumnPicker({ selected, onChange }) {
           </div>
           <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
             <button
-              onClick={() => onChange(DEFAULT_COLUMNS)}
+              onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))}
               className="text-xs text-ink/40 hover:text-ink transition-colors"
             >
               Select all
@@ -192,7 +215,7 @@ export default function ResultsStep({ results, influencers, config }) {
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_COLUMNS)
+  const [selectedColumns, setSelectedColumns] = useState(TABLE_COLUMNS.map((c) => c.id))
   const [liveStats, setLiveStats] = useState(() => {
     // Pre-populate from cache on first render
     const cache = readCache()
@@ -337,7 +360,13 @@ export default function ResultsStep({ results, influencers, config }) {
             </button>
           ) : null}
           <button
-            onClick={() => exportToCsv(filtered, influencers, selectedColumns, liveStats).catch(console.error)}
+            onClick={() => {
+                const exportIds = [
+                  ...ALWAYS_EXPORT_IDS,
+                  ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
+                ]
+                exportToCsv(filtered, influencers, exportIds, liveStats).catch(console.error)
+              }}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
           >
             <Download size={15} />
@@ -385,30 +414,102 @@ export default function ResultsStep({ results, influencers, config }) {
       )}
 
       {/* Table */}
+      {(() => {
+        const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
+        const gridTemplate = `2fr ${visibleCols.map((c) => c.width).join(' ')}`
+
+        const renderCell = (col, r) => {
+          const s = liveStats[r.username]
+          switch (col.id) {
+            case 'overall':
+              return <ScoreBadge score={r.overall} />
+            case 'niche_score':
+              return <MiniBar value={r.scores?.niche ?? 0} color="bg-rose/70" />
+            case 'location_score':
+              return <MiniBar value={r.scores?.location ?? 0} color="bg-sage/70" />
+            case 'engagement':
+              return (
+                <div>
+                  {r.engagementRate != null ? (
+                    <>
+                      <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
+                      <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
+                      <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
+                    </>
+                  )}
+                </div>
+              )
+            case 'follower_count': {
+              const val = (s?.followerCount ?? r.followerCount)
+              return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
+            }
+            case 'format':
+              return (
+                <div>
+                  <p className="font-mono text-xs text-ink">{r.videoRatio ?? 0}% video</p>
+                  <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
+                </div>
+              )
+            case 'live_median_likes':
+              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+              if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
+              return <p className="font-mono text-sm text-ink">{s.medianLikes != null ? s.medianLikes.toLocaleString() : '—'}</p>
+            case 'live_median_views':
+              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+              if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
+              return <p className="font-mono text-sm text-ink">{s.medianViews != null ? s.medianViews.toLocaleString() : '—'}</p>
+            case 'live_hidden_likes':
+              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+              if (s) return (
+                <div>
+                  <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
+                  {s.totalScraped > 0 && <p className="font-mono text-xs text-ink/30">of {s.totalScraped}</p>}
+                </div>
+              )
+              return (
+                <div>
+                  <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
+                  {r.xlsxRecentCount > 0 && <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>}
+                </div>
+              )
+            case 'sample_post_url':
+              return r.samplePostUrl ? (
+                <a href={r.samplePostUrl} target="_blank" rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1 font-mono text-xs text-accent hover:underline">
+                  View <ExternalLink size={10} />
+                </a>
+              ) : <p className="font-mono text-sm text-ink/30">—</p>
+            case 'bio':
+              return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
+            case 'sample_caption':
+              return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
+            default:
+              return null
+          }
+        }
+
+        return (
       <div className="border border-mist rounded-xl overflow-x-auto">
         {/* Table header */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_2fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[1300px]">
+        <div
+          className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
           <span>Account</span>
-          <button onClick={() => toggleSort('overall')} className="flex items-center gap-1 hover:text-ink">
-            Overall <SortIcon k="overall" /><InfoTooltip column="overall" />
-          </button>
-          <button onClick={() => toggleSort('niche')} className="flex items-center gap-1 hover:text-ink">
-            Niche <SortIcon k="niche" /><InfoTooltip column="niche" />
-          </button>
-          <button onClick={() => toggleSort('location')} className="flex items-center gap-1 hover:text-ink">
-            Location <SortIcon k="location" /><InfoTooltip column="location" />
-          </button>
-          <button onClick={() => toggleSort('engagement')} className="flex items-center gap-1 hover:text-ink">
-            Engagement <SortIcon k="engagement" /><InfoTooltip column="engagement" />
-          </button>
-          <span>Followers</span>
-          <span>Format</span>
-          <span>Med. Likes</span>
-          <span>Med. Views</span>
-          <span>Hidden</span>
-          <span>Sample Post</span>
-          <span>Bio</span>
-          <span>Caption</span>
+          {visibleCols.map((col) => (
+            col.sortKey ? (
+              <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center gap-1 hover:text-ink">
+                {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
+              </button>
+            ) : (
+              <span key={col.id}>{col.label}</span>
+            )
+          ))}
         </div>
 
         {/* Rows */}
@@ -421,10 +522,11 @@ export default function ResultsStep({ results, influencers, config }) {
           <div key={r.username}>
             {/* Main row */}
             <div
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_2fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[1300px]"
+              className="grid gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
+              style={{ gridTemplateColumns: gridTemplate }}
               onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
             >
-              {/* Account */}
+              {/* Account — always shown */}
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <a
@@ -450,119 +552,9 @@ export default function ResultsStep({ results, influencers, config }) {
                 </div>
               </div>
 
-              {/* Overall */}
-              <ScoreBadge score={r.overall} />
-
-              {/* Niche */}
-              <MiniBar value={r.scores?.niche ?? 0} color="bg-rose/70" />
-
-              {/* Location */}
-              <MiniBar value={r.scores?.location ?? 0} color="bg-sage/70" />
-
-              {/* Engagement */}
-              <div>
-                {r.engagementRate != null ? (
-                  <>
-                    <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
-                    <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
-                    <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
-                  </>
-                )}
-              </div>
-
-              {/* Followers */}
-              <div>
-                <p className="font-mono text-sm text-ink">
-                  {(() => {
-                    const live = liveStats[r.username]?.followerCount
-                    const xlsx = r.followerCount
-                    const val = live ?? xlsx
-                    return val != null ? val.toLocaleString() : '—'
-                  })()}
-                </p>
-              </div>
-
-              {/* Format */}
-              <div>
-                <p className="font-mono text-xs text-ink">{r.videoRatio ?? 0}% video</p>
-                <p className="text-xs text-ink/30">{r.postCount ?? 0} posts</p>
-              </div>
-
-              {/* Median Likes — live only */}
-              <div>
-                {(() => {
-                  const s = liveStats[r.username]
-                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
-                  return <p className="font-mono text-sm text-ink">{s.medianLikes !== null ? s.medianLikes.toLocaleString() : '—'}</p>
-                })()}
-              </div>
-
-              {/* Median Views — live only */}
-              <div>
-                {(() => {
-                  const s = liveStats[r.username]
-                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
-                  return <p className="font-mono text-sm text-ink">{s.medianViews !== null ? s.medianViews.toLocaleString() : '—'}</p>
-                })()}
-              </div>
-
-              {/* Hidden — live (all scraped posts) with XLSX fallback */}
-              <div>
-                {(() => {
-                  const s = liveStats[r.username]
-                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
-                  if (s) return (
-                    <>
-                      <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
-                      {s.totalScraped > 0 && (
-                        <p className="font-mono text-xs text-ink/30">of {s.totalScraped} posts</p>
-                      )}
-                    </>
-                  )
-                  // Fallback to XLSX while live hasn't loaded yet
-                  return (
-                    <>
-                      <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
-                      {r.xlsxRecentCount > 0 && (
-                        <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>
-                      )}
-                    </>
-                  )
-                })()}
-              </div>
-
-              {/* Sample Post — from original dataset */}
-              <div>
-                {r.samplePostUrl ? (
-                  <a
-                    href={r.samplePostUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex items-center gap-1 font-mono text-xs text-accent hover:underline"
-                  >
-                    View <ExternalLink size={10} />
-                  </a>
-                ) : (
-                  <p className="font-mono text-sm text-ink/30">—</p>
-                )}
-              </div>
-
-              {/* Bio — from original dataset */}
-              <div>
-                <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
-              </div>
-
-              {/* Caption — most recent post caption from original dataset */}
-              <div>
-                <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
-              </div>
+              {visibleCols.map((col) => (
+                <div key={col.id}>{renderCell(col, r)}</div>
+              ))}
             </div>
 
             {/* Expanded detail */}
@@ -600,6 +592,8 @@ export default function ResultsStep({ results, influencers, config }) {
           </div>
         ))}
       </div>
+        )
+      })()}
 
       <p className="mt-4 text-xs text-ink/25 font-mono text-center">
         Click any row to expand · Scores generated by Claude AI · Always verify manually

@@ -31,8 +31,7 @@ export const EXPORT_COLUMNS = [
   { id: 'flags',             label: 'flags',              getValue: (r)            => (r.flags || []).join(', ') },
   { id: 'location_signals',  label: 'location_signals',   getValue: (r)            => (r.locationSignals || []).join(', ') },
   { id: 'niche_signals',     label: 'niche_signals',      getValue: (r)            => (r.nicheSignals || []).join(', ') },
-  { id: 'xlsx_hidden_likes', label: 'xlsx_hidden_likes',  getValue: (r, inf)       => inf.xlsxHiddenCount ?? '' },
-  { id: 'live_hidden_likes', label: 'live_hidden_likes',  getValue: (r, inf, live) => live?.hiddenCount ?? '' },
+  { id: 'live_hidden_likes', label: 'hidden_likes',        getValue: (r, inf, live) => live?.hiddenCount ?? '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)

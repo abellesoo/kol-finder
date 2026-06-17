@@ -201,6 +201,11 @@ function ColumnPicker({ selected, onChange }) {
 const CACHE_KEY = 'kol_live_stats_v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
+// A cache entry is only valid if it has at least some real scraped data
+function hasRealData(stats) {
+  return stats && (stats.medianLikes != null || stats.medianViews != null || stats.followerCount != null)
+}
+
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') } catch { return {} }
 }
@@ -217,12 +222,12 @@ export default function ResultsStep({ results, influencers, config }) {
   const [expandedRow, setExpandedRow] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(TABLE_COLUMNS.map((c) => c.id))
   const [liveStats, setLiveStats] = useState(() => {
-    // Pre-populate from cache on first render
+    // Pre-populate from cache on first render — skip entries with no real data
     const cache = readCache()
     const now = Date.now()
     const valid = {}
     for (const [u, entry] of Object.entries(cache)) {
-      if (now - entry.ts < CACHE_TTL_MS) valid[u] = entry.stats
+      if (now - entry.ts < CACHE_TTL_MS && hasRealData(entry.stats)) valid[u] = entry.stats
     }
     return valid
   })
@@ -284,7 +289,7 @@ export default function ResultsStep({ results, influencers, config }) {
     const now = Date.now()
     const toFetch = force
       ? usernames
-      : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS)
+      : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS || !hasRealData(cache[u].stats))
     if (toFetch.length === 0) {
       setLiveStatus('done')
       return
@@ -297,10 +302,12 @@ export default function ResultsStep({ results, influencers, config }) {
       const statsMap = await fetchBatchStats(toFetch, (done, total) => {
         setLiveProgress({ done, total })
       })
-      // Persist to cache
+      // Persist to cache — don't overwrite good existing data with empty results
       const updated = { ...readCache() }
       for (const [u, stats] of Object.entries(statsMap)) {
-        updated[u] = { stats, ts: Date.now() }
+        if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) {
+          updated[u] = { stats, ts: Date.now() }
+        }
       }
       writeCache(updated)
       setLiveStats((prev) => ({ ...prev, ...statsMap }))

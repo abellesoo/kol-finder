@@ -115,14 +115,12 @@ const TABLE_COLUMNS = [
   { id: 'overall',          label: 'Overall',      width: '1fr', sortKey: 'overall',    infoKey: 'overall',          exportIds: ['overall'] },
   { id: 'niche_score',      label: 'Niche',        width: '1fr', sortKey: 'niche',      infoKey: 'niche',            exportIds: ['niche_score'] },
   { id: 'location_score',   label: 'Location',     width: '1fr', sortKey: 'location',   infoKey: 'location',         exportIds: ['location_score'] },
-  { id: 'engagement',       label: 'Engagement',   width: '1fr', sortKey: 'engagement', infoKey: 'engagement',       exportIds: ['engagement_rate'] },
+  { id: 'engagement',       label: 'Eng. Rate',    width: '1fr', sortKey: 'engagement', infoKey: 'engagement',       exportIds: ['engagement_rate'] },
   { id: 'follower_count',   label: 'Followers',    width: '1fr',                                                     exportIds: ['follower_count'] },
   { id: 'format',           label: 'Format',       width: '1fr',                                                     exportIds: ['video_ratio'] },
   { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                       exportIds: ['live_median_likes'] },
   { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                       exportIds: ['live_median_views'] },
-  { id: 'live_hidden_likes',label: 'Hidden',       width: '1fr',                                                     exportIds: ['live_hidden_likes'] },
   { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                                     exportIds: ['sample_post_url'] },
-  { id: 'bio',              label: 'Bio',          width: '2fr',                                                     exportIds: ['bio'] },
   { id: 'sample_caption',   label: 'Caption',      width: '2fr',                                                     exportIds: ['sample_caption'] },
 ]
 

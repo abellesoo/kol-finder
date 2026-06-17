@@ -125,6 +125,11 @@ export default function InstructionsPage() {
             description="An authenticity indicator based on the ratio of comments to likes. Genuine engagement typically produces a comment-to-like ratio of around 1–2% or higher. Accounts with very high like counts but near-zero comments are flagged as suspicious: a ratio below 0.5% on accounts with over 5,000 average likes scores 2 (high risk), while a ratio above 2% scores 9 (low risk, likely authentic). A higher Bot Risk Score means lower bot suspicion — it is an authenticity score, not a risk score."
           />
           <ScoreRow
+            name="Engagement Rate"
+            range="% · from export"
+            description="The percentage of followers who liked or commented on a post, averaged across all posts in the Apify export. Calculated as (average likes + average comments) ÷ follower count × 100. A higher rate indicates a more actively engaged audience relative to account size. This figure comes from the original export data, not from the live scrape, so it is available without clicking Fetch Live Stats."
+          />
+          <ScoreRow
             name="Median Likes"
             range="Live data"
             description="The median like count across the 10 most recent posts or reels fetched live for this account. Posts from the last 3 months are used as the primary source, so the figure reflects recent activity. For accounts that post infrequently and have no content within that window, the calculation uses all 10 scraped posts instead, ensuring a value is always shown as long as the scraper returned any data for that account."

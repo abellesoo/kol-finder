@@ -333,7 +333,7 @@ const nodes = [
   },
   {
     id: 'results', label: 'Results Table',
-    sub: 'Sort · Filter · Export CSV',
+    sub: 'Sort · Filter · Export XLSX',
     type: 'output', x: 125, y: 730, w: 172, h: 54,
   },
 
@@ -416,9 +416,9 @@ const details = {
   parse: {
     title: 'parseApifyXlsx',
     colorType: 'skill',
-    what: 'Reads the XLSX using the xlsx library, groups rows by ownerUsername, and aggregates per influencer: avgLikes, avgComments, videoRatio, up to 40 deduplicated hashtags, 5 sample captions, locationNames, and a count of paid-partnership posts.',
+    what: 'Reads the XLSX using the xlsx library, groups rows by ownerUsername, and aggregates per influencer: avgLikes, avgComments, engagementRate, videoRatio, followerCount, up to 40 deduplicated hashtags, 5 sample captions, locationNames, and a count of paid-partnership posts. Also extracts the most recent post URL, caption, like count, comment count, and play/view count for the Scraped Post columns.',
     output: 'Array of influencer objects sorted by totalEngagement desc',
-    notes: 'Video detection checks the "type" or "productType" column for "video", "clip", or "reel".',
+    notes: 'Video detection checks the "type" or "productType" column for "video", "clip", or "reel". Engagement rate = (avgLikes + avgComments) / followerCount × 100.',
   },
   dedup: {
     title: 'Deduplicate & Sort',
@@ -472,8 +472,8 @@ const details = {
   results: {
     title: 'Results Table',
     colorType: 'output',
-    what: 'Displays all scored influencers in a sortable, filterable table. Columns show username, overall score, niche, location, content format, and bot-risk sub-scores, plus flags and matched signals. Users can download the full dataset as a CSV.',
-    output: 'Interactive table + CSV export via exportCsv.js',
+    what: 'Displays all scored influencers in a sortable, filterable table. Columns include: Overall score, Niche, Location, Engagement Rate, Followers, Format, Med. Likes, Med. Views (both from live Apify batch scrape), Scraped Post URL, Post Likes, Post Comments, Post Plays, and Scraped Caption. The "Fetch Live Stats" button triggers fetchBatchStats — a parallelised Apify batch scrape (50 accounts per chunk, 10 posts each) that populates the live columns. Results are cached in localStorage for 7 days.',
+    output: 'Interactive table + XLSX export via exportCsv.js (ExcelJS)',
   },
   username: {
     title: '@username Input',
@@ -503,8 +503,8 @@ const details = {
   compute: {
     title: 'computeStats',
     colorType: 'process',
-    what: 'Filters posts to the last 90 days, then computes: median likes (skipping hidden-like posts where likesCount === -1), median video view count, and a count of posts with hidden likes. Returns up to 20 most recent posts for the list view.',
-    output: '{ total, hiddenCount, avgLikes, avgViews, posts[] }',
+    what: 'Filters posts to the last 3 months as the primary window, falling back to all scraped posts if none are recent enough. Computes median likes (hidden likes counted as 0), median video view count (video posts only), follower count, and a hidden-like count. Returns up to 20 most recent posts for the list view.',
+    output: '{ medianLikes, medianViews, followerCount, hiddenCount, totalScraped, posts[] }',
   },
   dashboard: {
     title: 'Profile Dashboard',

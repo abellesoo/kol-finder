@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 
@@ -133,42 +133,6 @@ const ALWAYS_EXPORT_IDS = [
   'approve', 'reachout_status', 'remarks',
 ]
 
-function RefreshWarning({ accountCount }) {
-  const [pos, setPos] = useState(null)
-  const ref = useRef(null)
-  const show = () => {
-    const r = ref.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 8, left: r.left + r.width / 2 })
-  }
-  const estimatedCost = (accountCount * 0.01).toFixed(2)
-  return (
-    <span>
-      <button
-        ref={ref}
-        onMouseEnter={show}
-        onMouseLeave={() => setPos(null)}
-        className="text-amber-500/60 hover:text-amber-500 transition-colors"
-      >
-        <AlertTriangle size={14} />
-      </button>
-      {pos && (
-        <div
-          className="fixed w-72 bg-ink text-white text-xs rounded-xl px-4 py-3 shadow-xl z-50 pointer-events-none -translate-x-1/2"
-          style={{ top: pos.top, left: pos.left }}
-        >
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-ink" />
-          <p className="font-semibold mb-1.5 text-amber-400">Charges your Apify account</p>
-          <p className="text-white/75 leading-relaxed mb-2">
-            Each Refresh triggers a live Apify scrape (~10 posts × {accountCount} accounts) that charges the Markato Apify account. Estimated cost: ~${estimatedCost} per run.
-          </p>
-          <p className="text-white/50 leading-relaxed">
-            Data is cached for 7 days — only click Refresh when you genuinely need updated stats.
-          </p>
-        </div>
-      )}
-    </span>
-  )
-}
 
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
@@ -404,38 +368,29 @@ export default function ResultsStep({ results, influencers, config }) {
               Fetching live stats {liveProgress.done}/{liveProgress.total}
             </div>
           ) : liveStatus === 'error' ? (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-                className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
-              >
-                <RefreshCw size={15} />
-                Retry
-              </button>
-              <RefreshWarning accountCount={results.length} />
-            </div>
+            <button
+              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
+            >
+              <RefreshCw size={15} />
+              Retry
+            </button>
           ) : liveStatus === 'done' ? (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-                className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
-              >
-                <RefreshCw size={15} />
-                Refresh
-              </button>
-              <RefreshWarning accountCount={results.length} />
-            </div>
+            <button
+              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
+            >
+              <RefreshCw size={15} />
+              Refresh
+            </button>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => handleFetchLive(results.map((r) => r.username))}
-                className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
-              >
-                <RefreshCw size={15} />
-                Fetch Live Stats
-              </button>
-              <RefreshWarning accountCount={results.length} />
-            </div>
+            <button
+              onClick={() => handleFetchLive(results.map((r) => r.username))}
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
+            >
+              <RefreshCw size={15} />
+              Fetch Live Stats
+            </button>
           )}
           <button
             onClick={() => {

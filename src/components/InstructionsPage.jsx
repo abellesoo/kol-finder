@@ -105,6 +105,11 @@ export default function InstructionsPage() {
 
         <div className="border border-mist rounded-xl px-4 py-1 mb-6">
           <ScoreRow
+            name="Overall Score"
+            range="0 – 100"
+            description="A weighted composite of the four sub-scores below. Niche fit is the strongest signal (×3.5), followed by location (×3.0), content format (×2.0), and authenticity/bot risk (×1.5). Accounts scoring 70 or above are flagged as strong matches; 45–69 as possible; below 45 as low fit. The score is intended as a triage tool — use it to prioritise who to review first, not as a definitive pass/fail."
+          />
+          <ScoreRow
             name="Niche Score"
             range="0 – 10"
             description="Measures how closely the account's content matches the niches you selected at setup. The tool scans each account's hashtags, recent captions, and display name for niche-specific keywords (e.g. 'skincare', '護膚', 'makeup', '化妝'). Each keyword match adds to the score, capped at 10. An account with many relevant keyword hits across its content will score closer to 10; one with little or no matching content will score near 0."

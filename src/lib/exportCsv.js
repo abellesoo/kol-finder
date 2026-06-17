@@ -32,9 +32,9 @@ export const EXPORT_COLUMNS = [
   { id: 'location_signals',  label: 'location_signals',   getValue: (r)            => (r.locationSignals || []).join(', ') },
   { id: 'niche_signals',     label: 'niche_signals',      getValue: (r)            => (r.nicheSignals || []).join(', ') },
   { id: 'live_hidden_likes', label: 'hidden_likes',        getValue: (r, inf, live) => live?.hiddenCount ?? '' },
-  { id: 'sample_post_url',  label: 'sample_post_url',    getValue: (r, inf)       => inf.samplePostUrl || '' },
+  { id: 'sample_post_url',  label: 'scraped_post',       getValue: (r, inf)       => inf.samplePostUrl || '' },
   { id: 'bio',              label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
-  { id: 'sample_caption',   label: 'sample_caption',     getValue: (r, inf)       => inf.sampleCaption || '' },
+  { id: 'sample_caption',   label: 'scraped_caption',    getValue: (r, inf)       => inf.sampleCaption || '' },
   { id: 'engagement_rate',  label: 'engagement_rate',    getValue: (r, inf)       => inf.engagementRate != null ? `${inf.engagementRate}%` : (inf.avgLikes ?? '') },
 ]
 

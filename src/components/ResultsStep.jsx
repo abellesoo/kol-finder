@@ -120,8 +120,8 @@ const TABLE_COLUMNS = [
   { id: 'format',           label: 'Format',       width: '1fr',                                                     exportIds: ['video_ratio'] },
   { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                       exportIds: ['live_median_likes'] },
   { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                       exportIds: ['live_median_views'] },
-  { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                                     exportIds: ['sample_post_url'] },
-  { id: 'sample_caption',   label: 'Caption',      width: '2fr',                                                     exportIds: ['sample_caption'] },
+  { id: 'sample_post_url',  label: 'Scraped Post',    width: '1fr',                                                     exportIds: ['sample_post_url'] },
+  { id: 'sample_caption',   label: 'Scraped Caption', width: '2fr',                                                     exportIds: ['sample_caption'] },
 ]
 
 // Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)

@@ -4,7 +4,7 @@ import { computeStats } from './computeStats'
 // In production this is set via VITE_PROXY_URL in GitHub Actions.
 // For local dev either point at the deployed worker or run `wrangler dev`
 // in the /worker directory (listens on http://localhost:8787 by default).
-const PROXY = (import.meta.env.VITE_PROXY_URL || 'http://localhost:8787').replace(/\/$/, '')
+const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
 async function startInstagramScraper(usernames, resultsLimit = 30) {
   const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)

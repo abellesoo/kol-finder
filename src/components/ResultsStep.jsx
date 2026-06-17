@@ -560,7 +560,7 @@ export default function ResultsStep({ results, influencers, config }) {
               </div>
 
               {visibleCols.map((col) => (
-                <div key={col.id}>{renderCell(col, r)}</div>
+                <div key={col.id} className="min-w-0 overflow-hidden">{renderCell(col, r)}</div>
               ))}
             </div>
 

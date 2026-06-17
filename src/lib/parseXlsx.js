@@ -121,10 +121,28 @@ export function parseApifyXlsx(file) {
           const bio = posts.map((p) => p['ownerBiography'] || p['biography'] || '').find(Boolean) || ''
 
           // Most recent post URL (Apify exports newest first)
+          const samplePost = posts[0] || null
           const samplePostUrl = posts.map((p) => p['url'] || (p['shortCode'] ? `https://www.instagram.com/p/${p['shortCode']}/` : null)).find(Boolean) || ''
 
           // Most recent post caption
           const sampleCaption = posts.map((p) => p['caption'] || '').find(Boolean) || ''
+
+          // Stats for the sample (most recent) post
+          const samplePostLikes = samplePost
+            ? (() => { const v = Number(samplePost['likesCount']); return isNaN(v) || v < 0 ? null : v })()
+            : null
+          const samplePostComments = samplePost
+            ? (Number(samplePost['commentsCount']) || null)
+            : null
+          const samplePostPlays = samplePost
+            ? (() => {
+                const v = Number(
+                  samplePost['videoViewCount'] ?? samplePost['videoPlayCount'] ??
+                  samplePost['igPlayCount'] ?? samplePost['playsCount'] ?? samplePost['views']
+                )
+                return isNaN(v) || v === 0 ? null : v
+              })()
+            : null
 
           return {
             username: inf.username,
@@ -148,6 +166,9 @@ export function parseApifyXlsx(file) {
             paidCount,
             samplePostUrl,
             sampleCaption,
+            samplePostLikes,
+            samplePostComments,
+            samplePostPlays,
             // Raw for AI
             sampleCaptions: posts.slice(0, 5).map((p) => p['caption'] || '').filter(Boolean),
           }

@@ -120,8 +120,11 @@ const TABLE_COLUMNS = [
   { id: 'format',           label: 'Format',       width: '1fr',                                                     exportIds: ['video_ratio'] },
   { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                       exportIds: ['live_median_likes'] },
   { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                       exportIds: ['live_median_views'] },
-  { id: 'sample_post_url',  label: 'Scraped Post',    width: '1fr',                                                     exportIds: ['sample_post_url'] },
-  { id: 'sample_caption',   label: 'Scraped Caption', width: '2fr',                                                     exportIds: ['sample_caption'] },
+  { id: 'sample_post_url',        label: 'Scraped Post',     width: '1fr',  exportIds: ['sample_post_url'] },
+  { id: 'scraped_post_likes',    label: 'Post Likes',       width: '1fr',  exportIds: ['scraped_post_likes'] },
+  { id: 'scraped_post_comments', label: 'Post Comments',    width: '1fr',  exportIds: ['scraped_post_comments'] },
+  { id: 'scraped_post_plays',    label: 'Post Plays',       width: '1fr',  exportIds: ['scraped_post_plays'] },
+  { id: 'sample_caption',        label: 'Scraped Caption',  width: '2fr',  exportIds: ['sample_caption'] },
 ]
 
 // Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
@@ -515,6 +518,12 @@ export default function ResultsStep({ results, influencers, config }) {
                   View <ExternalLink size={10} />
                 </a>
               ) : <p className="font-mono text-sm text-ink/30">—</p>
+            case 'scraped_post_likes':
+              return <p className="font-mono text-sm text-ink">{inf.samplePostLikes != null ? inf.samplePostLikes.toLocaleString() : '—'}</p>
+            case 'scraped_post_comments':
+              return <p className="font-mono text-sm text-ink">{inf.samplePostComments != null ? inf.samplePostComments.toLocaleString() : '—'}</p>
+            case 'scraped_post_plays':
+              return <p className="font-mono text-sm text-ink">{inf.samplePostPlays != null ? inf.samplePostPlays.toLocaleString() : '—'}</p>
             case 'bio':
               return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
             case 'sample_caption':

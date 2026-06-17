@@ -3,7 +3,25 @@ import { computeStats } from './computeStats'
 const BASE = 'https://api.apify.com/v2'
 const TOKEN = import.meta.env.VITE_APIFY_API_KEY
 
-// Used for both batch scraping and single-profile KolLookup
+async function startInstagramScraper(usernames, resultsLimit = 30) {
+  const res = await fetch(
+    `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        usernames,
+        resultsType: 'posts',
+        resultsLimit,
+      }),
+    }
+  )
+  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
+  const { data } = await res.json()
+  return data
+}
+
+// Used for KolLookup (single-profile mode)
 export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
   const res = await fetch(
@@ -57,20 +75,31 @@ export async function fetchBatchStats(usernames, onProgress) {
   }
 
   await Promise.all(chunks.map(async (chunk) => {
-    const run = await startReelScraper(chunk, 30)
+    const run = await startInstagramScraper(chunk, 30)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
 
+    const followerMap = {}
     const byUser = {}
     for (const item of items) {
+      // Profile-level item (no timestamp) — extract follower count
+      if (item.followersCount != null && item.username && item.timestamp == null) {
+        followerMap[item.username] = item.followersCount
+        continue
+      }
       const u = item.ownerUsername
       if (!u) continue
+      if (item.ownerFollowersCount != null && followerMap[u] == null) {
+        followerMap[u] = item.ownerFollowersCount
+      }
       if (!byUser[u]) byUser[u] = []
       byUser[u].push(item)
     }
 
     for (const username of chunk) {
-      statsMap[username] = computeStats(byUser[username] || [])
+      const stats = computeStats(byUser[username] || [])
+      if (followerMap[username] != null) stats.followerCount = followerMap[username]
+      statsMap[username] = stats
     }
 
     done += chunk.length

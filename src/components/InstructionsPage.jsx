@@ -1,5 +1,3 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 
 function Section({ label, title, children }) {
   return (
@@ -23,25 +21,6 @@ function ScoreRow({ name, range, description }) {
   )
 }
 
-function Collapsible({ label, children }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="border border-mist rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-mist/30 transition-colors"
-      >
-        <span className="font-mono text-xs tracking-widest text-ink/40 uppercase">{label}</span>
-        {open ? <ChevronDown size={14} className="text-ink/30" /> : <ChevronRight size={14} className="text-ink/30" />}
-      </button>
-      {open && (
-        <div className="px-5 pb-5 pt-1 border-t border-mist text-sm text-ink/70 leading-relaxed space-y-3">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function InstructionsPage() {
   return (
@@ -115,8 +94,6 @@ export default function InstructionsPage() {
         </p>
       </div>
 
-      <div className="border-t border-mist mb-10" />
-
       {/* Scoring Methodology */}
       <Section label="Scoring methodology" title="How accounts are scored">
         <p className="text-sm text-ink/60 leading-relaxed mb-5">
@@ -144,25 +121,22 @@ export default function InstructionsPage() {
             range="0 – 10"
             description="An authenticity indicator based on the ratio of comments to likes. Genuine engagement typically produces a comment-to-like ratio of around 1–2% or higher. Accounts with very high like counts but near-zero comments are flagged as suspicious: a ratio below 0.5% on accounts with over 5,000 average likes scores 2 (high risk), while a ratio above 2% scores 9 (low risk, likely authentic). A higher Bot Risk Score means lower bot suspicion — it is an authenticity score, not a risk score."
           />
+          <ScoreRow
+            name="Median Likes"
+            range="Live data"
+            description="The median like count across the 10 most recent posts or reels fetched live for this account. Posts from the last 3 months are used as the primary source, so the figure reflects recent activity. For accounts that post infrequently and have no content within that window, the calculation uses all 10 scraped posts instead, ensuring a value is always shown as long as the scraper returned any data for that account."
+          />
+          <ScoreRow
+            name="Median Views"
+            range="Live data"
+            description="The median video view count across the 10 most recent posts or reels fetched live for this account. Only video content (Reels and clips) contributes to this figure — accounts that post photos only will show a blank. The same 3-month recency window and fallback logic applies as for Median Likes."
+          />
         </div>
 
         <p className="text-xs text-ink/40 font-mono">
           Scores are computed from the Apify export data using hashtags, captions, location tags, and engagement metrics. No external data sources are used.
         </p>
       </Section>
-
-      <div className="border-t border-mist mb-10" />
-
-      {/* Known Issues */}
-      <Collapsible label="Changelog · Known issues">
-        <p className="font-medium text-ink/80">Median Likes / Median Views — recency fallback (fixed)</p>
-        <p>
-          The live scraper fetches a fixed number of recent posts per account (currently 10). For accounts that post infrequently, all scraped posts may fall outside the 3-month recency window that the tool uses to calculate engagement statistics. Previously, when no posts passed this filter, the median calculation returned no value, leaving the Median Likes and Median Views columns blank in both the table and the export — even after a successful scrape.
-        </p>
-        <p>
-          This has been fixed. The tool now uses the 3-month window as its primary source so that medians reflect recent activity wherever possible. When an account has no posts within that window, it falls back to calculating the median across all scraped posts instead of returning blank. As a result, Median Likes and Median Views will always be populated as long as the scraper returned at least some posts for that account.
-        </p>
-      </Collapsible>
 
     </div>
   )

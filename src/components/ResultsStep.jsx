@@ -387,7 +387,7 @@ export default function ResultsStep({ results, influencers, config }) {
       {/* Table */}
       <div className="border border-mist rounded-xl overflow-x-auto">
         {/* Table header */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[1000px]">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider min-w-[1100px]">
           <span>Account</span>
           <button onClick={() => toggleSort('overall')} className="flex items-center gap-1 hover:text-ink">
             Overall <SortIcon k="overall" /><InfoTooltip column="overall" />
@@ -406,6 +406,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <span>Med. Likes</span>
           <span>Med. Views</span>
           <span>Hidden</span>
+          <span>Sample Post</span>
         </div>
 
         {/* Rows */}
@@ -418,7 +419,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <div key={r.username}>
             {/* Main row */}
             <div
-              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[1000px]"
+              className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center min-w-[1100px]"
               onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
             >
               {/* Account */}
@@ -530,6 +531,29 @@ export default function ResultsStep({ results, influencers, config }) {
                         <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>
                       )}
                     </>
+                  )
+                })()}
+              </div>
+
+              {/* Sample Post — link to most recent scraped post */}
+              <div>
+                {(() => {
+                  const s = liveStats[r.username]
+                  if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40 mt-0.5" />
+                  if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
+                  const post = s.posts?.[0]
+                  const url = post?.url || (post?.shortCode ? `https://www.instagram.com/p/${post.shortCode}/` : null)
+                  if (!url) return <p className="font-mono text-sm text-ink/30">—</p>
+                  return (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 font-mono text-xs text-accent hover:underline"
+                    >
+                      View <ExternalLink size={10} />
+                    </a>
                   )
                 })()}
               </div>

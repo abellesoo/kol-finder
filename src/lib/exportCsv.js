@@ -4,7 +4,7 @@ import { saveAs } from 'file-saver'
 // Priority columns shown first; remaining data columns follow
 const PRIORITY_IDS = [
   'username', 'fullName', 'instagram_url', 'follower_count',
-  'live_median_likes', 'live_median_views',
+  'live_median_likes', 'live_median_views', 'sample_post_url',
   'approve', 'reachout_status', 'remarks',
 ]
 
@@ -32,6 +32,10 @@ export const EXPORT_COLUMNS = [
   { id: 'location_signals',  label: 'location_signals',   getValue: (r)            => (r.locationSignals || []).join(', ') },
   { id: 'niche_signals',     label: 'niche_signals',      getValue: (r)            => (r.nicheSignals || []).join(', ') },
   { id: 'live_hidden_likes', label: 'hidden_likes',        getValue: (r, inf, live) => live?.hiddenCount ?? '' },
+  { id: 'sample_post_url',  label: 'sample_post_url',    getValue: (r, inf, live) => {
+    const post = live?.posts?.[0]
+    return post?.url || (post?.shortCode ? `https://www.instagram.com/p/${post.shortCode}/` : '')
+  }},
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)
@@ -50,6 +54,7 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
     : EXPORT_COLUMNS
 
   const urlColIndex = cols.findIndex((c) => c.id === 'instagram_url') + 1
+  const samplePostColIndex = cols.findIndex((c) => c.id === 'sample_post_url') + 1
   const approveColIndex = cols.findIndex((c) => c.id === 'approve') + 1
   const reachoutColIndex = cols.findIndex((c) => c.id === 'reachout_status') + 1
 
@@ -80,6 +85,18 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
   if (urlColIndex > 0) {
     for (let i = 2; i <= results.length + 1; i++) {
       const cell = ws.getCell(i, urlColIndex)
+      const url = cell.value
+      if (url) {
+        cell.value = { text: url, hyperlink: url }
+        cell.font = { color: { argb: 'FF0563C1' }, underline: true }
+      }
+    }
+  }
+
+  // Hyperlinks in sample_post_url column
+  if (samplePostColIndex > 0) {
+    for (let i = 2; i <= results.length + 1; i++) {
+      const cell = ws.getCell(i, samplePostColIndex)
       const url = cell.value
       if (url) {
         cell.value = { text: url, hyperlink: url }

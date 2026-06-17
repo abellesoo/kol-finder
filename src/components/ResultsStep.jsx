@@ -449,10 +449,12 @@ export default function ResultsStep({ results, influencers, config }) {
 
       {/* Table */}
       {(() => {
+        try {
         const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
         const gridTemplate = `2fr ${visibleCols.map((c) => c.width).join(' ')}`
 
         const renderCell = (col, r) => {
+          try {
           const s = liveStats[r.username]
           switch (col.id) {
             case 'overall':
@@ -530,6 +532,10 @@ export default function ResultsStep({ results, influencers, config }) {
               return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
             default:
               return null
+          }
+          } catch (e) {
+            console.error('renderCell error', col.id, e)
+            return <p className="font-mono text-xs text-rose/50">—</p>
           }
         }
 
@@ -635,6 +641,14 @@ export default function ResultsStep({ results, influencers, config }) {
         ))}
       </div>
         )
+        } catch (e) {
+          console.error('Table render error:', e)
+          return (
+            <div className="px-4 py-8 text-center text-sm text-rose/70 border border-rose/20 rounded-xl">
+              Table failed to render. Open DevTools → Console for details.
+            </div>
+          )
+        }
       })()}
 
       <p className="mt-4 text-xs text-ink/25 font-mono text-center">

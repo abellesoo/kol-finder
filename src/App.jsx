@@ -4,12 +4,14 @@ import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
 import KolLookup from './components/KolLookup'
 import InstructionsPage from './components/InstructionsPage'
+import HistoryPage from './components/HistoryPage'
 import { parseApifyXlsx } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
-import { saveSession, loadHistory, deleteSession } from './lib/sessionHistory'
+import { saveSession } from './lib/sessionHistory'
 
 export default function App() {
-  const [mode, setMode] = useState('finder') // finder | lookup | instructions
+  const [mode, setMode] = useState('finder') // finder | lookup | instructions | history
+  const [lookupUsername, setLookupUsername] = useState('')
   const [step, setStep] = useState('upload') // upload | config | scoring | results
   const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
@@ -17,16 +19,18 @@ export default function App() {
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
 
-  const handleLoadSession = (session) => {
+  const handleLoadSeederSession = (session) => {
     setFileNames(session.fileNames)
     setConfig(session.config)
     setInfluencers(session.influencers)
     setResults(session.results)
     setStep('results')
+    setMode('finder')
   }
 
-  const handleDeleteSession = (id) => {
-    deleteSession(id)
+  const handleLoadLookup = (username) => {
+    setLookupUsername(username)
+    setMode('lookup')
   }
 
   const handleFiles = async (files) => {
@@ -124,30 +128,22 @@ export default function App() {
       <div className="border-b border-mist px-6 py-3 flex items-center gap-4">
         <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">Seeding Tool</span>
         <div className="flex items-center gap-1 bg-mist/60 rounded-lg p-1">
-          <button
-            onClick={() => setMode('finder')}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-              mode === 'finder' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
-            }`}
-          >
-            Seeder
-          </button>
-          <button
-            onClick={() => setMode('lookup')}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-              mode === 'lookup' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
-            }`}
-          >
-            Profile Lookup
-          </button>
-          <button
-            onClick={() => setMode('instructions')}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-              mode === 'instructions' ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
-            }`}
-          >
-            Instructions
-          </button>
+          {[
+            { id: 'finder', label: 'Seeder' },
+            { id: 'lookup', label: 'Profile Lookup' },
+            { id: 'history', label: 'History' },
+            { id: 'instructions', label: 'Instructions' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setMode(id)}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                mode === id ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <a
           href="/kol-finder/flowchart.html"
@@ -161,11 +157,13 @@ export default function App() {
 
       {mode === 'instructions' ? (
         <InstructionsPage />
+      ) : mode === 'history' ? (
+        <HistoryPage onLoadSeederSession={handleLoadSeederSession} onLoadLookup={handleLoadLookup} />
       ) : mode === 'lookup' ? (
-        <KolLookup />
+        <KolLookup key={lookupUsername} initialUsername={lookupUsername} />
       ) : (
         <>
-          {step === 'upload' && <UploadStep onFiles={handleFiles} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession} />}
+          {step === 'upload' && <UploadStep onFiles={handleFiles} />}
           {step === 'config' && (
             <ConfigStep
               fileNames={fileNames}

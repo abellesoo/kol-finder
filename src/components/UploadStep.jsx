@@ -1,24 +1,10 @@
 import { useRef, useState } from 'react'
-import { Upload, FileSpreadsheet, X, ChevronRight, Clock, Trash2 } from 'lucide-react'
-import { loadHistory } from '../lib/sessionHistory'
+import { Upload, FileSpreadsheet, X, ChevronRight } from 'lucide-react'
 
-function formatDate(iso) {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatConfig(config) {
-  if (!config) return ''
-  const parts = [config.locationTarget, config.niches?.slice(0, 2).join(', ')].filter(Boolean)
-  return parts.join(' · ')
-}
-
-export default function UploadStep({ onFiles, onLoadSession, onDeleteSession }) {
+export default function UploadStep({ onFiles }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState([])
-  const [history, setHistory] = useState(() => loadHistory())
 
   const addFiles = (incoming) => {
     const valid = Array.from(incoming).filter((f) => {
@@ -40,12 +26,6 @@ export default function UploadStep({ onFiles, onLoadSession, onDeleteSession }) 
     e.preventDefault()
     setDragging(false)
     addFiles(e.dataTransfer.files)
-  }
-
-  const handleDelete = (e, id) => {
-    e.stopPropagation()
-    onDeleteSession(id)
-    setHistory((prev) => prev.filter((s) => s.id !== id))
   }
 
   return (
@@ -117,44 +97,6 @@ export default function UploadStep({ onFiles, onLoadSession, onDeleteSession }) 
         <p className="mt-6 text-xs text-ink/30 font-mono text-center">
           Scraper: Instagram Scraper by Apify · Post-level export
         </p>
-
-        {/* Previous sessions */}
-        {history.length > 0 && (
-          <div className="mt-10">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock size={13} className="text-ink/30" />
-              <p className="font-mono text-xs tracking-widest text-ink/40 uppercase">Previous sessions</p>
-            </div>
-            <div className="space-y-2">
-              {history.map((session) => (
-                <div
-                  key={session.id}
-                  onClick={() => onLoadSession(session)}
-                  className="flex items-center justify-between px-4 py-3 border border-mist rounded-xl hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-ink group-hover:text-accent transition-colors truncate">
-                      {session.accountCount} accounts · {formatConfig(session.config)}
-                    </p>
-                    <p className="font-mono text-xs text-ink/40 mt-0.5">{formatDate(session.date)}</p>
-                    {session.fileNames?.length > 0 && (
-                      <p className="font-mono text-xs text-ink/30 truncate mt-0.5">
-                        {session.fileNames.join(', ')}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={(e) => handleDelete(e, session.id)}
-                    className="ml-3 flex-shrink-0 text-ink/20 hover:text-rose transition-colors"
-                    title="Delete session"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

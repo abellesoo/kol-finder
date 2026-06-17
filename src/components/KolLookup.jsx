@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { Search, Loader2, Heart, Eye, EyeOff, ExternalLink, AlertCircle } from 'lucide-react'
 import { startReelScraper, getRun, getDatasetItems } from '../lib/apifyApi'
 import { computeStats } from '../lib/computeStats'
+import { saveLookup } from '../lib/sessionHistory'
 
 function extractUsername(input) {
   const trimmed = input.trim().replace(/^@/, '')
@@ -9,8 +10,8 @@ function extractUsername(input) {
   return match ? match[1] : trimmed
 }
 
-export default function KolLookup() {
-  const [input, setInput] = useState('')
+export default function KolLookup({ initialUsername = '' }) {
+  const [input, setInput] = useState(initialUsername)
   const [status, setStatus] = useState('idle') // idle | starting | running | fetching | done | error
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
@@ -40,7 +41,9 @@ export default function KolLookup() {
 
       setStatus('fetching')
       const items = await getDatasetItems(runData.defaultDatasetId)
-      setStats(computeStats(items))
+      const computed = computeStats(items)
+      setStats(computed)
+      saveLookup({ username: user, stats: computed })
       setStatus('done')
     } catch (err) {
       setError(err.message)

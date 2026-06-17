@@ -262,7 +262,6 @@ export default function ResultsStep({ results, influencers, config }) {
     const toFetch = force
       ? usernames
       : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS)
-
     if (toFetch.length === 0) {
       setLiveStatus('done')
       return

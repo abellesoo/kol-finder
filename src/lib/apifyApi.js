@@ -3,25 +3,7 @@ import { computeStats } from './computeStats'
 const BASE = 'https://api.apify.com/v2'
 const TOKEN = import.meta.env.VITE_APIFY_API_KEY
 
-async function startInstagramScraper(usernames, resultsLimit = 30) {
-  const res = await fetch(
-    `${BASE}/acts/apify~instagram-scraper/runs?token=${TOKEN}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        usernames,
-        resultsType: 'posts',
-        resultsLimit,
-      }),
-    }
-  )
-  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
-  const { data } = await res.json()
-  return data
-}
-
-// Kept for KolLookup (single-profile mode)
+// Used for both batch scraping and single-profile KolLookup
 export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
   const res = await fetch(
@@ -64,61 +46,36 @@ async function pollUntilDone(run) {
   return runData
 }
 
-/**
- * Scrape a list of usernames using the general instagram-scraper which returns
- * both post data (for median likes/views) and profile data (for follower count).
- */
 export async function fetchBatchStats(usernames, onProgress) {
   const CHUNK = 50
   const statsMap = {}
+  let done = 0
 
+  const chunks = []
   for (let i = 0; i < usernames.length; i += CHUNK) {
-    const chunk = usernames.slice(i, i + CHUNK)
+    chunks.push(usernames.slice(i, i + CHUNK))
+  }
 
-    const run = await startInstagramScraper(chunk, 30)
+  await Promise.all(chunks.map(async (chunk) => {
+    const run = await startReelScraper(chunk, 30)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
 
-    // Separate profile-level items from post-level items
-    // instagram-scraper returns a mix: profile objects have followersCount,
-    // post objects have ownerUsername + engagement data
-    const followerMap = {}
     const byUser = {}
-
     for (const item of items) {
-      // Post items always have a timestamp or likesCount; pure profile items do not
-      const isPost = item.timestamp != null || item.likesCount !== undefined
-
-      if (!isPost) {
-        // Profile-only item
-        const u = item.username
-        if (u && item.followersCount != null) followerMap[u] = item.followersCount
-        continue
-      }
-
-      // Post item — try multiple field names for owner
-      const u = item.ownerUsername || item.username || item.owner?.username
+      const u = item.ownerUsername
       if (!u) continue
-
-      if (item.followersCount != null && followerMap[u] == null) {
-        followerMap[u] = item.followersCount
-      }
-      if (item.ownerFollowersCount != null && followerMap[u] == null) {
-        followerMap[u] = item.ownerFollowersCount
-      }
-
       if (!byUser[u]) byUser[u] = []
       byUser[u].push(item)
     }
 
     for (const username of chunk) {
-      const stats = computeStats(byUser[username] || [])
-      if (followerMap[username] != null) stats.followerCount = followerMap[username]
-      statsMap[username] = stats
+      statsMap[username] = computeStats(byUser[username] || [])
     }
 
-    if (onProgress) onProgress(Math.min(i + CHUNK, usernames.length), usernames.length)
-  }
+    done += chunk.length
+    if (onProgress) onProgress(Math.min(done, usernames.length), usernames.length)
+  }))
 
   return statsMap
 }

@@ -112,25 +112,25 @@ function InfoTooltip({ column }) {
 
 // Columns shown in the table. exportIds maps each to EXPORT_COLUMNS ids for the xlsx.
 const TABLE_COLUMNS = [
-  { id: 'overall',          label: 'Overall',      width: '1fr', sortKey: 'overall',    infoKey: 'overall',    exportIds: ['overall'] },
-  { id: 'niche_score',      label: 'Niche',        width: '1fr', sortKey: 'niche',      infoKey: 'niche',      exportIds: ['niche_score'] },
-  { id: 'location_score',   label: 'Location',     width: '1fr', sortKey: 'location',   infoKey: 'location',   exportIds: ['location_score'] },
-  { id: 'engagement',       label: 'Engagement',   width: '1fr', sortKey: 'engagement', infoKey: 'engagement', exportIds: ['avg_likes', 'avg_comments'] },
-  { id: 'follower_count',   label: 'Followers',    width: '1fr',                                               exportIds: ['follower_count'] },
-  { id: 'format',           label: 'Format',       width: '1fr',                                               exportIds: ['video_ratio', 'post_count', 'format_score'] },
-  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                   exportIds: ['live_median_likes'] },
-  { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                   exportIds: ['live_median_views'] },
-  { id: 'live_hidden_likes',label: 'Hidden',       width: '1fr',                                               exportIds: ['live_hidden_likes'] },
-  { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                               exportIds: ['sample_post_url'] },
-  { id: 'bio',              label: 'Bio',          width: '2fr',                                               exportIds: ['bio'] },
-  { id: 'sample_caption',   label: 'Caption',      width: '2fr',                                               exportIds: ['sample_caption'] },
+  { id: 'overall',          label: 'Overall',      width: '1fr', sortKey: 'overall',    infoKey: 'overall',          exportIds: ['overall'] },
+  { id: 'niche_score',      label: 'Niche',        width: '1fr', sortKey: 'niche',      infoKey: 'niche',            exportIds: ['niche_score'] },
+  { id: 'location_score',   label: 'Location',     width: '1fr', sortKey: 'location',   infoKey: 'location',         exportIds: ['location_score'] },
+  { id: 'engagement',       label: 'Engagement',   width: '1fr', sortKey: 'engagement', infoKey: 'engagement',       exportIds: ['engagement_rate'] },
+  { id: 'follower_count',   label: 'Followers',    width: '1fr',                                                     exportIds: ['follower_count'] },
+  { id: 'format',           label: 'Format',       width: '1fr',                                                     exportIds: ['video_ratio'] },
+  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                       exportIds: ['live_median_likes'] },
+  { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                       exportIds: ['live_median_views'] },
+  { id: 'live_hidden_likes',label: 'Hidden',       width: '1fr',                                                     exportIds: ['live_hidden_likes'] },
+  { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                                     exportIds: ['sample_post_url'] },
+  { id: 'bio',              label: 'Bio',          width: '2fr',                                                     exportIds: ['bio'] },
+  { id: 'sample_caption',   label: 'Caption',      width: '2fr',                                                     exportIds: ['sample_caption'] },
 ]
 
-// These export columns are always included regardless of table column selection
+// Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
 const ALWAYS_EXPORT_IDS = [
-  'username', 'fullName', 'instagram_url',
+  'username', 'instagram_url',
+  'niche_signals', 'location_signals',
   'approve', 'reachout_status', 'remarks',
-  'verdict', 'flags', 'niche_signals', 'location_signals', 'bot_risk_score',
 ]
 
 function RefreshWarning({ accountCount }) {
@@ -286,7 +286,12 @@ export default function ResultsStep({ results, influencers, config }) {
     }
     return valid
   })
-  const [liveStatus, setLiveStatus] = useState('idle') // idle | loading | done | error
+  const [liveStatus, setLiveStatus] = useState(() => {
+    // Start in 'done' if we already have cached data for any of the current results
+    const cache = readCache()
+    const hasCached = results.some((r) => hasRealData(cache[r.username]?.stats))
+    return hasCached ? 'done' : 'idle'
+  })
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
 
@@ -373,12 +378,6 @@ export default function ResultsStep({ results, influencers, config }) {
     }
   }, [])
 
-  // Auto-fetch on load — skips accounts already in cache
-  useEffect(() => {
-    if (results.length > 0) {
-      handleFetchLive(results.map((r) => r.username))
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
@@ -405,13 +404,16 @@ export default function ResultsStep({ results, influencers, config }) {
               Fetching live stats {liveProgress.done}/{liveProgress.total}
             </div>
           ) : liveStatus === 'error' ? (
-            <button
-              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
-            >
-              <RefreshCw size={15} />
-              Retry live stats
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+                className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
+              >
+                <RefreshCw size={15} />
+                Retry
+              </button>
+              <RefreshWarning accountCount={results.length} />
+            </div>
           ) : liveStatus === 'done' ? (
             <div className="flex items-center gap-1.5">
               <button
@@ -423,7 +425,18 @@ export default function ResultsStep({ results, influencers, config }) {
               </button>
               <RefreshWarning accountCount={results.length} />
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handleFetchLive(results.map((r) => r.username))}
+                className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
+              >
+                <RefreshCw size={15} />
+                Fetch Live Stats
+              </button>
+              <RefreshWarning accountCount={results.length} />
+            </div>
+          )}
           <button
             onClick={() => {
                 const exportIds = [

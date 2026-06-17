@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
+import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
 
 const COLUMN_INFO = {
   overall: {
@@ -28,12 +29,12 @@ const COLUMN_INFO = {
   engagement_score: {
     title: 'Engagement Score (0–10)',
     lines: [
-      'log(1 + Likes + Comments×3)',
-      'Comments are weighted 3× as a proxy for replies.',
-      'Instagram does not expose repost counts.',
-      '· ~4 = micro-influencer (~50 avg likes)',
-      '· ~6–7 = mid-tier (~500–1000 avg likes)',
-      '· ~9–10 = large account (10k+ avg likes)',
+      'Before live fetch: log(1 + avgLikes + avgComments×3)',
+      'After live fetch:  log(1 + medianLikes + medianViews×0.5)',
+      'Live data replaces the export estimate per account.',
+      '· ~4 = micro (~50 likes)',
+      '· ~6–7 = mid-tier (~500–1k likes)',
+      '· ~9–10 = large (10k+ likes)',
     ],
   },
   location: {
@@ -279,12 +280,21 @@ export default function ResultsStep({ results, influencers, config }) {
   }, [influencers])
 
   const enriched = useMemo(() => {
-    return results.map((r) => ({
-      ...r,
-      ...infMap[r.username],
-      overall: r.overall ?? 0,
-    }))
-  }, [results, infMap])
+    return results.map((r) => {
+      const live = liveStats[r.username]
+      const hasLive = live && (live.medianLikes != null || live.medianViews != null)
+      const engScore = hasLive
+        ? computeLiveEngagementScore(live.medianLikes, live.medianViews)
+        : (r.scores?.engagement ?? 0)
+      const overall = Math.round((engScore + (r.scores?.relevancy ?? 0)) * 5)
+      return {
+        ...r,
+        ...infMap[r.username],
+        scores: { ...r.scores, engagement: engScore },
+        overall,
+      }
+    })
+  }, [results, infMap, liveStats])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)

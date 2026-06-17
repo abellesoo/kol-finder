@@ -112,7 +112,7 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Engagement Score"
             range="0 – 10"
-            description="log(1 + Likes + Comments×3). Comments are weighted 3× as a proxy for replies, since they signal active conversation rather than passive scrolling. Instagram does not expose repost counts, so that term is omitted. Natural log compresses large numbers: ~4 for micro-influencers (~50 avg likes), ~6–7 for mid-tier (~500–1,000 avg likes), ~9–10 for large accounts (10,000+ avg likes)."
+            description="Two-stage formula. Before Fetch Live Stats: log(1 + avgLikes + avgComments×3) — computed from export data; comments weighted 3× as a proxy for replies. After Fetch Live Stats: log(1 + medianLikes + medianViews×0.5) — the score is upgraded per account as live data arrives; median is a more robust measure than the export average, and views are weighted 0.5× since they are a lower-intent action than likes. The Overall Score updates automatically once live data is loaded."
           />
           <ScoreRow
             name="Relevancy Score"

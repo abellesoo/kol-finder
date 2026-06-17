@@ -29,13 +29,22 @@ function textContainsAny(text, keywords) {
   return keywords.filter((kw) => lower.includes(kw.toLowerCase()))
 }
 
-// Engagement Score: log(1 + Likes + Replies×3 + Reposts×2)
+// Engagement Score (export data): log(1 + avgLikes + avgComments×3)
 // Instagram has no native repost metric — avgComments used as Replies, reposts treated as 0
 function scoreEngagement(inf) {
   const likes = inf.avgLikes || 0
   const comments = inf.avgComments || 0
   const raw = Math.log(1 + likes + comments * 3)
   return { score: parseFloat(Math.min(10, raw).toFixed(2)) }
+}
+
+// Upgraded Engagement Score using live Apify median data.
+// Views weighted at 0.5× (lower-intent action; photo-only accounts will have views=0).
+export function computeLiveEngagementScore(medianLikes, medianViews) {
+  const likes = medianLikes ?? 0
+  const views = medianViews ?? 0
+  const raw = Math.log(1 + likes + views * 0.5)
+  return parseFloat(Math.min(10, raw).toFixed(2))
 }
 
 // Relevancy Score: baseline 5, +1 per keyword hit in target niches, -1 per off-niche category match

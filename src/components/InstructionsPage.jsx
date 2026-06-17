@@ -91,7 +91,7 @@ export default function InstructionsPage() {
             },
             {
               n: 7,
-              text: <>Back in this tool, go to <strong>Step 1</strong> and upload the exported .xlsx file. The tool will parse all the accounts in the file, deduplicate them, and move you to the scoring configuration screen automatically.</>,
+              text: <>Back in this tool, go to <strong>Step 1</strong> and upload the exported .xlsx file. The tool will parse all the accounts in the file, deduplicate them, and move you to the scoring configuration screen automatically. Once on the Results page, you can click <strong>Refresh</strong> to fetch live engagement stats — but note that each Refresh triggers an Apify scrape that charges the Markato account (see the cost note above).</>,
             },
           ].map(({ n, text }) => (
             <li key={n} className="flex gap-4">
@@ -103,6 +103,17 @@ export default function InstructionsPage() {
           ))}
         </ol>
       </Section>
+
+      {/* Refresh / Cost Warning */}
+      <div className="mb-10 px-5 py-4 border border-amber-200 bg-amber-50 rounded-xl">
+        <p className="font-mono text-xs tracking-widest text-amber-600/70 uppercase mb-2">Important — Apify costs</p>
+        <p className="text-sm text-ink/70 leading-relaxed mb-2">
+          The <strong>Refresh</strong> button on the Results screen triggers a live Apify scrape that charges the Markato Apify account. Each run scrapes the 10 most recent posts for every account in your results — at approximately <strong>$0.01 per account</strong>, a typical run of 300–400 accounts costs around $3–4. Use Refresh sparingly.
+        </p>
+        <p className="text-sm text-ink/70 leading-relaxed">
+          To avoid unnecessary charges, the tool caches live scrape results for <strong>7 days</strong>. Re-uploading the same dataset within that window will reload your previously fetched stats without triggering a new scrape. Only click Refresh when you need genuinely updated figures.
+        </p>
+      </div>
 
       <div className="border-t border-mist mb-10" />
 

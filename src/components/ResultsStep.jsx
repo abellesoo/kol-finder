@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 
@@ -51,6 +51,24 @@ const COLUMN_INFO = {
       'Shows raw avg likes if follower count is unavailable.',
     ],
   },
+  live_median_likes: {
+    title: 'Median Likes (live)',
+    lines: [
+      'Median like count across the 10 most recent posts or reels scraped live for this account.',
+      'Uses only posts from the past 3 months where available.',
+      'Falls back to all 10 scraped posts for accounts that post infrequently.',
+      'Populated after a live Apify scrape — click Refresh to fetch.',
+    ],
+  },
+  live_median_views: {
+    title: 'Median Views (live)',
+    lines: [
+      'Median video view count across the 10 most recent posts or reels scraped live.',
+      'Only video posts (Reels, clips) count — photo-only accounts show —.',
+      'Uses only posts from the past 3 months where available.',
+      'Populated after a live Apify scrape — click Refresh to fetch.',
+    ],
+  },
 }
 
 function InfoTooltip({ column }) {
@@ -100,8 +118,8 @@ const TABLE_COLUMNS = [
   { id: 'engagement',       label: 'Engagement',   width: '1fr', sortKey: 'engagement', infoKey: 'engagement', exportIds: ['avg_likes', 'avg_comments'] },
   { id: 'follower_count',   label: 'Followers',    width: '1fr',                                               exportIds: ['follower_count'] },
   { id: 'format',           label: 'Format',       width: '1fr',                                               exportIds: ['video_ratio', 'post_count', 'format_score'] },
-  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr',                                               exportIds: ['live_median_likes'] },
-  { id: 'live_median_views',label: 'Med. Views',   width: '1fr',                                               exportIds: ['live_median_views'] },
+  { id: 'live_median_likes',label: 'Med. Likes',   width: '1fr', infoKey: 'live_median_likes',                   exportIds: ['live_median_likes'] },
+  { id: 'live_median_views',label: 'Med. Views',   width: '1fr', infoKey: 'live_median_views',                   exportIds: ['live_median_views'] },
   { id: 'live_hidden_likes',label: 'Hidden',       width: '1fr',                                               exportIds: ['live_hidden_likes'] },
   { id: 'sample_post_url',  label: 'Sample Post',  width: '1fr',                                               exportIds: ['sample_post_url'] },
   { id: 'bio',              label: 'Bio',          width: '2fr',                                               exportIds: ['bio'] },
@@ -114,6 +132,43 @@ const ALWAYS_EXPORT_IDS = [
   'approve', 'reachout_status', 'remarks',
   'verdict', 'flags', 'niche_signals', 'location_signals', 'bot_risk_score',
 ]
+
+function RefreshWarning({ accountCount }) {
+  const [pos, setPos] = useState(null)
+  const ref = useRef(null)
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (r) setPos({ top: r.bottom + 8, left: r.left + r.width / 2 })
+  }
+  const estimatedCost = (accountCount * 0.01).toFixed(2)
+  return (
+    <span>
+      <button
+        ref={ref}
+        onMouseEnter={show}
+        onMouseLeave={() => setPos(null)}
+        className="text-amber-500/60 hover:text-amber-500 transition-colors"
+      >
+        <AlertTriangle size={14} />
+      </button>
+      {pos && (
+        <div
+          className="fixed w-72 bg-ink text-white text-xs rounded-xl px-4 py-3 shadow-xl z-50 pointer-events-none -translate-x-1/2"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-ink" />
+          <p className="font-semibold mb-1.5 text-amber-400">Charges your Apify account</p>
+          <p className="text-white/75 leading-relaxed mb-2">
+            Each Refresh triggers a live Apify scrape (~10 posts × {accountCount} accounts) that charges the Markato Apify account. Estimated cost: ~${estimatedCost} per run.
+          </p>
+          <p className="text-white/50 leading-relaxed">
+            Data is cached for 7 days — only click Refresh when you genuinely need updated stats.
+          </p>
+        </div>
+      )}
+    </span>
+  )
+}
 
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
@@ -358,13 +413,16 @@ export default function ResultsStep({ results, influencers, config }) {
               Retry live stats
             </button>
           ) : liveStatus === 'done' ? (
-            <button
-              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
-            >
-              <RefreshCw size={15} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+                className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
+              >
+                <RefreshCw size={15} />
+                Refresh
+              </button>
+              <RefreshWarning accountCount={results.length} />
+            </div>
           ) : null}
           <button
             onClick={() => {
@@ -514,7 +572,9 @@ export default function ResultsStep({ results, influencers, config }) {
                 {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
               </button>
             ) : (
-              <span key={col.id}>{col.label}</span>
+              <span key={col.id} className="flex items-center gap-1">
+                {col.label}{col.infoKey && <InfoTooltip column={col.infoKey} />}
+              </span>
             )
           ))}
         </div>

@@ -6,6 +6,7 @@ import KolLookup from './components/KolLookup'
 import InstructionsPage from './components/InstructionsPage'
 import { parseApifyXlsx } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
+import { saveSession, loadHistory, deleteSession } from './lib/sessionHistory'
 
 export default function App() {
   const [mode, setMode] = useState('finder') // finder | lookup | instructions
@@ -15,6 +16,18 @@ export default function App() {
   const [results, setResults] = useState([])
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
+
+  const handleLoadSession = (session) => {
+    setFileNames(session.fileNames)
+    setConfig(session.config)
+    setInfluencers(session.influencers)
+    setResults(session.results)
+    setStep('results')
+  }
+
+  const handleDeleteSession = (id) => {
+    deleteSession(id)
+  }
 
   const handleFiles = async (files) => {
     setFileNames(files.map((f) => f.name))
@@ -60,6 +73,7 @@ export default function App() {
       }
       setResults(allResults)
       setStep('results')
+      saveSession({ fileNames, config: cfg, results: allResults, influencers })
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
     }
@@ -151,7 +165,7 @@ export default function App() {
         <KolLookup />
       ) : (
         <>
-          {step === 'upload' && <UploadStep onFiles={handleFiles} />}
+          {step === 'upload' && <UploadStep onFiles={handleFiles} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession} />}
           {step === 'config' && (
             <ConfigStep
               fileNames={fileNames}

@@ -33,8 +33,11 @@ export default function InstructionsPage() {
         <p className="text-ink/70 leading-relaxed mb-3">
           This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche, location, and content format. It works by analysing the posts of accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
         </p>
-        <p className="text-ink/70 leading-relaxed">
+        <p className="text-ink/70 leading-relaxed mb-3">
           Accounts are sourced by running an Apify Instagram scraper against a competitor's tagged posts, then exporting the results and uploading them here. The tool scores each account across four dimensions and produces a ranked table you can filter, review, and export directly to Excel.
+        </p>
+        <p className="text-ink/70 leading-relaxed">
+          The main benefit over working from a raw Apify export is that all the cleanup, deduplication, and ranking happens automatically. Instead of a messy spreadsheet that still needs manual sorting, you get a prioritised shortlist of MIs, KOLs, and KOCs — ordered by fit rather than scrape order — that's ready to hand off or act on directly.
         </p>
       </div>
 

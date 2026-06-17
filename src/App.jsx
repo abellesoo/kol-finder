@@ -10,7 +10,7 @@ import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
 export default function App() {
-  const [mode, setMode] = useState('finder') // finder | lookup | instructions | history
+  const [mode, setMode] = useState('instructions') // instructions | finder | lookup | history
   const [lookupUsername, setLookupUsername] = useState('')
   const [step, setStep] = useState('upload') // upload | config | scoring | results
   const [fileNames, setFileNames] = useState([])
@@ -129,10 +129,10 @@ export default function App() {
         <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">Seeding Tool</span>
         <div className="flex items-center gap-1 bg-mist/60 rounded-lg p-1">
           {[
+            { id: 'instructions', label: 'Instructions' },
             { id: 'finder', label: 'Seeder' },
             { id: 'lookup', label: 'Profile Lookup' },
             { id: 'history', label: 'History' },
-            { id: 'instructions', label: 'Instructions' },
           ].map(({ id, label }) => (
             <button
               key={id}

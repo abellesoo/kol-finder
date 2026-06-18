@@ -205,11 +205,34 @@ export function aggregatePostItems(rows, brandName = '') {
 }
 
 /**
+ * Infer brand name from post rows by finding the most-mentioned @account
+ * in captions, excluding the posters themselves (they're the influencers,
+ * not the brand). Works well for tagged-page scrapes where 80%+ of posts
+ * mention the brand.
+ */
+function detectBrandFromRows(rows) {
+  const ownerUsernames = new Set(rows.map((r) => (r['ownerUsername'] || '').toLowerCase()))
+  const counts = {}
+  for (const row of rows) {
+    const caption = (row['caption'] || '').toLowerCase()
+    const mentions = caption.match(/@([\w.]+)/g) || []
+    for (const m of mentions) {
+      const handle = m.slice(1)
+      if (!ownerUsernames.has(handle)) {
+        counts[handle] = (counts[handle] || 0) + 1
+      }
+    }
+  }
+  if (!Object.keys(counts).length) return ''
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+}
+
+/**
  * Parse Apify Instagram scraper xlsx.
  * Returns an array of influencer objects, one per unique ownerUsername.
  */
 export function parseApifyXlsx(file, brandName = null) {
-  const brand = brandName ?? file.name.replace(/\.xlsx$/i, '')
+  const brand = brandName || null // null triggers auto-detect inside
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -218,7 +241,8 @@ export function parseApifyXlsx(file, brandName = null) {
         const wb = XLSX.read(data, { type: 'array' })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json(ws, { defval: null })
-        resolve(aggregatePostItems(rows, brand))
+        const resolvedBrand = brand || detectBrandFromRows(rows)
+        resolve(aggregatePostItems(rows, resolvedBrand))
       } catch (err) {
         reject(err)
       }

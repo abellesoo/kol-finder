@@ -46,12 +46,11 @@ export default function App() {
     return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
   }
 
-  const handleFiles = async (files, brandNames = {}) => {
+  const handleFiles = async (files) => {
     setFileNames(files.map((f) => f.name))
     try {
-      const allParsed = await Promise.all(
-        files.map((f) => parseApifyXlsx(f, brandNames[f.name]?.trim() || f.name.replace(/\.xlsx$/i, '')))
-      )
+      // brand auto-detected inside parseApifyXlsx from caption @mentions
+      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
       setInfluencers(deduplicateInfluencers(allParsed))
       setStep('config')
     } catch (err) {

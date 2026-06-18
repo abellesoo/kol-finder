@@ -31,6 +31,8 @@ export default {
     const { pathname } = new URL(request.url)
     const KEY = env.APIFY_API_KEY
 
+    if (!KEY) return json({ error: 'APIFY_API_KEY not configured in Worker secrets' }, 500, origin)
+
     // POST /start-run/instagram-scraper
     if (pathname === '/start-run/instagram-scraper' && request.method === 'POST') {
       const body = await request.json()

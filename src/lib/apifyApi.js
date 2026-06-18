@@ -13,7 +13,10 @@ async function startInstagramScraper(usernames, resultsLimit = 30) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
   })
-  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(`Failed to start actor (${res.status}): ${body?.error?.message || body?.message || 'unknown error'}`)
+  }
   const { data } = await res.json()
   return data
 }
@@ -46,7 +49,10 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
   })
-  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(`Failed to start actor (${res.status}): ${body?.error?.message || body?.message || 'unknown error'}`)
+  }
   const { data } = await res.json()
   return data
 }

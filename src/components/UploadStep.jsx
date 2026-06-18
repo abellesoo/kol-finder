@@ -55,21 +55,21 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     addFiles(e.dataTransfer.files)
   }
 
-  // Scrape handler — runs one Apify job per brand in parallel
+  // Scrape handler — runs one Apify job per brand sequentially to avoid
+  // hitting Apify's concurrent-run limit (most plans allow 1 at a time).
   const handleScrape = async () => {
     const groups = parseBrandGroups(scrapeInput)
     if (groups.length === 0) return
     setScrapeStatus('running')
     setScrapeError(null)
     try {
-      const brandedResults = await Promise.all(
-        groups.map(async ({ brand, lines }) => {
-          const run = await startSeederScrape(lines, resultsLimit)
-          const completed = await pollUntilDone(run)
-          const items = await getDatasetItems(completed.defaultDatasetId)
-          return { items, brand: brand || 'scraped' }
-        })
-      )
+      const brandedResults = []
+      for (const { brand, lines } of groups) {
+        const run = await startSeederScrape(lines, resultsLimit)
+        const completed = await pollUntilDone(run)
+        const items = await getDatasetItems(completed.defaultDatasetId)
+        brandedResults.push({ items, brand: brand || 'scraped' })
+      }
       onScrapedItems(brandedResults)
     } catch (err) {
       setScrapeError(err.message)

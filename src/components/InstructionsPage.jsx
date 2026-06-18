@@ -48,10 +48,10 @@ export default function InstructionsPage() {
           This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche and how actively engaged their audience is. It works by analysing posts from accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
         </p>
         <p className="text-ink/70 leading-relaxed mb-3">
-          Accounts are sourced by running an Apify Instagram scraper against a competitor's tagged posts, then exporting the results and uploading them here. The tool scores each account across two dimensions — Engagement and Relevancy — and produces a ranked table you can filter, review, and export directly to Excel.
+          You can bring in accounts two ways: upload an <strong>.xlsx</strong> export from Apify, or paste competitor post URLs and hashtags directly — the tool triggers the scrape for you and skips the manual Apify step entirely. Either way, it deduplicates accounts, scores them across Engagement and Relevancy, and produces a ranked table ready to filter, review, and export to Excel.
         </p>
         <p className="text-ink/70 leading-relaxed">
-          The main benefit over working from a raw Apify export is that all the cleanup, deduplication, and ranking happens automatically. Instead of a messy spreadsheet that still needs manual sorting, you get a prioritised shortlist of MIs, KOLs, and KOCs — ordered by fit rather than scrape order — that's ready to hand off or act on directly.
+          Optionally, run <strong>AI Deep-Dive</strong> on the top results — this sends account captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Base scoring is deterministic arithmetic computed entirely in your browser; AI is only involved if you explicitly opt in.
         </p>
       </div>
 
@@ -59,35 +59,52 @@ export default function InstructionsPage() {
 
       {/* Seeding Tool Instructions */}
       <Section label="How to use" title="Seeding Tool — Step-by-step">
+
+        {/* Step 1 — two intake paths */}
+        <div className="mb-6">
+          <div className="flex gap-3 items-start mb-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-xs font-mono font-medium flex items-center justify-center mt-0.5">1</span>
+            <p className="text-sm font-medium text-ink pt-0.5">Bring in your account data — pick one of two paths:</p>
+          </div>
+
+          <div className="ml-9 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="border border-mist rounded-xl px-4 py-3">
+              <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option A — Paste URLs / hashtags</p>
+              <p className="text-sm text-ink/70 leading-relaxed">
+                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-xs bg-mist/60 px-1 rounded">#skincare</code> or just <code className="font-mono text-xs bg-mist/60 px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps required.
+              </p>
+            </div>
+            <div className="border border-mist rounded-xl px-4 py-3">
+              <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option B — Upload XLSX</p>
+              <p className="text-sm text-ink/70 leading-relaxed">
+                Run an <strong>Apify Instagram Scraper</strong> job manually (paste competitor post URLs into Direct URLs, set a 3-month date filter, run). Export the dataset as <strong>.xlsx</strong>. Go to <strong>Step 1 → "Upload XLSX" tab</strong> and drop the file in. The filename becomes the brand label in the export. You can upload multiple files to combine brands.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Steps 2–6 */}
         <ol className="space-y-4">
           {[
             {
-              n: 1,
-              text: <>Open the <a href="https://console.apify.com" target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">Apify Console</a> and navigate to the <strong>Instagram Scraper</strong> actor (apify/instagram-scraper). You want the actor that accepts post URLs as direct input.</>,
-            },
-            {
               n: 2,
-              text: <>In the <strong>Direct URLs</strong> input field, paste the links to your competitor's tagged Instagram posts. These are posts where real users have tagged or mentioned the competitor's brand — typically found under a branded hashtag or the brand's tagged section on their profile.</>,
+              text: <>On the <strong>Configure</strong> screen, select your target niches and set a minimum engagement threshold. Optionally fill in a <strong>Campaign brief</strong> — a sentence or two describing the campaign goal, target audience, and tone. The brief is passed to AI Deep-Dive if you run it and makes the qualitative verdicts significantly more useful.</>,
             },
             {
               n: 3,
-              text: <>Set the date filter to cover the <strong>last 3 months</strong>. In the Apify scraper, this is usually labelled "Only posts newer than" or a similar recency field. Limiting to 3 months ensures you're working with currently active accounts rather than historical data.</>,
+              text: <>Click <strong>Start scoring</strong>. Engagement and Relevancy scores are computed entirely in your browser from the uploaded data — no external calls happen at this step.</>,
             },
             {
               n: 4,
-              text: <>Set the <strong>maximum number of results</strong> to your desired volume — 500 is a good starting point for a broad search. A higher number gives you more candidates to score but increases scraping time and cost.</>,
+              text: <>On the <strong>Results</strong> screen, review the ranked table. Columns are customisable. Click <strong>Fetch Live Stats</strong> to pull real-time median likes and views from Apify — this upgrades the Engagement Score with more accurate data but incurs cost (see the cost note below).</>,
             },
             {
               n: 5,
-              text: <>Click <strong>Run</strong> and wait for the actor to finish. Run time depends on the number of results requested; most runs complete within a few minutes.</>,
+              text: <><strong>Optional — AI Deep-Dive:</strong> Set the top-N limit (default 50) and click the AI Deep-Dive button. This sends captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Results are cached for 7 days per account + brief combination. Verdicts appear in the expanded row and the export. This is the only step that calls an AI model.</>,
             },
             {
               n: 6,
-              text: <>Once the run is complete, click <strong>Export</strong> in the Apify results view and download the output as an <strong>.xlsx</strong> file. Make sure you export the full dataset, not just a preview.</>,
-            },
-            {
-              n: 7,
-              text: <>Back in this tool, go to <strong>Step 1</strong> and upload the exported .xlsx file. The tool will parse all accounts, deduplicate them, and move you to the scoring configuration screen automatically. On the Results page you can click <strong>Fetch Live Stats</strong> to pull real-time median likes and views — this upgrades the Engagement Score with more accurate data, but triggers an Apify scrape that incurs cost (see the cost note below).</>,
+              text: <>Filter, sort, and customise columns, then click <strong>Export to XLSX</strong>. The export includes per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), hyperlinked Instagram URLs, and AI verdicts if available.</>,
             },
           ].map(({ n, text }) => (
             <li key={n} className="flex gap-4">
@@ -102,12 +119,15 @@ export default function InstructionsPage() {
 
       {/* Refresh / Cost Warning */}
       <div className="mb-10 px-5 py-4 border border-amber-200 bg-amber-50 rounded-xl">
-        <p className="font-mono text-xs tracking-widest text-amber-600/70 uppercase mb-2">Important — Apify costs</p>
+        <p className="font-mono text-xs tracking-widest text-amber-600/70 uppercase mb-2">Important — costs</p>
         <p className="text-sm text-ink/70 leading-relaxed mb-2">
-          The <strong>Fetch Live Stats</strong> button on the Results screen triggers a live Apify scrape that charges the Markato Apify account. Each run scrapes the 10 most recent posts for every account in your results — at approximately <strong>$0.01 per account</strong>, a typical run of 300–400 accounts costs around $3–4. Use it sparingly.
+          <strong>Fetch Live Stats</strong> triggers a live Apify scrape — approximately <strong>$0.01 per account</strong>. A typical run of 300–400 accounts costs around $3–4. Results are cached for 7 days, so re-uploading the same dataset within that window won't trigger a new scrape.
+        </p>
+        <p className="text-sm text-ink/70 leading-relaxed mb-2">
+          <strong>Direct scrape</strong> (Option A intake) also uses Apify — cost scales with result limit. 200 results costs roughly $0.50–1; 1,000 results costs around $2–3.
         </p>
         <p className="text-sm text-ink/70 leading-relaxed">
-          To avoid unnecessary charges, the tool caches live scrape results for <strong>7 days</strong>. Re-uploading the same dataset within that window will reload your previously fetched stats without triggering a new scrape. Only click Fetch Live Stats when you need genuinely updated figures.
+          <strong>AI Deep-Dive</strong> calls Claude via Anthropic's API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief combination, so re-running with the same brief won't re-charge for accounts already processed.
         </p>
       </div>
 
@@ -201,10 +221,15 @@ export default function InstructionsPage() {
             range="from export"
             description="Caption text of the most recent scraped post. Helpful for a quick read on content style and language without leaving the tool."
           />
+          <ScoreRow
+            name="AI Deep-Dive"
+            range="optional · Claude"
+            description="Qualitative verdict generated by Claude after reviewing the account's captions, hashtags, bio, and your campaign brief. Only populated after you run AI Deep-Dive on the Results screen. Cached for 7 days per account + brief combination — a different campaign brief will generate a fresh verdict even for the same account."
+          />
         </div>
 
         <p className="text-xs text-ink/40 font-mono">
-          All scores are computed locally in your browser from the uploaded export file. No data is sent to any external server except Apify (for the optional live stats fetch).
+          All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and Anthropic (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.
         </p>
       </Section>
 

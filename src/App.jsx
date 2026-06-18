@@ -46,10 +46,12 @@ export default function App() {
     return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
   }
 
-  const handleFiles = async (files) => {
+  const handleFiles = async (files, brandNames = {}) => {
     setFileNames(files.map((f) => f.name))
     try {
-      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f, f.name.replace(/\.xlsx$/i, ''))))
+      const allParsed = await Promise.all(
+        files.map((f) => parseApifyXlsx(f, brandNames[f.name]?.trim() || f.name.replace(/\.xlsx$/i, '')))
+      )
       setInfluencers(deduplicateInfluencers(allParsed))
       setStep('config')
     } catch (err) {
@@ -57,9 +59,8 @@ export default function App() {
     }
   }
 
-  const handleScrapedItems = (items) => {
-    // Items come directly from the Apify API (no brand name — show "scraped" as source)
-    const influencerList = aggregatePostItems(items, 'scraped')
+  const handleScrapedItems = (items, brandName = '') => {
+    const influencerList = aggregatePostItems(items, brandName || 'scraped')
     setFileNames(['Live scrape'])
     setInfluencers(deduplicateInfluencers([influencerList]))
     setStep('config')

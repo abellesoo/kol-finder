@@ -10,8 +10,10 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   // Upload tab state
   const inputRef = useRef(null)
   const [files, setFiles] = useState([])
+  const [brandNames, setBrandNames] = useState({}) // { [filename]: brandName }
 
   // Scrape tab state
+  const [scrapeBrand, setScrapeBrand] = useState('')
   const [scrapeInput, setScrapeInput] = useState('')
   const [resultsLimit, setResultsLimit] = useState(200)
   const [scrapeStatus, setScrapeStatus] = useState('idle') // idle | running | error
@@ -30,9 +32,20 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       const names = new Set(prev.map((f) => f.name))
       return [...prev, ...valid.filter((f) => !names.has(f.name))]
     })
+    // Pre-populate brand name slots (blank — user must fill in)
+    setBrandNames((prev) => {
+      const next = { ...prev }
+      for (const f of valid) {
+        if (!(f.name in next)) next[f.name] = ''
+      }
+      return next
+    })
   }
 
-  const removeFile = (name) => setFiles((prev) => prev.filter((f) => f.name !== name))
+  const removeFile = (name) => {
+    setFiles((prev) => prev.filter((f) => f.name !== name))
+    setBrandNames((prev) => { const n = { ...prev }; delete n[name]; return n })
+  }
 
   const handleDrop = (e) => {
     e.preventDefault()
@@ -49,7 +62,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       const run = await startSeederScrape(lines, resultsLimit)
       const completed = await pollUntilDone(run)
       const items = await getDatasetItems(completed.defaultDatasetId)
-      onScrapedItems(items)
+      onScrapedItems(items, scrapeBrand.trim())
     } catch (err) {
       setScrapeError(err.message)
       setScrapeStatus('error')
@@ -119,14 +132,23 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             {files.length > 0 && (
               <div className="mt-5 text-left space-y-2">
                 {files.map((f) => (
-                  <div key={f.name} className="flex items-center justify-between px-3 py-2 bg-mist/40 rounded-lg">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileSpreadsheet size={14} className="text-accent flex-shrink-0" />
-                      <span className="font-mono text-xs text-ink/70 truncate">{f.name}</span>
+                  <div key={f.name} className="bg-mist/40 rounded-lg px-3 py-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileSpreadsheet size={14} className="text-accent flex-shrink-0" />
+                        <span className="font-mono text-xs text-ink/50 truncate">{f.name}</span>
+                      </div>
+                      <button onClick={() => removeFile(f.name)} className="ml-2 text-ink/30 hover:text-ink/60 flex-shrink-0">
+                        <X size={14} />
+                      </button>
                     </div>
-                    <button onClick={() => removeFile(f.name)} className="ml-2 text-ink/30 hover:text-ink/60 flex-shrink-0">
-                      <X size={14} />
-                    </button>
+                    <input
+                      type="text"
+                      value={brandNames[f.name] ?? ''}
+                      onChange={(e) => setBrandNames((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                      placeholder="Brand name (e.g. Laneige)"
+                      className="w-full px-2 py-1.5 text-xs border border-mist rounded bg-white text-ink placeholder:text-ink/30 focus:outline-none focus:border-accent"
+                    />
                   </div>
                 ))}
               </div>
@@ -134,7 +156,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
 
             {files.length > 0 && (
               <button
-                onClick={() => onFiles(files)}
+                onClick={() => onFiles(files, brandNames)}
                 className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium text-sm bg-ink text-white hover:bg-ink/80 transition-all"
               >
                 Parse {files.length} file{files.length > 1 ? 's' : ''}
@@ -151,6 +173,15 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
               Use this to kick off a fresh scrape right now — no manual Apify steps needed.
             </p>
             <div className="mb-4">
+              <label className="block text-xs font-mono text-ink/40 uppercase tracking-wider mb-1.5">Brand name</label>
+              <input
+                type="text"
+                value={scrapeBrand}
+                onChange={(e) => setScrapeBrand(e.target.value)}
+                disabled={isLoading}
+                placeholder="e.g. Laneige"
+                className="w-full px-3 py-2 border border-mist rounded-lg text-sm text-ink bg-white focus:outline-none focus:border-accent placeholder:text-ink/30 disabled:opacity-50 mb-4"
+              />
               <p className="text-xs text-ink/50 mb-3 leading-relaxed">
                 Paste one entry per line — competitor post URLs, hashtag explore pages, brand tagged pages, or hashtags (e.g. <span className="font-mono">#skincare</span> or <span className="font-mono">skincare</span>).
               </p>

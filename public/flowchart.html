@@ -73,14 +73,14 @@
     .chart-area {
       position: relative;
       width: 820px;
-      height: 810px;
+      height: 860px;
     }
 
     .chart-svg {
       position: absolute;
       inset: 0;
       width: 820px;
-      height: 810px;
+      height: 860px;
       pointer-events: none;
       z-index: 0;
     }
@@ -131,13 +131,14 @@
       line-height: 1.35;
     }
 
-    /* colour palette matching Figma */
-    .t-input   { background: #A2DDD0; } /* teal */
-    .t-skill   { background: #F0A896; } /* salmon */
-    .t-process { background: #EDA082; } /* salmon darker */
-    .t-config  { background: #B0C4EE; } /* periwinkle */
-    .t-sub     { background: #F2C290; } /* amber */
-    .t-output  { background: #A6BEEF; } /* blue */
+    /* colour palette */
+    .t-input   { background: #A2DDD0; }
+    .t-skill   { background: #F0A896; }
+    .t-process { background: #EDA082; }
+    .t-config  { background: #B0C4EE; }
+    .t-sub     { background: #F2C290; }
+    .t-output  { background: #A6BEEF; }
+    .t-opt     { background: #D4C5F0; } /* purple — optional steps */
 
     .t-api {
       background: #3E6FDB;
@@ -185,6 +186,19 @@
       color: rgba(0,0,0,0.8);
       font-family: 'SF Mono', 'Fira Code', monospace;
       letter-spacing: -0.01em;
+    }
+
+    .detail-badge {
+      display: inline-block;
+      margin-top: 5px;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(0,0,0,0.12);
+      color: rgba(0,0,0,0.5);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: 'SF Mono', monospace;
     }
 
     .detail-body {
@@ -296,102 +310,136 @@
 
 const nodes = [
   // ── FINDER MODE ──────────────────────────────────────────────
+
+  // Two intake paths side by side
   {
     id: 'xlsx', label: 'XLSX Files',
-    sub: 'Apify Instagram export · multi-file',
-    type: 'input', x: 125, y: 40, w: 172, h: 54,
+    sub: 'Apify export · multi-file',
+    type: 'input', x: 16, y: 44, w: 195, h: 54,
   },
   {
-    id: 'parse', label: 'parseApifyXlsx',
-    sub: 'Group by username · aggregate stats',
-    type: 'skill', x: 125, y: 140, w: 172, h: 54,
+    id: 'scrape_urls', label: 'URLs / Hashtags',
+    sub: 'paste directly · no manual Apify',
+    type: 'input', x: 221, y: 44, w: 195, h: 54,
   },
+
+  // Parse & aggregate (wide, spanning both inputs)
   {
-    id: 'dedup', label: 'Deduplicate & Sort',
-    sub: 'Keep highest engagement per user',
-    type: 'process', x: 125, y: 240, w: 172, h: 54,
+    id: 'parse', label: 'aggregatePostItems',
+    sub: 'Group by username · merge stats · dedupe',
+    type: 'skill', x: 74, y: 148, w: 274, h: 54,
   },
+
+  // Config
   {
     id: 'config', label: 'Config Step',
-    sub: 'niches · location · min likes · video',
-    type: 'config', x: 125, y: 340, w: 172, h: 54,
+    sub: 'niches · min likes · campaign brief',
+    type: 'config', x: 118, y: 252, w: 186, h: 54,
   },
+
+  // Scoring entry
   {
-    id: 'batch', label: 'Filter + Batch Score',
-    sub: '5 accounts per batch',
-    type: 'process', x: 125, y: 435, w: 172, h: 54,
+    id: 'batch', label: 'scoreInfluencers',
+    sub: 'filter · score · deterministic',
+    type: 'process', x: 118, y: 352, w: 186, h: 54,
   },
-  // sub-nodes fan out below batch
-  { id: 'n_niche',   label: 'scoreNiche',    sub: 'keyword match',      type: 'sub', x: 8,   y: 537, w: 108, h: 44 },
-  { id: 'n_loc',     label: 'scoreLocation', sub: 'signal words',       type: 'sub', x: 124, y: 537, w: 108, h: 44 },
-  { id: 'n_content', label: 'scoreContent',  sub: 'video ratio',        type: 'sub', x: 240, y: 537, w: 108, h: 44 },
-  { id: 'n_bot',     label: 'scoreBotRisk',  sub: 'comment/like ratio', type: 'sub', x: 356, y: 537, w: 108, h: 44 },
+
+  // Sub-score fan-out (3 nodes)
+  { id: 'n_engage',    label: 'scoreEngagement', sub: 'log-scaled likes/views', type: 'sub', x: 26,  y: 454, w: 124, h: 44 },
+  { id: 'n_relevancy', label: 'scoreRelevancy',  sub: 'keyword + niche match',  type: 'sub', x: 159, y: 454, w: 124, h: 44 },
+  { id: 'n_bot',       label: 'scoreBotRisk',    sub: 'comment/like ratio',     type: 'sub', x: 292, y: 454, w: 124, h: 44 },
+
+  // Weighted result
   {
-    id: 'weighted', label: 'Weighted Score',
-    sub: 'niche×3.5 + loc×3.0 + format×2.0 + bot×1.5',
-    type: 'process', x: 125, y: 630, w: 172, h: 54,
+    id: 'weighted', label: 'Overall Score',
+    sub: 'engagement × 8 + relevancy × 2',
+    type: 'process', x: 118, y: 548, w: 186, h: 54,
   },
+
+  // Results table
   {
     id: 'results', label: 'Results Table',
     sub: 'Sort · Filter · Export XLSX',
-    type: 'output', x: 125, y: 730, w: 172, h: 54,
+    type: 'output', x: 118, y: 648, w: 186, h: 54,
+  },
+
+  // Optional: Fetch Live Stats
+  {
+    id: 'live_stats', label: 'Fetch Live Stats',
+    sub: 'Apify batch · ~$0.01/account',
+    type: 'opt', x: 118, y: 754, w: 186, h: 44,
+  },
+
+  // Optional: AI Deep-Dive
+  {
+    id: 'ai_dive', label: 'AI Deep-Dive',
+    sub: 'Claude · top-N · campaign brief',
+    type: 'opt', x: 322, y: 754, w: 132, h: 44,
   },
 
   // ── PROFILE LOOKUP MODE ───────────────────────────────────────
   {
     id: 'username', label: '@username',
     sub: 'or instagram.com/username',
-    type: 'input', x: 516, y: 40, w: 172, h: 54,
+    type: 'input', x: 516, y: 44, w: 172, h: 54,
   },
   {
     id: 'scraper', label: 'startReelScraper',
-    sub: 'Trigger Apify actor run',
-    type: 'skill', x: 516, y: 140, w: 172, h: 54,
+    sub: 'Trigger Apify actor via Worker',
+    type: 'skill', x: 516, y: 148, w: 172, h: 54,
   },
   {
     id: 'apify_api', label: 'Apify API', sub: '',
-    type: 'api', x: 710, y: 151, w: 84, h: 30,
+    type: 'api', x: 710, y: 159, w: 84, h: 30,
   },
   {
-    id: 'poll', label: 'Poll getRun',
-    sub: 'Every 3s until SUCCEEDED',
-    type: 'process', x: 516, y: 248, w: 172, h: 54,
+    id: 'poll', label: 'pollUntilDone',
+    sub: 'Backoff 3s→5s→8s→10s',
+    type: 'process', x: 516, y: 252, w: 172, h: 54,
   },
   {
     id: 'dataset', label: 'getDatasetItems',
     sub: 'Fetch all scraped reels',
-    type: 'skill', x: 516, y: 348, w: 172, h: 54,
+    type: 'skill', x: 516, y: 352, w: 172, h: 54,
   },
   {
     id: 'compute', label: 'computeStats',
     sub: 'Filter to last 90 days',
-    type: 'process', x: 516, y: 448, w: 172, h: 54,
+    type: 'process', x: 516, y: 452, w: 172, h: 54,
   },
   {
     id: 'dashboard', label: 'Profile Dashboard',
     sub: 'Median likes · views · hidden count',
-    type: 'output', x: 516, y: 553, w: 172, h: 54,
+    type: 'output', x: 516, y: 552, w: 172, h: 54,
   },
 ]
 
 // edges: from node id → to node id
 const edges = [
+  // finder: both intakes → parse
+  { from: 'xlsx',        to: 'parse' },
+  { from: 'scrape_urls', to: 'parse' },
+
   // finder vertical chain
-  { from: 'xlsx',    to: 'parse' },
-  { from: 'parse',   to: 'dedup' },
-  { from: 'dedup',   to: 'config' },
+  { from: 'parse',   to: 'config' },
   { from: 'config',  to: 'batch' },
-  // fan out
-  { from: 'batch',   to: 'n_niche' },
-  { from: 'batch',   to: 'n_loc' },
-  { from: 'batch',   to: 'n_content' },
-  { from: 'batch',   to: 'n_bot' },
-  // fan in
-  { from: 'n_niche',   to: 'weighted' },
-  { from: 'n_loc',     to: 'weighted' },
-  { from: 'n_content', to: 'weighted' },
-  { from: 'n_bot',     to: 'weighted' },
+
+  // fan out to sub-scores
+  { from: 'batch', to: 'n_engage' },
+  { from: 'batch', to: 'n_relevancy' },
+  { from: 'batch', to: 'n_bot' },
+
+  // fan in (engage + relevancy → weighted; bot risk is informational only)
+  { from: 'n_engage',    to: 'weighted' },
+  { from: 'n_relevancy', to: 'weighted' },
+  { from: 'n_bot',       to: 'weighted', style: 'info' },
+
   { from: 'weighted', to: 'results' },
+
+  // optional downstream steps
+  { from: 'results', to: 'live_stats', style: 'opt' },
+  { from: 'results', to: 'ai_dive',    style: 'opt' },
+
   // lookup chain
   { from: 'username', to: 'scraper' },
   { from: 'scraper',  to: 'apify_api', style: 'api' },
@@ -409,71 +457,82 @@ const details = {
   xlsx: {
     title: 'XLSX Files',
     colorType: 'input',
-    what: 'One or more Excel files exported from an Apify Instagram scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, paidPartnership, and productType.',
+    what: 'One or more Excel files exported from an Apify Instagram scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, and productType. The filename (without .xlsx) becomes the brand label in the export, enabling per-brand colour coding.',
     output: 'Raw post rows, one per Instagram post',
-    notes: 'Multiple files are accepted. Identical usernames across files are merged; the version with the highest totalEngagement wins.',
+    notes: 'Multiple files are accepted and merged. Identical usernames across files are deduplicated after aggregation.',
+  },
+  scrape_urls: {
+    title: 'URLs / Hashtags',
+    colorType: 'input',
+    what: 'Paste competitor post URLs, brand-tagged page URLs, or hashtag strings (one per line) directly into the tool. Hashtags like #skincare or skincare are converted to Instagram explore URLs automatically. The tool triggers an Apify Instagram Scraper run through the Cloudflare Worker proxy, polls until done, and feeds the results into the same parse → score pipeline — no manual Apify steps needed.',
+    output: 'Raw post items array from Apify dataset',
+    notes: 'Accounts scraped this way are labelled with sourceBrand: "scraped" in the export. Result limit is configurable (100 / 200 / 500 / 1000).',
   },
   parse: {
-    title: 'parseApifyXlsx',
+    title: 'aggregatePostItems',
     colorType: 'skill',
-    what: 'Reads the XLSX using the xlsx library, groups rows by ownerUsername, and aggregates per influencer: avgLikes, avgComments, engagementRate, videoRatio, followerCount, up to 40 deduplicated hashtags, 5 sample captions, locationNames, and a count of paid-partnership posts. Also extracts the most recent post URL, caption, like count, comment count, and play/view count for the Scraped Post columns.',
+    what: 'Groups rows by ownerUsername and aggregates per-influencer stats: avgLikes, avgComments, engagementRate, videoRatio, followerCount, up to 40 deduplicated hashtags, 5 sample captions, and the most recent post URL with its like/comment/play counts. Handles both xlsx column format (hashtags/0, hashtags/1…) and Apify API array format (item.hashtags). Also reads accountLocation from city/ownerCity/country fields if present.',
     output: 'Array of influencer objects sorted by totalEngagement desc',
-    notes: 'Video detection checks the "type" or "productType" column for "video", "clip", or "reel". Engagement rate = (avgLikes + avgComments) / followerCount × 100.',
-  },
-  dedup: {
-    title: 'Deduplicate & Sort',
-    colorType: 'process',
-    what: 'When multiple XLSX files are uploaded, the same account may appear in more than one. Deduplication keeps the version with the highest totalEngagement (avgLikes + avgComments). The final list is sorted descending by that metric.',
-    output: 'Clean, deduplicated influencer array',
+    notes: 'Called as parseApifyXlsx for XLSX files and directly for scraped items. Brand name is passed in for colour coding.',
   },
   config: {
     title: 'Config Step',
     colorType: 'config',
-    what: 'Before scoring, the user sets four parameters: target niches (beauty, skincare, lifestyle, fashion, health, food), target location (Hong Kong, Taiwan, Singapore, or Macau), a minimum average-likes threshold, and whether to require video content.',
-    output: 'Config object: { niches, locationTarget, minEngagement, requireVideo }',
+    what: 'Before scoring, the user sets: target niches (beauty, skincare, lifestyle, fashion, health, food), a minimum average-likes threshold, whether to require video content, and an optional Campaign Brief. The campaign brief is a free-text field — a sentence or two describing the campaign goal, audience, and tone. It is stored on the config object and passed to AI Deep-Dive to make qualitative verdicts campaign-specific.',
+    output: 'Config object: { niches, minEngagement, requireVideo, campaignBrief }',
   },
   batch: {
-    title: 'Filter + Batch Score',
+    title: 'scoreInfluencers',
     colorType: 'process',
-    what: 'Influencers below the minimum engagement threshold are removed first. Remaining accounts are scored in batches of 5, with the progress bar updated after each batch. Batching keeps the UI responsive even with hundreds of accounts.',
-    output: 'Progress state + final scored results array',
+    what: 'Filters accounts below the minimum engagement threshold, then scores each remaining account. All scoring is deterministic arithmetic computed locally in the browser — no AI involved at this step. Results are returned synchronously; the progress bar updates as accounts are processed.',
+    output: 'Scored results array with overall, scores, verdict, flags, nicheSignals',
   },
-  n_niche: {
-    title: 'scoreNiche',
+  n_engage: {
+    title: 'scoreEngagement',
     colorType: 'sub',
-    what: 'Keyword-matches the influencer\'s hashtags, captions, and full name against a curated niche dictionary (English + Traditional Chinese terms). Each hit scores 1.5 points, capped at 10. Also returns the matched signal words for display.',
-    output: '{ score: 0–10, signals: string[] }',
-  },
-  n_loc: {
-    title: 'scoreLocation',
-    colorType: 'sub',
-    what: 'Scans hashtags, captions, and locationNames for region-specific signals — e.g. "香港", "causeway bay", "旺角" for HK; "台灣", "taipei" for Taiwan. For Taiwan, pairing traditional Chinese with Putonghua voiceover signals adds a +4 boost. Capped at 10.',
-    output: '{ score: 0–10, signals: string[] }',
-  },
-  n_content: {
-    title: 'scoreContentFormat',
-    colorType: 'sub',
-    what: 'If the user requires video, the score equals videoRatio × 10 (share of posts that are reels or clips). If video is not required, a neutral score of 7 is used so it doesn\'t penalise static-content creators.',
+    what: 'Log-scales median likes and views to produce a 0–10 score. Before live stats are fetched: log(1 + avgLikes + avgComments × 3). After Fetch Live Stats: log(1 + medianLikes + medianViews × 0.5). The natural log compresses large follower differences so a 10k-like account doesn\'t automatically swamp a 1k-like account. Views are weighted 0.5× since they require less intent than a like.',
     output: '{ score: 0–10 }',
+  },
+  n_relevancy: {
+    title: 'scoreRelevancy',
+    colorType: 'sub',
+    what: 'Keyword-matches the influencer\'s hashtags, captions, and display name against niche-specific keyword lists (English + Traditional Chinese). Starts at a neutral baseline of 5 — any account in the dataset has already shown some affinity with competitor content. Adds 1 point per keyword match, deducts 1 point per off-niche category with hits (penalises unfocused accounts). Returns matched signal words for display in the table.',
+    output: '{ score: 0–10, signals: string[] }',
   },
   n_bot: {
     title: 'scoreBotRisk',
     colorType: 'sub',
-    what: 'Checks the comment-to-like ratio. Very high likes with near-zero comments is a bot signal. Scores 2–9: accounts with >5k likes and <0.5% comment ratio score 2 (suspicious); healthy ratios (≥2%) score 9. A score ≤3 appends a "bot-risk" flag.',
+    what: 'Checks the comment-to-like ratio. Very high likes with near-zero comments is a bot signal. Scores 2–9: >5k likes and <0.5% comment ratio → score 2 (suspicious); ≥2% comment ratio → score 9. Accounts scoring ≤3 are flagged with "bot-risk". Bot risk score is informational only — it does not contribute to the Overall Score.',
     output: '{ score: 0–10 }',
+    notes: 'Dashed arrow to Overall Score indicates informational-only: bot risk is shown in the table but excluded from the 80/20 overall formula.',
   },
   weighted: {
-    title: 'Weighted Score',
+    title: 'Overall Score',
     colorType: 'process',
-    what: 'Combines the four sub-scores into a single integer using fixed weights. Also generates a human-readable verdict ("Strong HK signals, good niche fit") and a flag array (e.g. "hk-based", "video-creator", "bot-risk", "cantonese-speaker").',
-    output: '{ overall, scores, verdict, flags[], locationSignals, nicheSignals }',
+    what: 'Combines the two sub-scores into a single integer 0–100. Also generates a human-readable verdict ("strong niche fit, some niche relevancy") and a flag array (e.g. "video-creator", "strong-relevancy", "bot-risk"). The bot risk score is displayed separately but not included in the overall formula.',
+    output: '{ overall, scores, verdict, flags[], nicheSignals }',
     weights: true,
   },
   results: {
     title: 'Results Table',
     colorType: 'output',
-    what: 'Displays all scored influencers in a sortable, filterable table. Columns include: Overall score, Niche, Location, Engagement Rate, Followers, Format, Med. Likes, Med. Views (both from live Apify batch scrape), Scraped Post URL, Post Likes, Post Comments, Post Plays, and Scraped Caption. The "Fetch Live Stats" button triggers fetchBatchStats — a parallelised Apify batch scrape (50 accounts per chunk, 10 posts each) that populates the live columns. Results are cached in localStorage for 7 days.',
-    output: 'Interactive table + XLSX export via exportCsv.js (ExcelJS)',
+    what: 'Displays all scored influencers in a sortable, filterable table with customisable columns. Med. Likes and Med. Views show xlsx-based fallback values with an "(export)" label before live stats are fetched, upgrading in real time as live data arrives per account. Expanded rows show the full verdict, AI Deep-Dive verdict (if run), scraped caption, and post stats.',
+    output: 'Interactive table + XLSX export via exportCsv.js (ExcelJS, with per-brand colour fills and workflow dropdowns)',
+  },
+  live_stats: {
+    title: 'Fetch Live Stats',
+    colorType: 'opt',
+    badge: 'optional · costs ~$0.01/account',
+    what: 'Triggers a parallelised Apify reel scraper batch through the Cloudflare Worker proxy. Scrapes the 10 most recent posts for every account in the current results, computing median likes and median views. Results are cached in localStorage for 7 days — re-running within that window skips already-cached accounts. Upgrades the Engagement Score and Overall Score in real time as each account completes.',
+    output: 'liveStats map: { [username]: { medianLikes, medianViews, hiddenCount, followerCount } }',
+  },
+  ai_dive: {
+    title: 'AI Deep-Dive',
+    colorType: 'opt',
+    badge: 'optional · costs ~$0.01–0.05/run',
+    what: 'Sends the top-N accounts\' captions, hashtags, bio, and the campaign brief to Claude (claude-sonnet-4-6) via the Cloudflare Worker proxy. The Worker calls the Anthropic API server-side — the API key never reaches the browser. Returns a qualitative verdict per account, stored as aiVerdict (distinct from the deterministic verdict). Processed in batches of 10 to stay within rate limits.',
+    output: 'aiVerdicts map: { [username]: string }',
+    notes: 'Verdicts are cached in localStorage for 7 days per account + campaign brief combination. A different brief generates a fresh verdict even for the same account. This is the only step that calls an AI model.',
   },
   username: {
     title: '@username Input',
@@ -484,20 +543,20 @@ const details = {
   scraper: {
     title: 'startReelScraper',
     colorType: 'skill',
-    what: 'POSTs to the Cloudflare Worker proxy (VITE_PROXY_URL/start-run/reel-scraper), which forwards the request to the Apify API server-side. The Apify key is stored as a Cloudflare Worker secret — it never reaches the browser bundle.',
+    what: 'POSTs to the Cloudflare Worker proxy (/start-run/reel-scraper), which forwards the request to Apify server-side. The Apify key is stored as a Cloudflare Worker secret — it never reaches the browser bundle.',
     output: '{ id: string, status: "READY" | "RUNNING" }',
     notes: 'Browser → Cloudflare Worker (kol-finder-proxy) → Apify. The Worker enforces CORS so only abellesoo.github.io and localhost can call it.',
   },
   poll: {
-    title: 'Poll getRun',
+    title: 'pollUntilDone',
     colorType: 'process',
-    what: 'Calls the Worker proxy (VITE_PROXY_URL/run-status/:runId) in a backoff loop until the run is no longer READY or RUNNING. Delays follow 3s → 5s → 8s → 10s (capped). If the run ends in any status other than SUCCEEDED (e.g. FAILED, ABORTED), an error is thrown and shown to the user.',
+    what: 'Shared utility exported from apifyApi.js — used by both KolLookup and the direct scrape intake. Calls the Worker proxy (/run-status/:runId) in a backoff loop until the run reaches a terminal state. Delays follow 3s → 5s → 8s → 10s (capped). Throws if the run ends in any state other than SUCCEEDED (e.g. FAILED, ABORTED).',
     output: 'Completed run object with defaultDatasetId',
   },
   dataset: {
     title: 'getDatasetItems',
     colorType: 'skill',
-    what: 'Fetches the full result set from the Apify dataset using the defaultDatasetId from the completed run. Returns an array of reel post objects with fields: timestamp, likesCount, videoViewCount, caption, and url.',
+    what: 'Fetches the full result set from the Apify dataset using the defaultDatasetId from the completed run. Returns an array of post objects with fields: timestamp, likesCount, videoViewCount, caption, and url.',
     output: 'Post objects array from Apify dataset',
   },
   compute: {
@@ -509,7 +568,7 @@ const details = {
   dashboard: {
     title: 'Profile Dashboard',
     colorType: 'output',
-    what: 'Renders three stat cards (median likes, median views, hidden-like count) and a scrollable table of up to 20 recent reels with per-post like and view counts plus dates. Each row links out to the reel on Instagram.',
+    what: 'Renders three stat cards (median likes, median views, hidden-like count) and a scrollable table of up to 20 recent reels with per-post like and view counts plus dates. Each row links out to the reel on Instagram. Lookup history is saved to sessionStorage.',
     output: 'Profile analytics UI (real-time, single account)',
   },
 }
@@ -526,30 +585,34 @@ function cy(n) { return n.y + n.h / 2 }
 function edgePoints(e) {
   const s = nodeMap[e.from]
   const t = nodeMap[e.to]
-  // horizontal (API badge): right edge of source → left edge of target
   if (e.style === 'api') {
     return { x1: s.x + s.w, y1: cy(s), x2: t.x, y2: cy(t) }
   }
-  // default: bottom-center of source → top-center of target
+  // opt edges from results: bottom of results → top of target
+  if (e.style === 'opt') {
+    return { x1: cx(s), y1: s.y + s.h, x2: cx(t), y2: t.y }
+  }
   return { x1: cx(s), y1: s.y + s.h, x2: cx(t), y2: t.y }
 }
 
 function buildPath(e) {
   const { x1, y1, x2, y2 } = edgePoints(e)
   if (e.style === 'api') return `M ${x1} ${y1} L ${x2} ${y2}`
-  if (Math.abs(x1 - x2) < 2) return `M ${x1} ${y1} L ${x2} ${y2}` // straight vertical
+  if (Math.abs(x1 - x2) < 2) return `M ${x1} ${y1} L ${x2} ${y2}`
   const midY = (y1 + y2) / 2
   return `M ${x1} ${y1} C ${x1} ${midY} ${x2} ${midY} ${x2} ${y2}`
 }
 
 const typeClass = {
   input: 't-input', skill: 't-skill', process: 't-process',
-  config: 't-config', sub: 't-sub', output: 't-output', api: 't-api',
+  config: 't-config', sub: 't-sub', output: 't-output',
+  opt: 't-opt', api: 't-api',
 }
 
 const headerBg = {
   input: '#A2DDD0', skill: '#F0A896', process: '#EDA082',
   config: '#B0C4EE', sub: '#F2C290', output: '#A6BEEF',
+  opt: '#D4C5F0',
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -561,7 +624,7 @@ function render() {
 
   // Mode labels
   ;[
-    { text: '— Finder Mode',         left: 125 },
+    { text: '— Finder Mode',         left: 16 },
     { text: '— Profile Lookup Mode', left: 516 },
   ].forEach(({ text, left }) => {
     const el = document.createElement('div')
@@ -575,9 +638,8 @@ function render() {
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
   svg.classList.add('chart-svg')
-  svg.setAttribute('viewBox', '0 0 820 810')
+  svg.setAttribute('viewBox', '0 0 820 860')
 
-  // Marker definitions
   svg.innerHTML = `
     <defs>
       <marker id="arr"      markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
@@ -586,13 +648,19 @@ function render() {
       <marker id="arr-api"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L7,3 z" fill="#1e3a7a"/>
       </marker>
+      <marker id="arr-opt"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#6a4a9a"/>
+      </marker>
+      <marker id="arr-info" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#1e1e1e"/>
+      </marker>
     </defs>
   `
 
   // Vertical separator between modes
   const sep = document.createElementNS(ns, 'line')
   sep.setAttribute('x1', '472'); sep.setAttribute('y1', '28')
-  sep.setAttribute('x2', '472'); sep.setAttribute('y2', '620')
+  sep.setAttribute('x2', '472'); sep.setAttribute('y2', '660')
   sep.setAttribute('stroke', '#181818')
   sep.setAttribute('stroke-width', '1')
   sep.setAttribute('stroke-dasharray', '5 5')
@@ -608,6 +676,16 @@ function render() {
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('stroke-dasharray', '4 3')
       path.setAttribute('marker-end', 'url(#arr-api)')
+    } else if (e.style === 'opt') {
+      path.setAttribute('stroke', '#3d2a5a')
+      path.setAttribute('stroke-width', '1.5')
+      path.setAttribute('stroke-dasharray', '5 3')
+      path.setAttribute('marker-end', 'url(#arr-opt)')
+    } else if (e.style === 'info') {
+      path.setAttribute('stroke', '#1e1e1e')
+      path.setAttribute('stroke-width', '1.5')
+      path.setAttribute('stroke-dasharray', '3 3')
+      path.setAttribute('marker-end', 'url(#arr-info)')
     } else {
       path.setAttribute('stroke', '#282828')
       path.setAttribute('stroke-width', '1.5')
@@ -653,6 +731,7 @@ function showDetail(id) {
   sidebar.innerHTML = `
     <div class="detail-header" style="background:${bg}">
       <div class="detail-title">${d.title}</div>
+      ${d.badge ? `<div class="detail-badge">${d.badge}</div>` : ''}
     </div>
     <div class="detail-body">
       <div>
@@ -668,10 +747,9 @@ function showDetail(id) {
       <div>
         <div class="section-label">Score weights</div>
         <div class="weights-grid">
-          <div class="weight-chip"><strong>Niche</strong>× 3.5</div>
-          <div class="weight-chip"><strong>Location</strong>× 3.0</div>
-          <div class="weight-chip"><strong>Format</strong>× 2.0</div>
-          <div class="weight-chip"><strong>Bot Risk</strong>× 1.5</div>
+          <div class="weight-chip"><strong>Engagement</strong>× 8 (80%)</div>
+          <div class="weight-chip"><strong>Relevancy</strong>× 2 (20%)</div>
+          <div class="weight-chip" style="grid-column:span 2;opacity:0.6"><strong>Bot Risk</strong>informational only — not in overall</div>
         </div>
       </div>` : ''}
       ${d.notes ? `

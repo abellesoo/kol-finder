@@ -65,7 +65,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
           <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Step 1 of 3</p>
           <h1 className="text-3xl font-semibold text-ink mb-2">Get your dataset</h1>
           <p className="text-ink/50 text-sm">
-            Upload an Apify .xlsx export, or paste URLs / hashtags to scrape directly.
+            Have an existing Apify export? Upload it. Starting a new scrape? Paste URLs or hashtags directly.
           </p>
         </div>
 
@@ -90,6 +90,9 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         {/* Upload tab */}
         {tab === 'upload' && (
           <>
+            <p className="text-xs text-ink/40 mb-4 text-center">
+              Use this if you already ran a scrape in Apify Console and downloaded the .xlsx export.
+            </p>
             <div
               className={`border-2 border-dashed rounded-2xl p-10 cursor-pointer transition-all
                 border-mist hover:border-accent/50 hover:bg-accent-dim/10`}
@@ -144,6 +147,9 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         {/* Scrape tab */}
         {tab === 'scrape' && (
           <>
+            <p className="text-xs text-ink/40 mb-4 text-center">
+              Use this to kick off a fresh scrape right now — no manual Apify steps needed.
+            </p>
             <div className="mb-4">
               <p className="text-xs text-ink/50 mb-3 leading-relaxed">
                 Paste one entry per line — competitor post URLs, hashtag explore pages, brand tagged pages, or hashtags (e.g. <span className="font-mono">#skincare</span> or <span className="font-mono">skincare</span>).

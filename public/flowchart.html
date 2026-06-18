@@ -457,14 +457,16 @@ const details = {
   xlsx: {
     title: 'XLSX Files',
     colorType: 'input',
-    what: 'One or more Excel files exported from an Apify Instagram scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, and productType. The filename (without .xlsx) becomes the brand label in the export, enabling per-brand colour coding.',
+    badge: 'use when: you already have a previous export',
+    what: 'One or more Excel files exported from a previous Apify Instagram Scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, and productType. The filename (without .xlsx) becomes the brand label in the export, enabling per-brand colour coding. Also useful for re-scoring an old dataset with different niche filters without re-scraping.',
     output: 'Raw post rows, one per Instagram post',
     notes: 'Multiple files are accepted and merged. Identical usernames across files are deduplicated after aggregation.',
   },
   scrape_urls: {
     title: 'URLs / Hashtags',
     colorType: 'input',
-    what: 'Paste competitor post URLs, brand-tagged page URLs, or hashtag strings (one per line) directly into the tool. Hashtags like #skincare or skincare are converted to Instagram explore URLs automatically. The tool triggers an Apify Instagram Scraper run through the Cloudflare Worker proxy, polls until done, and feeds the results into the same parse → score pipeline — no manual Apify steps needed.',
+    badge: 'use when: starting a fresh scrape now',
+    what: 'Paste competitor post URLs, brand-tagged page URLs, or hashtag strings (one per line) directly into the tool — no Apify Console access needed. Hashtags like #skincare are converted to Instagram explore URLs automatically. The tool triggers an Apify Instagram Scraper run through the Cloudflare Worker proxy, polls until done, and feeds results into the same parse → score pipeline.',
     output: 'Raw post items array from Apify dataset',
     notes: 'Accounts scraped this way are labelled with sourceBrand: "scraped" in the export. Result limit is configurable (100 / 200 / 500 / 1000).',
   },

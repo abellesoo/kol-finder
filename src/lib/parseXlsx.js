@@ -1,5 +1,23 @@
 import * as XLSX from 'xlsx'
 
+// Signal lists for location inference when structured city/country fields are absent.
+// Keyed by display name; the entry with the most keyword hits wins.
+const LOCATION_SIGNALS = {
+  'Hong Kong': [
+    '香港', 'hong kong', 'hongkong', 'hkig', 'hkgirl', 'hkboy',
+    '萬寧', '屈臣氏', '莎莎', 'sasa', 'watsons', 'mannings',
+    'causeway bay', 'mong kok', 'tsim sha tsui', 'admiralty', 'tst', 'cwb',
+    '銅鑼灣', '旺角', '尖沙咀', '中環', '灣仔',
+    'cantonese', '廣東話', '粵語',
+  ],
+  'Taiwan': [
+    '台灣', 'taiwan', '台北', 'taipei', '高雄', '台中',
+    'nt$', '國語', '台語', '繁體', '正體',
+  ],
+  'Singapore': ['singapore', '新加坡', 'sgig', 'sgfashion', 'sgbeauty', 'sgd', 'orchard', 'sentosa'],
+  'Macau': ['macau', 'macao', '澳門'],
+}
+
 // Handle hashtags from both xlsx rows (hashtags/0, hashtags/1…) and raw API items (array)
 function getRowHashtags(row) {
   if (Array.isArray(row.hashtags)) return row.hashtags.map((h) => String(h).toLowerCase())
@@ -110,10 +128,30 @@ export function aggregatePostItems(rows, brandName = '') {
     // Bio — take first non-empty value across posts
     const bio = posts.map((p) => p['ownerBiography'] || p['biography'] || '').find(Boolean) || ''
 
-    // Profile location — common field names from Apify profile scrapers
-    const accountLocation = posts
+    // Profile location — prefer structured fields; fall back to signal matching
+    let accountLocation = posts
       .map((p) => p['city'] || p['ownerCity'] || p['profileCity'] || p['locationCity'] || p['country'] || p['ownerCountry'] || '')
       .find(Boolean) || ''
+
+    if (!accountLocation) {
+      const searchText = [
+        ...uniqueHashtags,
+        captions,
+        ...locationNames,
+        bio,
+      ].join(' ').toLowerCase()
+
+      let bestLocation = ''
+      let bestCount = 0
+      for (const [loc, signals] of Object.entries(LOCATION_SIGNALS)) {
+        const count = signals.filter((kw) => searchText.includes(kw.toLowerCase())).length
+        if (count > bestCount) {
+          bestCount = count
+          bestLocation = loc
+        }
+      }
+      accountLocation = bestLocation
+    }
 
     // Most recent post URL
     const samplePost = posts[0] || null

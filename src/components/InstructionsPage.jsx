@@ -70,14 +70,16 @@ export default function InstructionsPage() {
           <div className="ml-9 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="border border-mist rounded-xl px-4 py-3">
               <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option A — Paste URLs / hashtags</p>
+              <p className="text-sm text-ink/50 italic mb-2">Use this when you're starting a fresh scrape right now.</p>
               <p className="text-sm text-ink/70 leading-relaxed">
-                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-xs bg-mist/60 px-1 rounded">#skincare</code> or just <code className="font-mono text-xs bg-mist/60 px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps required.
+                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-xs bg-mist/60 px-1 rounded">#skincare</code> or just <code className="font-mono text-xs bg-mist/60 px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps needed.
               </p>
             </div>
             <div className="border border-mist rounded-xl px-4 py-3">
               <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option B — Upload XLSX</p>
+              <p className="text-sm text-ink/50 italic mb-2">Use this when you already have a previous Apify export.</p>
               <p className="text-sm text-ink/70 leading-relaxed">
-                Run an <strong>Apify Instagram Scraper</strong> job manually (paste competitor post URLs into Direct URLs, set a 3-month date filter, run). Export the dataset as <strong>.xlsx</strong>. Go to <strong>Step 1 → "Upload XLSX" tab</strong> and drop the file in. The filename becomes the brand label in the export. You can upload multiple files to combine brands.
+                If you ran an Apify Instagram Scraper job previously and saved the .xlsx, go to <strong>Step 1 → "Upload XLSX" tab</strong> and drop the file in. The filename becomes the brand label in the export. You can upload multiple files to combine brands. This path is also useful when you want to re-score an old dataset with different niche filters.
               </p>
             </div>
           </div>

@@ -24,9 +24,10 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          # VITE_PROXY_URL is the public Worker URL — not a secret.
-          # Add it under repo Settings → Secrets and variables → Variables.
+          # These are public-safe vars (not secrets) — add under repo Settings → Secrets and variables → Variables.
           VITE_PROXY_URL: ${{ vars.VITE_PROXY_URL }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:

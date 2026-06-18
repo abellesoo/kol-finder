@@ -5,11 +5,19 @@ import ResultsStep from './components/ResultsStep'
 import KolLookup from './components/KolLookup'
 import InstructionsPage from './components/InstructionsPage'
 import HistoryPage from './components/HistoryPage'
+import ReviewPage from './components/ReviewPage'
 import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
+// Check if this page load is a review link (?review=<uuid>)
+const REVIEW_ID = new URLSearchParams(window.location.search).get('review')
+
 export default function App() {
+  // If opened via a share link, render only the review page
+  if (REVIEW_ID) {
+    return <ReviewPage reviewId={REVIEW_ID} />
+  }
   const [mode, setMode] = useState('instructions') // instructions | finder | lookup | history
   const [lookupUsername, setLookupUsername] = useState('')
   const [step, setStep] = useState('upload') // upload | config | scoring | results

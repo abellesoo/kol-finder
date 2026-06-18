@@ -10,9 +10,11 @@ export const EXPORT_COLUMNS = [
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
   { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
   { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => live?.medianViews ?? '' },
-  { id: 'approve',           label: 'Approve Yes/No',     getValue: ()             => '' },
-  { id: 'reachout_status',   label: 'Reach-out Status',   getValue: ()             => 'Not sent' },
-  { id: 'remarks',           label: 'Remarks',            getValue: ()             => '' },
+  { id: 'approve',           label: 'Approve Yes/No',     getValue: ()                      => '' },
+  { id: 'reachout_status',   label: 'Reach-out Status',   getValue: ()                      => 'Not sent' },
+  { id: 'remarks',           label: 'Remarks',            getValue: ()                      => '' },
+  { id: 'dm_status',         label: 'DM Status',          getValue: (r, inf, live, rs)      => rs?.dm_status ? { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }[rs.dm_status] || rs.dm_status : '' },
+  { id: 'dm_draft',          label: 'DM Draft',           getValue: (r, inf, live, rs)      => rs?.dm_draft || '' },
   { id: 'overall',           label: 'overall',            getValue: (r)            => r.overall ?? '' },
   { id: 'relevancy_score',   label: 'relevancy_score',    getValue: (r)            => r.scores?.relevancy ?? '' },
   { id: 'engagement_score',  label: 'engagement_score',   getValue: (r)            => r.scores?.engagement ?? '' },
@@ -67,7 +69,7 @@ function colIndexToLetter(n) {
 // Soft color palette for brand column — cycles if more than 5 brands
 const BRAND_COLORS = ['FFFCE5CF', 'FFD5E8D4', 'FFDAE8FC', 'FFE1D5E7', 'FFFFD7D7']
 
-export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}) {
+export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}, reviewState = {}) {
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
 
@@ -96,7 +98,8 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
   results.forEach((r) => {
     const inf = map[r.username] || {}
     const live = liveStats[r.username]
-    ws.addRow(cols.map((c) => c.getValue(r, inf, live)))
+    const rs = reviewState[r.username]
+    ws.addRow(cols.map((c) => c.getValue(r, inf, live, rs)))
   })
 
   // Style header row

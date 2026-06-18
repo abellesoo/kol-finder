@@ -1,8 +1,9 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Share2, Check, Copy, X } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
+import { supabase } from '../lib/supabase'
 import TableErrorBoundary from './TableErrorBoundary'
 
 const COLUMN_INFO = {
@@ -110,7 +111,6 @@ function InfoTooltip({ column }) {
   )
 }
 
-// Columns shown in the table. exportIds maps each to EXPORT_COLUMNS ids for the xlsx.
 const TABLE_COLUMNS = [
   { id: 'brand',                 label: 'Brand',           width: '1fr',                                                       exportIds: ['brand'] },
   { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
@@ -127,11 +127,23 @@ const TABLE_COLUMNS = [
   { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
   { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
   { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
+  { id: 'dm_status',             label: 'DM Status',       width: '1fr',                                                       exportIds: ['dm_status'] },
 ]
 
-// Always exported regardless of column picker — operational columns the user fills in Excel
-const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks']
+const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks', 'dm_status', 'dm_draft']
 
+const DM_STATUS_STYLES = {
+  'not_sent':    'bg-ink/10 text-ink/50',
+  'sent':        'bg-blue-100 text-blue-700',
+  'replied':     'bg-green-100 text-green-700',
+  'no_response': 'bg-rose/10 text-rose/70',
+}
+const DM_STATUS_LABELS = {
+  'not_sent': 'Not sent',
+  'sent': 'Sent',
+  'replied': 'Replied',
+  'no_response': 'No response',
+}
 
 function ScoreBadge({ score }) {
   const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
@@ -142,10 +154,7 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   return (
     <div className="flex items-center gap-1.5">
       <div className="w-16 h-1.5 bg-mist rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${(value / max) * 100}%` }}
-        />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
       <span className="font-mono text-xs text-ink/50">{value}</span>
     </div>
@@ -186,29 +195,14 @@ function ColumnPicker({ selected, onChange }) {
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(col.id)}
-                  onChange={() => toggle(col.id)}
-                  className="accent-accent"
-                />
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent" />
                 <span className="font-mono text-xs text-ink/70">{col.label}</span>
               </label>
             ))}
           </div>
           <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button
-              onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))}
-              className="text-xs text-ink/40 hover:text-ink transition-colors"
-            >
-              Select all
-            </button>
-            <button
-              onClick={() => onChange([])}
-              className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto"
-            >
-              Clear
-            </button>
+            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-xs text-ink/40 hover:text-ink transition-colors">Select all</button>
+            <button onClick={() => onChange([])} className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto">Clear</button>
           </div>
         </div>
       )}
@@ -216,9 +210,42 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
-function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus }) {
+// Share modal — shows the generated link and a copy button
+function ShareModal({ url, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-ink">Share link created</h2>
+          <button onClick={onClose} className="text-ink/30 hover:text-ink"><X size={18} /></button>
+        </div>
+        <p className="text-xs text-ink/50 mb-3">Send this link to the brand manager. They can approve or reject each account without logging in.</p>
+        <div className="flex items-center gap-2 p-3 bg-mist/40 rounded-lg border border-mist mb-4">
+          <p className="font-mono text-xs text-ink/70 truncate flex-1">{url}</p>
+          <button onClick={copy} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 flex-shrink-0 transition-colors">
+            {copied ? <Check size={13} /> : <Copy size={13} />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <button onClick={onClose} className="w-full py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all">Done</button>
+      </div>
+    </div>
+  )
+}
+
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
-  const gridTemplate = `2fr ${visibleCols.map((c) => c.width).join(' ')}`
+  // Extra leading column for checkbox when in selection mode
+  const gridTemplate = selectionMode
+    ? `2rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
+    : `2fr ${visibleCols.map((c) => c.width).join(' ')}`
 
   const SortIcon = ({ k }) => {
     if (sortKey !== k) return <ChevronUp size={12} className="opacity-20" />
@@ -228,6 +255,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
   const renderCell = (col, r) => {
     try {
       const s = liveStats[r.username]
+      const rs = reviewState[r.username]
       switch (col.id) {
         case 'brand':
           return <p className="font-mono text-xs text-ink/70 truncate">{r.sourceBrand || '—'}</p>
@@ -252,7 +280,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             </div>
           )
         case 'follower_count': {
-          const val = (s?.followerCount ?? r.followerCount)
+          const val = s?.followerCount ?? r.followerCount
           return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
         }
         case 'account_location':
@@ -281,8 +309,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <p className="font-mono text-sm text-ink/30">—</p>
         case 'sample_post_url':
           return r.samplePostUrl ? (
-            <a href={r.samplePostUrl} target="_blank" rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
+            <a href={r.samplePostUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
               className="flex items-center gap-1 font-mono text-xs text-accent hover:underline">
               View <ExternalLink size={10} />
             </a>
@@ -299,10 +326,14 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
         case 'niche_signals':
           return <p className="font-mono text-xs text-ink/60">{(r.nicheSignals || []).join(', ') || '—'}</p>
-        case 'approve':
-        case 'reachout_status':
-        case 'remarks':
-          return <p className="font-mono text-xs text-ink/30">— export only</p>
+        case 'dm_status': {
+          const status = rs?.dm_status || 'not_sent'
+          return (
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-mono ${DM_STATUS_STYLES[status] || DM_STATUS_STYLES.not_sent}`}>
+              {DM_STATUS_LABELS[status] || status}
+            </span>
+          )
+        }
         default:
           return null
       }
@@ -314,11 +345,9 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 
   return (
     <div className="border border-mist rounded-xl overflow-x-auto">
-      {/* Table header */}
-      <div
-        className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
-        style={{ gridTemplateColumns: gridTemplate }}
-      >
+      <div className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
+        style={{ gridTemplateColumns: gridTemplate }}>
+        {selectionMode && <span />}
         <span>Account</span>
         {visibleCols.map((col) => (
           col.sortKey ? (
@@ -333,51 +362,46 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         ))}
       </div>
 
-      {/* Rows */}
       {filtered.length === 0 && (
-        <div className="px-4 py-12 text-center text-sm text-ink/30">
-          No accounts match your filters.
-        </div>
+        <div className="px-4 py-12 text-center text-sm text-ink/30">No accounts match your filters.</div>
       )}
       {filtered.map((r) => (
         <div key={r.username}>
-          {/* Main row */}
           <div
             className="grid gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
           >
-            {/* Account — always shown */}
+            {selectionMode && (
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={selectedAccounts.has(r.username)}
+                  onChange={() => onToggleSelect(r.username)}
+                  className="w-4 h-4 accent-accent cursor-pointer"
+                />
+              </div>
+            )}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <a
-                  href={`https://instagram.com/${r.username}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <a href={`https://instagram.com/${r.username}`} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1"
-                >
-                  @{r.username}
-                  <ExternalLink size={11} className="opacity-40" />
+                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1">
+                  @{r.username} <ExternalLink size={11} className="opacity-40" />
                 </a>
               </div>
               {r.fullName && <p className="text-xs text-ink/40 truncate">{r.fullName}</p>}
               <div className="flex flex-wrap gap-1 mt-1">
                 {(r.flags || []).slice(0, 3).map((f) => (
-                  <span key={f} className={`tag ${
-                    f === 'video-creator' ? 'tag-video' :
-                    f === 'bot-risk' ? 'tag-bot' : ''
-                  }`}>{f}</span>
+                  <span key={f} className={`tag ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
                 ))}
               </div>
             </div>
-
             {visibleCols.map((col) => (
               <div key={col.id} className="min-w-0 overflow-hidden">{renderCell(col, r)}</div>
             ))}
           </div>
 
-          {/* Expanded detail */}
           {expandedRow === r.username && (
             <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
               <div>
@@ -409,17 +433,14 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 }
 
 const CACHE_KEY = 'kol_live_stats_v1'
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// A cache entry is only valid if it has at least some real scraped data
 function hasRealData(stats) {
   return stats && (stats.medianLikes != null || stats.medianViews != null || stats.followerCount != null)
 }
-
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') } catch { return {} }
 }
-
 function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
@@ -431,6 +452,18 @@ export default function ResultsStep({ results, influencers, config }) {
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(TABLE_COLUMNS.map((c) => c.id))
+
+  // Selection + share state
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedAccounts, setSelectedAccounts] = useState(new Set())
+  const [shareStatus, setShareStatus] = useState('idle') // idle | loading | done | error
+  const [shareUrl, setShareUrl] = useState(null)
+  const [shareId, setShareId] = useState(null)
+
+  // Review state synced from Supabase (Phase 4)
+  const [reviewState, setReviewState] = useState({}) // { username: { status, dm_status, dm_draft } }
+  const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | done | error
+
   const [liveStats, setLiveStats] = useState(() => {
     const cache = readCache()
     const now = Date.now()
@@ -448,7 +481,6 @@ export default function ResultsStep({ results, influencers, config }) {
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
 
-  // Build enriched list
   const infMap = useMemo(() => {
     const m = {}
     for (const inf of influencers) m[inf.username] = inf
@@ -463,31 +495,22 @@ export default function ResultsStep({ results, influencers, config }) {
         ? computeLiveEngagementScore(live.medianLikes, live.medianViews)
         : (r.scores?.engagement ?? 0)
       const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
-      return {
-        ...r,
-        ...infMap[r.username],
-        scores: { ...r.scores, engagement: engScore },
-        overall,
-      }
+      return { ...r, ...infMap[r.username], scores: { ...r.scores, engagement: engScore }, overall }
     })
   }, [results, infMap, liveStats])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
-    if (filterFlag !== 'all') {
-      list = list.filter((r) => (r.flags || []).includes(filterFlag))
-    }
+    if (filterFlag !== 'all') list = list.filter((r) => (r.flags || []).includes(filterFlag))
     list = [...list].sort((a, b) => {
       const av = sortKey === 'overall' ? a.overall
         : sortKey === 'relevancy' ? (a.scores?.relevancy ?? 0)
         : sortKey === 'eng_score' ? (a.scores?.engagement ?? 0)
-        : sortKey === 'location' ? (a.scores?.location ?? 0)
         : sortKey === 'engagement' ? (a.engagementRate ?? a.totalEngagement ?? 0)
         : a.overall
       const bv = sortKey === 'overall' ? b.overall
         : sortKey === 'relevancy' ? (b.scores?.relevancy ?? 0)
         : sortKey === 'eng_score' ? (b.scores?.engagement ?? 0)
-        : sortKey === 'location' ? (b.scores?.location ?? 0)
         : sortKey === 'engagement' ? (b.engagementRate ?? b.totalEngagement ?? 0)
         : b.overall
       return sortDir === 'desc' ? bv - av : av - bv
@@ -509,23 +532,15 @@ export default function ResultsStep({ results, influencers, config }) {
     const toFetch = force
       ? usernames
       : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS || !hasRealData(cache[u].stats))
-    if (toFetch.length === 0) {
-      setLiveStatus('done')
-      return
-    }
-
+    if (toFetch.length === 0) { setLiveStatus('done'); return }
     setLiveStatus('loading')
     setLiveProgress({ done: 0, total: toFetch.length })
     setLiveError(null)
     try {
-      const statsMap = await fetchBatchStats(toFetch, (done, total) => {
-        setLiveProgress({ done, total })
-      })
+      const statsMap = await fetchBatchStats(toFetch, (done, total) => setLiveProgress({ done, total }))
       const updated = { ...readCache() }
       for (const [u, stats] of Object.entries(statsMap)) {
-        if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) {
-          updated[u] = { stats, ts: Date.now() }
-        }
+        if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) updated[u] = { stats, ts: Date.now() }
       }
       writeCache(updated)
       setLiveStats((prev) => ({ ...prev, ...statsMap }))
@@ -536,15 +551,96 @@ export default function ResultsStep({ results, influencers, config }) {
     }
   }, [])
 
+  const handleToggleSelect = (username) => {
+    setSelectedAccounts((prev) => {
+      const next = new Set(prev)
+      next.has(username) ? next.delete(username) : next.add(username)
+      return next
+    })
+  }
+
+  const handleSelectAll = () => {
+    setSelectedAccounts(new Set(filtered.map((r) => r.username)))
+  }
+
+  // Share selected accounts to Supabase
+  const handleShare = async () => {
+    if (selectedAccounts.size === 0) return
+    setShareStatus('loading')
+    try {
+      const accountsToShare = enriched
+        .filter((r) => selectedAccounts.has(r.username))
+        .map((r) => ({
+          username: r.username,
+          fullName: r.fullName || '',
+          sourceBrand: r.sourceBrand || '',
+          overall: r.overall,
+          scores: r.scores,
+          accountLocation: r.accountLocation || '',
+          followerCount: r.followerCount ?? null,
+          engagementRate: r.engagementRate ?? null,
+          avgLikes: r.avgLikes ?? 0,
+          avgComments: r.avgComments ?? 0,
+          hashtags: r.hashtags || [],
+          bio: r.bio || '',
+          samplePostUrl: r.samplePostUrl || '',
+          sampleCaption: r.sampleCaption || '',
+          flags: r.flags || [],
+          nicheSignals: r.nicheSignals || [],
+          verdict: r.verdict || '',
+        }))
+
+      const { data, error } = await supabase
+        .from('shared_results')
+        .insert({
+          campaign_brief: config?.campaignBrief || '',
+          accounts: accountsToShare,
+          review_state: {},
+        })
+        .select('id')
+        .single()
+
+      if (error) throw new Error(error.message)
+
+      const base = window.location.origin + window.location.pathname
+      const url = `${base}?review=${data.id}`
+      setShareUrl(url)
+      setShareId(data.id)
+      setShareStatus('done')
+    } catch (err) {
+      console.error('Share failed:', err)
+      setShareStatus('error')
+    }
+  }
+
+  // Sync review state from Supabase (Phase 4)
+  const handleSync = useCallback(async () => {
+    if (!shareId) return
+    setSyncStatus('loading')
+    try {
+      const { data, error } = await supabase
+        .from('shared_results')
+        .select('review_state')
+        .eq('id', shareId)
+        .single()
+      if (error) throw new Error(error.message)
+      setReviewState(data.review_state || {})
+      setSyncStatus('done')
+    } catch (err) {
+      console.error('Sync failed:', err)
+      setSyncStatus('error')
+    }
+  }, [shareId])
+
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
+      {shareUrl && <ShareModal url={shareUrl} onClose={() => setShareUrl(null)} />}
+
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Step 3 of 3 · Results</p>
-          <h1 className="text-2xl font-semibold text-ink mb-1">
-            {filtered.length} accounts scored
-          </h1>
+          <h1 className="text-2xl font-semibold text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-sm text-ink/50">
             <span className="text-sage font-medium">{highCount} strong matches</span>
             {' · '}
@@ -555,91 +651,117 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+
+          {/* Selection + Share controls */}
+          {!selectionMode ? (
+            <button
+              onClick={() => setSelectionMode(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
+            >
+              <Share2 size={15} />
+              Share for review
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button onClick={handleSelectAll} className="text-xs text-ink/40 hover:text-ink font-mono px-2 py-1 border border-mist rounded">
+                Select all
+              </button>
+              <span className="text-xs font-mono text-ink/50">{selectedAccounts.size} selected</span>
+              <button
+                onClick={handleShare}
+                disabled={selectedAccounts.size === 0 || shareStatus === 'loading'}
+                className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm hover:bg-accent/80 transition-all disabled:opacity-40"
+              >
+                {shareStatus === 'loading' ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
+                {shareStatus === 'loading' ? 'Sharing…' : 'Create link'}
+              </button>
+              <button onClick={() => { setSelectionMode(false); setSelectedAccounts(new Set()) }}
+                className="text-xs text-ink/40 hover:text-ink px-2 py-1 border border-mist rounded">
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* Sync button (shows once a share exists) */}
+          {shareId && (
+            <button
+              onClick={handleSync}
+              disabled={syncStatus === 'loading'}
+              className="flex items-center gap-2 px-3 py-2 border border-mist rounded-lg text-sm text-ink/50 hover:border-ink/30 hover:text-ink transition-all"
+              title="Sync approval + DM status from the review link"
+            >
+              {syncStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Sync reviews
+            </button>
+          )}
+
+          {/* Live stats */}
           {liveStatus === 'loading' ? (
             <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
               <Loader2 size={15} className="animate-spin" />
-              Fetching live stats {liveProgress.done}/{liveProgress.total}
+              Fetching {liveProgress.done}/{liveProgress.total}
             </div>
           ) : liveStatus === 'error' ? (
-            <button
-              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
-            >
-              <RefreshCw size={15} />
-              Retry
+            <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all">
+              <RefreshCw size={15} /> Retry
             </button>
           ) : liveStatus === 'done' ? (
-            <button
-              onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all"
-            >
-              <RefreshCw size={15} />
-              Refresh
+            <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all">
+              <RefreshCw size={15} /> Refresh
             </button>
           ) : (
-            <button
-              onClick={() => handleFetchLive(results.map((r) => r.username))}
-              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
-            >
-              <RefreshCw size={15} />
-              Fetch Live Stats
+            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all">
+              <RefreshCw size={15} /> Fetch Live Stats
             </button>
           )}
+
           <button
             onClick={() => {
-                const exportIds = [
-                  ...ALWAYS_EXPORT_IDS,
-                  ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
-                ]
-                exportToCsv(filtered, influencers, exportIds, liveStats).catch(console.error)
-              }}
+              const exportIds = [
+                ...ALWAYS_EXPORT_IDS,
+                ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
+              ]
+              exportToCsv(filtered, influencers, exportIds, liveStats, reviewState).catch(console.error)
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
           >
-            <Download size={15} />
-            Export XLSX
+            <Download size={15} /> Export XLSX
           </button>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-ink/40 font-mono">
-          <Filter size={12} />
-          Filter:
-        </div>
+        <div className="flex items-center gap-1.5 text-xs text-ink/40 font-mono"><Filter size={12} />Filter:</div>
         {['all', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilterFlag(f)}
-            className={`px-2.5 py-1 rounded-full text-xs border transition-all
-              ${filterFlag === f
-                ? 'bg-ink text-white border-ink'
-                : 'border-mist text-ink/50 hover:border-ink/30'
-              }`}
-          >
+          <button key={f} onClick={() => setFilterFlag(f)}
+            className={`px-2.5 py-1 rounded-full text-xs border transition-all ${filterFlag === f ? 'bg-ink text-white border-ink' : 'border-mist text-ink/50 hover:border-ink/30'}`}>
             {f === 'all' ? 'All' : f}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-ink/40 font-mono">Min score:</span>
-          <input
-            type="number"
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value))}
-            min="0" max="100"
-            className="w-16 px-2 py-1 border border-mist rounded text-xs font-mono bg-white focus:outline-none focus:border-accent"
-          />
+          <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
+            min="0" max="100" className="w-16 px-2 py-1 border border-mist rounded text-xs font-mono bg-white focus:outline-none focus:border-accent" />
         </div>
       </div>
 
-      {/* Live stats error */}
       {liveStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
-          Live fetch failed: {liveError}
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Live fetch failed: {liveError}</div>
+      )}
+      {shareStatus === 'error' && (
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Failed to create share link. Check your Supabase env vars.</div>
+      )}
+
+      {selectionMode && (
+        <div className="mb-4 px-4 py-3 bg-accent-dim/20 border border-accent/20 rounded-xl text-xs text-accent/80">
+          Tick the accounts you want the brand manager to review, then click <strong>Create link</strong>.
         </div>
       )}
 
-      {/* Table */}
       <TableErrorBoundary>
         <ResultsTable
           selectedColumns={selectedColumns}
@@ -651,6 +773,10 @@ export default function ResultsStep({ results, influencers, config }) {
           toggleSort={toggleSort}
           liveStats={liveStats}
           liveStatus={liveStatus}
+          reviewState={reviewState}
+          selectedAccounts={selectedAccounts}
+          onToggleSelect={handleToggleSelect}
+          selectionMode={selectionMode}
         />
       </TableErrorBoundary>
 

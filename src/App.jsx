@@ -5,7 +5,7 @@ import ResultsStep from './components/ResultsStep'
 import KolLookup from './components/KolLookup'
 import InstructionsPage from './components/InstructionsPage'
 import HistoryPage from './components/HistoryPage'
-import { parseApifyXlsx } from './lib/parseXlsx'
+import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
@@ -33,26 +33,36 @@ export default function App() {
     setMode('lookup')
   }
 
+  function deduplicateInfluencers(batches) {
+    const merged = {}
+    for (const batch of batches) {
+      for (const inf of batch) {
+        const existing = merged[inf.username]
+        if (!existing || inf.totalEngagement > existing.totalEngagement) {
+          merged[inf.username] = inf
+        }
+      }
+    }
+    return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
+  }
+
   const handleFiles = async (files) => {
     setFileNames(files.map((f) => f.name))
     try {
-      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
-      // Merge and deduplicate by username, keeping highest engagement version
-      const merged = {}
-      for (const batch of allParsed) {
-        for (const inf of batch) {
-          const existing = merged[inf.username]
-          if (!existing || inf.totalEngagement > existing.totalEngagement) {
-            merged[inf.username] = inf
-          }
-        }
-      }
-      const deduplicated = Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
-      setInfluencers(deduplicated)
+      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f, f.name.replace(/\.xlsx$/i, ''))))
+      setInfluencers(deduplicateInfluencers(allParsed))
       setStep('config')
     } catch (err) {
       alert('Failed to parse file(s): ' + err.message)
     }
+  }
+
+  const handleScrapedItems = (items) => {
+    // Items come directly from the Apify API (no brand name — show "scraped" as source)
+    const influencerList = aggregatePostItems(items, 'scraped')
+    setFileNames(['Live scrape'])
+    setInfluencers(deduplicateInfluencers([influencerList]))
+    setStep('config')
   }
 
   const handleStart = async (cfg) => {
@@ -163,7 +173,7 @@ export default function App() {
         <KolLookup key={lookupUsername} initialUsername={lookupUsername} />
       ) : (
         <>
-          {step === 'upload' && <UploadStep onFiles={handleFiles} />}
+          {step === 'upload' && <UploadStep onFiles={handleFiles} onScrapedItems={handleScrapedItems} />}
           {step === 'config' && (
             <ConfigStep
               fileNames={fileNames}

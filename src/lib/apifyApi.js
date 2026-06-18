@@ -18,6 +18,39 @@ async function startInstagramScraper(usernames, resultsLimit = 30) {
   return data
 }
 
+/**
+ * Start an instagram-scraper run from a mix of post/hashtag/profile URLs or
+ * hashtag strings. The caller passes raw lines from a textarea; this function
+ * normalises them into the Apify input format.
+ *
+ * Supported input lines:
+ *  - Full Instagram URLs (posts, hashtag explore pages, tagged pages, profiles)
+ *  - Hashtag strings: "#skincare" or "skincare"  → converted to explore URLs
+ */
+export async function startSeederScrape(lines, resultsLimit = 200) {
+  const directUrls = []
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) continue
+    if (line.startsWith('https://') || line.startsWith('http://')) {
+      directUrls.push(line)
+    } else {
+      // Treat as hashtag (strip leading # if present)
+      const tag = line.replace(/^#/, '').trim()
+      if (tag) directUrls.push(`https://www.instagram.com/explore/tags/${tag}/`)
+    }
+  }
+  if (directUrls.length === 0) throw new Error('No valid URLs or hashtags provided')
+  const res = await fetch(`${PROXY}/start-run/instagram-scraper`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
+  })
+  if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
+  const { data } = await res.json()
+  return data
+}
+
 // Used for KolLookup (single-profile mode)
 export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
@@ -47,7 +80,7 @@ export async function getDatasetItems(datasetId) {
 // Poll with backoff: 3s → 5s → 8s → 10s (cap)
 const POLL_DELAYS = [3000, 5000, 8000, 10000]
 
-async function pollUntilDone(run) {
+export async function pollUntilDone(run) {
   let runData = run
   let attempt = 0
   while (runData.status === 'READY' || runData.status === 'RUNNING') {

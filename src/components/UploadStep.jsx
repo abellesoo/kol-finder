@@ -1,11 +1,23 @@
 import { useRef, useState } from 'react'
-import { Upload, FileSpreadsheet, X, ChevronRight } from 'lucide-react'
+import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
+import { startSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 
-export default function UploadStep({ onFiles }) {
+const RESULT_LIMITS = [100, 200, 500, 1000]
+
+export default function UploadStep({ onFiles, onScrapedItems }) {
+  const [tab, setTab] = useState('upload') // 'upload' | 'scrape'
+
+  // Upload tab state
   const inputRef = useRef(null)
-  const [dragging, setDragging] = useState(false)
   const [files, setFiles] = useState([])
 
+  // Scrape tab state
+  const [scrapeInput, setScrapeInput] = useState('')
+  const [resultsLimit, setResultsLimit] = useState(200)
+  const [scrapeStatus, setScrapeStatus] = useState('idle') // idle | running | error
+  const [scrapeError, setScrapeError] = useState(null)
+
+  // Upload helpers
   const addFiles = (incoming) => {
     const valid = Array.from(incoming).filter((f) => {
       if (!f.name.endsWith('.xlsx')) {
@@ -24,74 +36,180 @@ export default function UploadStep({ onFiles }) {
 
   const handleDrop = (e) => {
     e.preventDefault()
-    setDragging(false)
     addFiles(e.dataTransfer.files)
   }
+
+  // Scrape handler
+  const handleScrape = async () => {
+    const lines = scrapeInput.split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length === 0) return
+    setScrapeStatus('running')
+    setScrapeError(null)
+    try {
+      const run = await startSeederScrape(lines, resultsLimit)
+      const completed = await pollUntilDone(run)
+      const items = await getDatasetItems(completed.defaultDatasetId)
+      onScrapedItems(items)
+    } catch (err) {
+      setScrapeError(err.message)
+      setScrapeStatus('error')
+    }
+  }
+
+  const isLoading = scrapeStatus === 'running'
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
       <div className="max-w-lg w-full">
         <div className="text-center mb-8">
           <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Step 1 of 3</p>
-          <h1 className="text-3xl font-semibold text-ink mb-2">Upload Apify datasets</h1>
+          <h1 className="text-3xl font-semibold text-ink mb-2">Get your dataset</h1>
           <p className="text-ink/50 text-sm">
-            Export your Instagram scraper results as .xlsx from Apify. You can upload multiple files — duplicates will be merged.
+            Upload an Apify .xlsx export, or paste URLs / hashtags to scrape directly.
           </p>
         </div>
 
-        <div
-          className={`border-2 border-dashed rounded-2xl p-10 cursor-pointer transition-all
-            ${dragging ? 'border-accent bg-accent-dim/30' : 'border-mist hover:border-accent/50 hover:bg-accent-dim/10'}`}
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={handleDrop}
-        >
-          <div className="flex flex-col items-center gap-3">
-            {dragging
-              ? <Upload size={32} className="text-accent" />
-              : <FileSpreadsheet size={32} className="text-ink/30" />
-            }
-            <p className="text-sm text-ink/50">
-              {dragging ? 'Drop to upload' : 'Click or drag .xlsx files here'}
-            </p>
-            <p className="text-xs text-ink/30">Multiple files supported</p>
-          </div>
+        {/* Tab switcher */}
+        <div className="flex items-center gap-1 bg-mist/60 rounded-lg p-1 mb-6">
+          {[
+            { id: 'upload', label: 'Upload XLSX' },
+            { id: 'scrape', label: 'Scrape URLs / Hashtags' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`flex-1 py-2 rounded text-sm font-medium transition-all ${
+                tab === id ? 'bg-white text-ink shadow-sm' : 'text-ink/50 hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx"
-          multiple
-          className="hidden"
-          onChange={(e) => addFiles(e.target.files)}
-        />
-
-        {files.length > 0 && (
-          <div className="mt-5 text-left space-y-2">
-            {files.map((f) => (
-              <div key={f.name} className="flex items-center justify-between px-3 py-2 bg-mist/40 rounded-lg">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileSpreadsheet size={14} className="text-accent flex-shrink-0" />
-                  <span className="font-mono text-xs text-ink/70 truncate">{f.name}</span>
-                </div>
-                <button onClick={() => removeFile(f.name)} className="ml-2 text-ink/30 hover:text-ink/60 flex-shrink-0">
-                  <X size={14} />
-                </button>
+        {/* Upload tab */}
+        {tab === 'upload' && (
+          <>
+            <div
+              className={`border-2 border-dashed rounded-2xl p-10 cursor-pointer transition-all
+                border-mist hover:border-accent/50 hover:bg-accent-dim/10`}
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault() }}
+              onDrop={handleDrop}
+            >
+              <div className="flex flex-col items-center gap-3">
+                <FileSpreadsheet size={32} className="text-ink/30" />
+                <p className="text-sm text-ink/50">Click or drag .xlsx files here</p>
+                <p className="text-xs text-ink/30">Multiple files supported</p>
               </div>
-            ))}
-          </div>
+            </div>
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".xlsx"
+              multiple
+              className="hidden"
+              onChange={(e) => addFiles(e.target.files)}
+            />
+
+            {files.length > 0 && (
+              <div className="mt-5 text-left space-y-2">
+                {files.map((f) => (
+                  <div key={f.name} className="flex items-center justify-between px-3 py-2 bg-mist/40 rounded-lg">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileSpreadsheet size={14} className="text-accent flex-shrink-0" />
+                      <span className="font-mono text-xs text-ink/70 truncate">{f.name}</span>
+                    </div>
+                    <button onClick={() => removeFile(f.name)} className="ml-2 text-ink/30 hover:text-ink/60 flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {files.length > 0 && (
+              <button
+                onClick={() => onFiles(files)}
+                className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium text-sm bg-ink text-white hover:bg-ink/80 transition-all"
+              >
+                Parse {files.length} file{files.length > 1 ? 's' : ''}
+                <ChevronRight size={16} />
+              </button>
+            )}
+          </>
         )}
 
-        {files.length > 0 && (
-          <button
-            onClick={() => onFiles(files)}
-            className="mt-5 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium text-sm bg-ink text-white hover:bg-ink/80 transition-all"
-          >
-            Parse {files.length} file{files.length > 1 ? 's' : ''}
-            <ChevronRight size={16} />
-          </button>
+        {/* Scrape tab */}
+        {tab === 'scrape' && (
+          <>
+            <div className="mb-4">
+              <p className="text-xs text-ink/50 mb-3 leading-relaxed">
+                Paste one entry per line — competitor post URLs, hashtag explore pages, brand tagged pages, or hashtags (e.g. <span className="font-mono">#skincare</span> or <span className="font-mono">skincare</span>).
+              </p>
+              <textarea
+                value={scrapeInput}
+                onChange={(e) => setScrapeInput(e.target.value)}
+                disabled={isLoading}
+                rows={6}
+                placeholder={`https://www.instagram.com/p/ABC123/\nhttps://www.instagram.com/brandname/tagged/\n#skincare\n#beauty`}
+                className="w-full px-3 py-2.5 border border-mist rounded-lg text-sm text-ink font-mono bg-white focus:outline-none focus:border-accent resize-none placeholder:text-ink/25 disabled:opacity-50"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 mb-5">
+              <label className="text-xs font-mono text-ink/40 uppercase tracking-wider whitespace-nowrap">Max results</label>
+              <div className="flex gap-1.5">
+                {RESULT_LIMITS.map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setResultsLimit(n)}
+                    disabled={isLoading}
+                    className={`px-3 py-1 rounded text-xs font-mono border transition-all ${
+                      resultsLimit === n
+                        ? 'bg-ink text-white border-ink'
+                        : 'border-mist text-ink/50 hover:border-ink/30'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-ink/30">~${(resultsLimit * 0.01).toFixed(0)} Apify cost</span>
+            </div>
+
+            {scrapeStatus === 'error' && (
+              <div className="flex items-start gap-3 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-sm mb-4">
+                <AlertCircle size={15} className="text-rose shrink-0 mt-0.5" />
+                <p className="text-ink/70 text-xs">{scrapeError}</p>
+              </div>
+            )}
+
+            <button
+              onClick={handleScrape}
+              disabled={isLoading || !scrapeInput.trim()}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-medium text-sm bg-ink text-white hover:bg-ink/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Scraping Instagram…
+                </>
+              ) : (
+                <>
+                  <Link2 size={16} />
+                  Start scrape
+                </>
+              )}
+            </button>
+
+            {isLoading && (
+              <p className="mt-3 text-xs text-ink/30 text-center">
+                This usually takes 1–5 minutes depending on result count.
+              </p>
+            )}
+          </>
         )}
 
         <p className="mt-6 text-xs text-ink/30 font-mono text-center">

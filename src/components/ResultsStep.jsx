@@ -113,6 +113,7 @@ function InfoTooltip({ column }) {
 
 // Columns shown in the table. exportIds maps each to EXPORT_COLUMNS ids for the xlsx.
 const TABLE_COLUMNS = [
+  { id: 'brand',                 label: 'Brand',           width: '1fr',                                                       exportIds: ['brand'] },
   { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
   { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
   { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
@@ -234,6 +235,8 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
     try {
       const s = liveStats[r.username]
       switch (col.id) {
+        case 'brand':
+          return <p className="font-mono text-xs text-ink/70 truncate">{r.sourceBrand || '—'}</p>
         case 'overall':
           return <ScoreBadge score={r.overall} />
         case 'relevancy_score':

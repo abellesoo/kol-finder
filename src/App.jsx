@@ -60,11 +60,22 @@ export default function App() {
 
   const handleScrapedItems = (brandedResults) => {
     // brandedResults = [{ items, brand }, ...] — one entry per brand job
-    const influencerLists = brandedResults.map(({ items, brand }) =>
-      aggregatePostItems(items, brand)
-    )
+    const influencerLists = brandedResults.map(({ items, brand }) => {
+      const all = aggregatePostItems(items, brand)
+      // Exclude the brand account itself — it's the target, not a KOL
+      return brand
+        ? all.filter((inf) => inf.username.toLowerCase() !== brand.toLowerCase())
+        : all
+    })
+    const merged = deduplicateInfluencers(influencerLists)
+    if (merged.length === 0) {
+      alert(
+        'No KOLs found in the scraped data.\n\nThis usually means the tagged page returned no posts from other users, or the account doesn\'t exist. Try a different URL or check the account on Instagram first.'
+      )
+      return
+    }
     setFileNames(brandedResults.map(({ brand }) => brand))
-    setInfluencers(deduplicateInfluencers(influencerLists))
+    setInfluencers(merged)
     setStep('config')
   }
 

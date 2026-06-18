@@ -1,9 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
-import { fetchAiVerdicts } from '../lib/aiApi'
 import TableErrorBoundary from './TableErrorBoundary'
 
 const COLUMN_INFO = {
@@ -128,7 +127,6 @@ const TABLE_COLUMNS = [
   { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
   { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
   { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
-  { id: 'ai_verdict',            label: 'AI Verdict',      width: '2fr',                                                       exportIds: ['ai_verdict'] },
   { id: 'approve',               label: 'Approve',         width: '1fr',                                                       exportIds: ['approve'] },
   { id: 'reachout_status',       label: 'Reach-out Status',width: '1fr',                                                       exportIds: ['reachout_status'] },
   { id: 'remarks',               label: 'Remarks',         width: '1fr',                                                       exportIds: ['remarks'] },
@@ -304,8 +302,6 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
         case 'niche_signals':
           return <p className="font-mono text-xs text-ink/60">{(r.nicheSignals || []).join(', ') || '—'}</p>
-        case 'ai_verdict':
-          return <p className="text-xs text-ink/70 line-clamp-2">{r.aiVerdict || '—'}</p>
         case 'approve':
         case 'reachout_status':
         case 'remarks':
@@ -388,19 +384,6 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           {expandedRow === r.username && (
             <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
               <div>
-                {r.aiVerdict ? (
-                  <div className="mb-3">
-                    <p className="text-xs font-mono text-accent/70 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <Sparkles size={10} /> AI Deep-Dive
-                    </p>
-                    <p className="text-ink/80 leading-relaxed">{r.aiVerdict}</p>
-                  </div>
-                ) : (
-                  <div className="mb-3">
-                    <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">AI Deep-Dive</p>
-                    <p className="text-xs text-ink/30">Not yet run — click AI Deep-Dive in the header.</p>
-                  </div>
-                )}
                 <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Scoring Verdict</p>
                 <p className="text-ink/60 text-xs leading-relaxed">{r.verdict || '—'}</p>
               </div>
@@ -429,10 +412,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 }
 
 const CACHE_KEY = 'kol_live_stats_v1'
-const AI_CACHE_KEY = 'kol_ai_verdicts_v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
-
-const AI_DEFAULT_TOP_N = 50
 
 // A cache entry is only valid if it has at least some real scraped data
 function hasRealData(stats) {
@@ -447,15 +427,6 @@ function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
 
-function readAiCache() {
-  try { return JSON.parse(localStorage.getItem(AI_CACHE_KEY) || '{}') } catch { return {} }
-}
-function writeAiCache(cache) {
-  try { localStorage.setItem(AI_CACHE_KEY, JSON.stringify(cache)) } catch {}
-}
-// Cache key: account + brief combo so different campaigns don't share verdicts
-function aiCacheKey(username, brief) { return `${username}::${brief.trim()}` }
-
 export default function ResultsStep({ results, influencers, config }) {
   const [sortKey, setSortKey] = useState('overall')
   const [sortDir, setSortDir] = useState('desc')
@@ -464,7 +435,6 @@ export default function ResultsStep({ results, influencers, config }) {
   const [expandedRow, setExpandedRow] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(TABLE_COLUMNS.map((c) => c.id))
   const [liveStats, setLiveStats] = useState(() => {
-    // Pre-populate from cache on first render — skip entries with no real data
     const cache = readCache()
     const now = Date.now()
     const valid = {}
@@ -474,32 +444,12 @@ export default function ResultsStep({ results, influencers, config }) {
     return valid
   })
   const [liveStatus, setLiveStatus] = useState(() => {
-    // Start in 'done' if we already have cached data for any of the current results
     const cache = readCache()
     const hasCached = results.some((r) => hasRealData(cache[r.username]?.stats))
     return hasCached ? 'done' : 'idle'
   })
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
-
-  // AI Deep-Dive state
-  const [aiVerdicts, setAiVerdicts] = useState(() => {
-    const cache = readAiCache()
-    const now = Date.now()
-    const valid = {}
-    const brief = config?.campaignBrief || ''
-    for (const [k, entry] of Object.entries(cache)) {
-      if (now - entry.ts < CACHE_TTL_MS && k.endsWith(`::${brief.trim()}`)) {
-        const username = k.slice(0, k.length - brief.trim().length - 2)
-        valid[username] = entry.verdict
-      }
-    }
-    return valid
-  })
-  const [aiStatus, setAiStatus] = useState('idle') // idle | loading | done | error
-  const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 })
-  const [aiError, setAiError] = useState(null)
-  const [aiTopN, setAiTopN] = useState(AI_DEFAULT_TOP_N)
 
   // Build enriched list
   const infMap = useMemo(() => {
@@ -521,10 +471,9 @@ export default function ResultsStep({ results, influencers, config }) {
         ...infMap[r.username],
         scores: { ...r.scores, engagement: engScore },
         overall,
-        aiVerdict: aiVerdicts[r.username] || null,
       }
     })
-  }, [results, infMap, liveStats, aiVerdicts])
+  }, [results, infMap, liveStats])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
@@ -575,7 +524,6 @@ export default function ResultsStep({ results, influencers, config }) {
       const statsMap = await fetchBatchStats(toFetch, (done, total) => {
         setLiveProgress({ done, total })
       })
-      // Persist to cache — don't overwrite good existing data with empty results
       const updated = { ...readCache() }
       for (const [u, stats] of Object.entries(statsMap)) {
         if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) {
@@ -590,61 +538,6 @@ export default function ResultsStep({ results, influencers, config }) {
       setLiveStatus('error')
     }
   }, [])
-
-
-  const handleAiDeepDive = useCallback(async () => {
-    const brief = config?.campaignBrief || ''
-    const cache = readAiCache()
-    const now = Date.now()
-
-    // Pick top-N from current filtered list, skip already-cached
-    const candidates = filtered
-      .slice(0, aiTopN)
-      .filter((r) => {
-        const entry = cache[aiCacheKey(r.username, brief)]
-        return !entry || now - entry.ts >= CACHE_TTL_MS
-      })
-
-    if (candidates.length === 0) {
-      setAiStatus('done')
-      return
-    }
-
-    setAiStatus('loading')
-    setAiProgress({ done: 0, total: candidates.length })
-    setAiError(null)
-
-    // Send in batches of 10 matching the Worker's internal batch size
-    const BATCH = 10
-    const updatedCache = { ...readAiCache() }
-    const updatedVerdicts = { ...aiVerdicts }
-    try {
-      for (let i = 0; i < candidates.length; i += BATCH) {
-        const batch = candidates.slice(i, i + BATCH)
-        const accounts = batch.map((r) => {
-          const inf = infMap[r.username] || {}
-          return {
-            username: r.username,
-            captions: inf.sampleCaptions || [],
-            hashtags: inf.hashtags || [],
-            bio: inf.bio || '',
-          }
-        })
-        const verdicts = await fetchAiVerdicts(accounts, brief)
-        for (const { username, verdict } of verdicts) {
-          updatedVerdicts[username] = verdict
-          updatedCache[aiCacheKey(username, brief)] = { verdict, ts: Date.now() }
-        }
-        setAiVerdicts({ ...updatedVerdicts })
-        setAiProgress({ done: Math.min(i + BATCH, candidates.length), total: candidates.length })
-      }
-      writeAiCache(updatedCache)
-      setAiStatus('done')
-    } catch (err) {
-      setAiError(err.message)
-      setAiStatus('error')
-    }
-  }, [filtered, aiTopN, config, infMap, aiVerdicts])
 
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
@@ -665,49 +558,6 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
-          {/* AI Deep-Dive button */}
-          {aiStatus === 'loading' ? (
-            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
-              <Loader2 size={15} className="animate-spin" />
-              AI Deep-Dive {aiProgress.done}/{aiProgress.total}
-            </div>
-          ) : aiStatus === 'error' ? (
-            <button
-              onClick={handleAiDeepDive}
-              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
-            >
-              <Sparkles size={15} />
-              Retry AI
-            </button>
-          ) : (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleAiDeepDive}
-                className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
-              >
-                <Sparkles size={15} />
-                AI Deep-Dive
-                {aiStatus === 'done' && Object.keys(aiVerdicts).length > 0 && (
-                  <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
-                    {Object.keys(aiVerdicts).length}
-                  </span>
-                )}
-              </button>
-              <div className="relative group">
-                <span className="flex items-center gap-1 px-2 py-2 text-xs text-ink/40 font-mono">
-                  top
-                  <input
-                    type="number"
-                    value={aiTopN}
-                    onChange={(e) => setAiTopN(Math.max(1, Number(e.target.value)))}
-                    className="w-12 px-1 py-0.5 border border-mist rounded text-xs font-mono text-ink bg-white focus:outline-none focus:border-accent text-center"
-                    min="1"
-                    max={filtered.length}
-                  />
-                </span>
-              </div>
-            </div>
-          )}
           {liveStatus === 'loading' ? (
             <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
               <Loader2 size={15} className="animate-spin" />
@@ -785,13 +635,6 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
       </div>
 
-      {/* AI Deep-Dive error */}
-      {aiStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
-          AI Deep-Dive failed: {aiError}
-        </div>
-      )}
-
       {/* Live stats error */}
       {liveStatus === 'error' && (
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
@@ -815,7 +658,7 @@ export default function ResultsStep({ results, influencers, config }) {
       </TableErrorBoundary>
 
       <p className="mt-4 text-xs text-ink/25 font-mono text-center">
-        Click any row to expand · Engagement &amp; Relevancy scores are deterministic keyword + arithmetic logic · AI Deep-Dive is the only step that calls Claude
+        Click any row to expand · Engagement &amp; Relevancy scores are deterministic keyword + arithmetic logic
       </p>
     </div>
   )

@@ -130,6 +130,7 @@ const TABLE_COLUMNS = [
 
 // Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
 const ALWAYS_EXPORT_IDS = [
+  'brand',
   'username', 'instagram_url',
   'niche_signals',
   'ai_verdict',

@@ -4,6 +4,7 @@ import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
 import { fetchAiVerdicts } from '../lib/aiApi'
+import TableErrorBoundary from './TableErrorBoundary'
 
 const COLUMN_INFO = {
   overall: {
@@ -219,6 +220,203 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus }) {
+  const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
+  const gridTemplate = `2fr ${visibleCols.map((c) => c.width).join(' ')}`
+
+  const SortIcon = ({ k }) => {
+    if (sortKey !== k) return <ChevronUp size={12} className="opacity-20" />
+    return sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />
+  }
+
+  const renderCell = (col, r) => {
+    try {
+      const s = liveStats[r.username]
+      switch (col.id) {
+        case 'overall':
+          return <ScoreBadge score={r.overall} />
+        case 'relevancy_score':
+          return <MiniBar value={r.scores?.relevancy ?? 0} color="bg-rose/70" />
+        case 'engagement':
+          return (
+            <div>
+              {r.engagementRate != null ? (
+                <>
+                  <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
+                  <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
+                  <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
+                </>
+              )}
+            </div>
+          )
+        case 'follower_count': {
+          const val = (s?.followerCount ?? r.followerCount)
+          return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
+        }
+        case 'account_location':
+          return <p className="font-mono text-sm text-ink">{r.accountLocation || '—'}</p>
+        case 'engagement_score':
+          return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
+        case 'live_median_likes':
+          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+          if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
+          if (r.xlsxMedianLikes != null) return (
+            <div>
+              <p className="font-mono text-sm text-ink">{r.xlsxMedianLikes.toLocaleString()}</p>
+              <p className="font-mono text-xs text-ink/25">export</p>
+            </div>
+          )
+          return <p className="font-mono text-sm text-ink/30">—</p>
+        case 'live_median_views':
+          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+          if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
+          if (r.xlsxMedianViews != null) return (
+            <div>
+              <p className="font-mono text-sm text-ink">{r.xlsxMedianViews.toLocaleString()}</p>
+              <p className="font-mono text-xs text-ink/25">export</p>
+            </div>
+          )
+          return <p className="font-mono text-sm text-ink/30">—</p>
+        case 'sample_post_url':
+          return r.samplePostUrl ? (
+            <a href={r.samplePostUrl} target="_blank" rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 font-mono text-xs text-accent hover:underline">
+              View <ExternalLink size={10} />
+            </a>
+          ) : <p className="font-mono text-sm text-ink/30">—</p>
+        case 'scraped_post_likes':
+          return <p className="font-mono text-sm text-ink">{r.samplePostLikes != null ? r.samplePostLikes.toLocaleString() : '—'}</p>
+        case 'scraped_post_comments':
+          return <p className="font-mono text-sm text-ink">{r.samplePostComments != null ? r.samplePostComments.toLocaleString() : '—'}</p>
+        case 'scraped_post_plays':
+          return <p className="font-mono text-sm text-ink">{r.samplePostPlays != null ? r.samplePostPlays.toLocaleString() : '—'}</p>
+        case 'bio':
+          return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
+        case 'sample_caption':
+          return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
+        default:
+          return null
+      }
+    } catch (e) {
+      console.error('renderCell error', col.id, e)
+      return <p className="font-mono text-xs text-rose/50">—</p>
+    }
+  }
+
+  return (
+    <div className="border border-mist rounded-xl overflow-x-auto">
+      {/* Table header */}
+      <div
+        className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
+        style={{ gridTemplateColumns: gridTemplate }}
+      >
+        <span>Account</span>
+        {visibleCols.map((col) => (
+          col.sortKey ? (
+            <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center gap-1 hover:text-ink">
+              {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
+            </button>
+          ) : (
+            <span key={col.id} className="flex items-center gap-1">
+              {col.label}{col.infoKey && <InfoTooltip column={col.infoKey} />}
+            </span>
+          )
+        ))}
+      </div>
+
+      {/* Rows */}
+      {filtered.length === 0 && (
+        <div className="px-4 py-12 text-center text-sm text-ink/30">
+          No accounts match your filters.
+        </div>
+      )}
+      {filtered.map((r) => (
+        <div key={r.username}>
+          {/* Main row */}
+          <div
+            className="grid gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
+            style={{ gridTemplateColumns: gridTemplate }}
+            onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
+          >
+            {/* Account — always shown */}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <a
+                  href={`https://instagram.com/${r.username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1"
+                >
+                  @{r.username}
+                  <ExternalLink size={11} className="opacity-40" />
+                </a>
+              </div>
+              {r.fullName && <p className="text-xs text-ink/40 truncate">{r.fullName}</p>}
+              <div className="flex flex-wrap gap-1 mt-1">
+                {(r.flags || []).slice(0, 3).map((f) => (
+                  <span key={f} className={`tag ${
+                    f === 'video-creator' ? 'tag-video' :
+                    f === 'bot-risk' ? 'tag-bot' : ''
+                  }`}>{f}</span>
+                ))}
+              </div>
+            </div>
+
+            {visibleCols.map((col) => (
+              <div key={col.id} className="min-w-0 overflow-hidden">{renderCell(col, r)}</div>
+            ))}
+          </div>
+
+          {/* Expanded detail */}
+          {expandedRow === r.username && (
+            <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
+              <div>
+                {r.aiVerdict ? (
+                  <div className="mb-3">
+                    <p className="text-xs font-mono text-accent/70 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Sparkles size={10} /> AI Deep-Dive
+                    </p>
+                    <p className="text-ink/80 leading-relaxed">{r.aiVerdict}</p>
+                  </div>
+                ) : (
+                  <div className="mb-3">
+                    <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">AI Deep-Dive</p>
+                    <p className="text-xs text-ink/30">Not yet run — click AI Deep-Dive in the header.</p>
+                  </div>
+                )}
+                <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Scoring Verdict</p>
+                <p className="text-ink/60 text-xs leading-relaxed">{r.verdict || '—'}</p>
+              </div>
+              <div>
+                {r.nicheSignals?.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Niche Signals</p>
+                    <p className="text-xs text-ink/60">{r.nicheSignals.join(' · ')}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Top Hashtags</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(r.hashtags || []).slice(0, 10).map((h) => (
+                      <span key={h} className="tag">#{h}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const CACHE_KEY = 'kol_live_stats_v1'
 const AI_CACHE_KEY = 'kol_ai_verdicts_v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -343,11 +541,6 @@ export default function ResultsStep({ results, influencers, config }) {
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => d === 'desc' ? 'asc' : 'desc')
     else { setSortKey(key); setSortDir('desc') }
-  }
-
-  const SortIcon = ({ k }) => {
-    if (sortKey !== k) return <ChevronUp size={12} className="opacity-20" />
-    return sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />
   }
 
   const highCount = enriched.filter((r) => r.overall >= 70).length
@@ -596,209 +789,19 @@ export default function ResultsStep({ results, influencers, config }) {
       )}
 
       {/* Table */}
-      {(() => {
-        try {
-        const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
-        const gridTemplate = `2fr ${visibleCols.map((c) => c.width).join(' ')}`
-
-        const renderCell = (col, r) => {
-          try {
-          const s = liveStats[r.username]
-          switch (col.id) {
-            case 'overall':
-              return <ScoreBadge score={r.overall} />
-            case 'relevancy_score':
-              return <MiniBar value={r.scores?.relevancy ?? 0} color="bg-rose/70" />
-            case 'engagement':
-              return (
-                <div>
-                  {r.engagementRate != null ? (
-                    <>
-                      <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
-                      <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
-                      <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
-                    </>
-                  )}
-                </div>
-              )
-            case 'follower_count': {
-              const val = (s?.followerCount ?? r.followerCount)
-              return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
-            }
-            case 'account_location':
-              return <p className="font-mono text-sm text-ink">{r.accountLocation || '—'}</p>
-            case 'engagement_score':
-              return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
-            case 'live_median_likes':
-              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
-              if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
-              if (r.xlsxMedianLikes != null) return (
-                <div>
-                  <p className="font-mono text-sm text-ink">{r.xlsxMedianLikes.toLocaleString()}</p>
-                  <p className="font-mono text-xs text-ink/25">export</p>
-                </div>
-              )
-              return <p className="font-mono text-sm text-ink/30">—</p>
-            case 'live_median_views':
-              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
-              if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
-              if (r.xlsxMedianViews != null) return (
-                <div>
-                  <p className="font-mono text-sm text-ink">{r.xlsxMedianViews.toLocaleString()}</p>
-                  <p className="font-mono text-xs text-ink/25">export</p>
-                </div>
-              )
-              return <p className="font-mono text-sm text-ink/30">—</p>
-            case 'sample_post_url':
-              return r.samplePostUrl ? (
-                <a href={r.samplePostUrl} target="_blank" rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 font-mono text-xs text-accent hover:underline">
-                  View <ExternalLink size={10} />
-                </a>
-              ) : <p className="font-mono text-sm text-ink/30">—</p>
-            case 'scraped_post_likes':
-              return <p className="font-mono text-sm text-ink">{r.samplePostLikes != null ? r.samplePostLikes.toLocaleString() : '—'}</p>
-            case 'scraped_post_comments':
-              return <p className="font-mono text-sm text-ink">{r.samplePostComments != null ? r.samplePostComments.toLocaleString() : '—'}</p>
-            case 'scraped_post_plays':
-              return <p className="font-mono text-sm text-ink">{r.samplePostPlays != null ? r.samplePostPlays.toLocaleString() : '—'}</p>
-            case 'bio':
-              return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
-            case 'sample_caption':
-              return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
-            default:
-              return null
-          }
-          } catch (e) {
-            console.error('renderCell error', col.id, e)
-            return <p className="font-mono text-xs text-rose/50">—</p>
-          }
-        }
-
-        return (
-      <div className="border border-mist rounded-xl overflow-x-auto">
-        {/* Table header */}
-        <div
-          className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
-          style={{ gridTemplateColumns: gridTemplate }}
-        >
-          <span>Account</span>
-          {visibleCols.map((col) => (
-            col.sortKey ? (
-              <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center gap-1 hover:text-ink">
-                {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
-              </button>
-            ) : (
-              <span key={col.id} className="flex items-center gap-1">
-                {col.label}{col.infoKey && <InfoTooltip column={col.infoKey} />}
-              </span>
-            )
-          ))}
-        </div>
-
-        {/* Rows */}
-        {filtered.length === 0 && (
-          <div className="px-4 py-12 text-center text-sm text-ink/30">
-            No accounts match your filters.
-          </div>
-        )}
-        {filtered.map((r) => (
-          <div key={r.username}>
-            {/* Main row */}
-            <div
-              className="grid gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
-              style={{ gridTemplateColumns: gridTemplate }}
-              onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
-            >
-              {/* Account — always shown */}
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`https://instagram.com/${r.username}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1"
-                  >
-                    @{r.username}
-                    <ExternalLink size={11} className="opacity-40" />
-                  </a>
-                </div>
-                {r.fullName && <p className="text-xs text-ink/40 truncate">{r.fullName}</p>}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(r.flags || []).slice(0, 3).map((f) => (
-                    <span key={f} className={`tag ${
-                      f === 'hk-based' ? 'tag-hk' :
-                      f === 'video-creator' ? 'tag-video' :
-                      f === 'bot-risk' ? 'tag-bot' : ''
-                    }`}>{f}</span>
-                  ))}
-                </div>
-              </div>
-
-              {visibleCols.map((col) => (
-                <div key={col.id} className="min-w-0 overflow-hidden">{renderCell(col, r)}</div>
-              ))}
-            </div>
-
-            {/* Expanded detail */}
-            {expandedRow === r.username && (
-              <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
-                <div>
-                  {r.aiVerdict ? (
-                    <div className="mb-3">
-                      <p className="text-xs font-mono text-accent/70 uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <Sparkles size={10} /> AI Deep-Dive
-                      </p>
-                      <p className="text-ink/80 leading-relaxed">{r.aiVerdict}</p>
-                    </div>
-                  ) : (
-                    <div className="mb-3">
-                      <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">AI Deep-Dive</p>
-                      <p className="text-xs text-ink/30">Not yet run — click AI Deep-Dive in the header.</p>
-                    </div>
-                  )}
-
-                  <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Scoring Verdict</p>
-                  <p className="text-ink/60 text-xs leading-relaxed">{r.verdict || '—'}</p>
-
-                </div>
-                <div>
-                  {r.nicheSignals?.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Niche Signals</p>
-                      <p className="text-xs text-ink/60">{r.nicheSignals.join(' · ')}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Top Hashtags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {(r.hashtags || []).slice(0, 10).map((h) => (
-                        <span key={h} className="tag">#{h}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-        )
-        } catch (e) {
-          console.error('Table render error:', e)
-          return (
-            <div className="px-4 py-8 text-center text-sm text-rose/70 border border-rose/20 rounded-xl">
-              Table failed to render. Open DevTools → Console for details.
-            </div>
-          )
-        }
-      })()}
+      <TableErrorBoundary>
+        <ResultsTable
+          selectedColumns={selectedColumns}
+          filtered={filtered}
+          expandedRow={expandedRow}
+          setExpandedRow={setExpandedRow}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          toggleSort={toggleSort}
+          liveStats={liveStats}
+          liveStatus={liveStatus}
+        />
+      </TableErrorBoundary>
 
       <p className="mt-4 text-xs text-ink/25 font-mono text-center">
         Click any row to expand · Engagement &amp; Relevancy scores are deterministic keyword + arithmetic logic · AI Deep-Dive is the only step that calls Claude

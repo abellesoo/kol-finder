@@ -44,10 +44,13 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
     }
   }
   if (directUrls.length === 0) throw new Error('No valid URLs or hashtags provided')
+  // Tagged pages (/username/tagged/) need resultsType 'mentions' to return posts
+  // by other users who tagged the brand. Hashtag/post URLs use 'posts'.
+  const resultsType = directUrls.some((u) => u.includes('/tagged/')) ? 'mentions' : 'posts'
   const res = await fetch(`${PROXY}/start-run/instagram-scraper`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
+    body: JSON.stringify({ directUrls, resultsType, resultsLimit }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')

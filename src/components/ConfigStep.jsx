@@ -15,6 +15,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [requireVideo, setRequireVideo] = useState(true)
   const [minEngagement, setMinEngagement] = useState(0)
+  const [campaignBrief, setCampaignBrief] = useState('')
 
   const toggleNiche = (id) => {
     setNiches((prev) =>
@@ -30,6 +31,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
       locationTarget,
       requireVideo,
       minEngagement,
+      campaignBrief: campaignBrief.trim(),
     })
   }
 
@@ -115,7 +117,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
         </section>
 
         {/* Min engagement */}
-        <section className="mb-10">
+        <section className="mb-8">
           <label className="block text-xs font-mono tracking-widest text-ink/40 uppercase mb-3">
             Minimum avg likes per post
           </label>
@@ -129,6 +131,24 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
             />
             <span className="text-xs text-ink/40">{minEngagement === 0 ? 'No minimum' : `≥ ${minEngagement.toLocaleString()} likes`}</span>
           </div>
+        </section>
+
+        {/* Campaign brief */}
+        <section className="mb-10">
+          <label className="block text-xs font-mono tracking-widest text-ink/40 uppercase mb-1">
+            Campaign brief
+            <span className="ml-2 normal-case text-ink/25 tracking-normal font-sans">optional · used by AI Deep-Dive</span>
+          </label>
+          <p className="text-xs text-ink/40 mb-3">
+            Describe the brand aesthetic, campaign goals, and content style you're looking for. The AI Deep-Dive on the Results page uses this to give you qualitative fit assessments.
+          </p>
+          <textarea
+            value={campaignBrief}
+            onChange={(e) => setCampaignBrief(e.target.value)}
+            rows={3}
+            placeholder="e.g. Minimalist skincare brand targeting 25–35 year olds, clean aesthetic, natural ingredients positioning, looking for creators who film at-home routines or morning skincare content."
+            className="w-full px-3 py-2.5 border border-mist rounded-lg text-sm text-ink bg-white focus:outline-none focus:border-accent resize-none placeholder:text-ink/25"
+          />
         </section>
 
         <button

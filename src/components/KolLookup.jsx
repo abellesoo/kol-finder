@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Search, Loader2, Heart, Eye, EyeOff, ExternalLink, AlertCircle } from 'lucide-react'
-import { startReelScraper, getRun, getDatasetItems } from '../lib/apifyApi'
+import { startReelScraper, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 import { computeStats } from '../lib/computeStats'
 import { saveLookup } from '../lib/sessionHistory'
 
@@ -28,19 +28,9 @@ export default function KolLookup({ initialUsername = '' }) {
     try {
       const run = await startReelScraper(user)
       setStatus('running')
-
-      let runData = run
-      while (runData.status === 'READY' || runData.status === 'RUNNING') {
-        await new Promise((r) => setTimeout(r, 3000))
-        runData = await getRun(run.id)
-      }
-
-      if (runData.status !== 'SUCCEEDED') {
-        throw new Error(`Actor run ${runData.status.toLowerCase()}`)
-      }
-
+      const completed = await pollUntilDone(run)
       setStatus('fetching')
-      const items = await getDatasetItems(runData.defaultDatasetId)
+      const items = await getDatasetItems(completed.defaultDatasetId)
       const computed = computeStats(items)
       setStats(computed)
       saveLookup({ username: user, stats: computed })

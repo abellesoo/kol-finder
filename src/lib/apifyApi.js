@@ -14,8 +14,8 @@ async function startInstagramScraper(usernames, resultsLimit = 30) {
     body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(`Failed to start actor (${res.status}): ${body?.error?.message || body?.message || 'unknown error'}`)
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to start actor (${res.status}): ${text || 'no response body'}`)
   }
   const { data } = await res.json()
   return data
@@ -50,8 +50,8 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
     body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(`Failed to start actor (${res.status}): ${body?.error?.message || body?.message || 'unknown error'}`)
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to start actor (${res.status}): ${text || 'no response body'}`)
   }
   const { data } = await res.json()
   return data

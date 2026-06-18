@@ -58,10 +58,13 @@ export default function App() {
     }
   }
 
-  const handleScrapedItems = (items, brandName = '') => {
-    const influencerList = aggregatePostItems(items, brandName || 'scraped')
-    setFileNames(['Live scrape'])
-    setInfluencers(deduplicateInfluencers([influencerList]))
+  const handleScrapedItems = (brandedResults) => {
+    // brandedResults = [{ items, brand }, ...] — one entry per brand job
+    const influencerLists = brandedResults.map(({ items, brand }) =>
+      aggregatePostItems(items, brand)
+    )
+    setFileNames(brandedResults.map(({ brand }) => brand))
+    setInfluencers(deduplicateInfluencers(influencerLists))
     setStep('config')
   }
 

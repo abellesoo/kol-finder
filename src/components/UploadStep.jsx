@@ -4,11 +4,20 @@ import { startSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyA
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 
-function extractBrandFromInput(text) {
-  const first = text.split('\n').map((l) => l.trim()).find(Boolean) || ''
-  const urlMatch = first.match(/instagram\.com\/([^/?#]+)/)
-  if (urlMatch) return urlMatch[1]
-  return first.replace(/^#/, '').split(/\s/)[0]
+// Group input lines by brand. Each distinct instagram.com/username gets its
+// own group so we can run parallel Apify jobs and label results correctly.
+// Hashtags and post URLs with no clear profile owner go into a shared group.
+function parseBrandGroups(inputText) {
+  const lines = inputText.split('\n').map((l) => l.trim()).filter(Boolean)
+  const map = new Map() // brand key → { brand, lines }
+  for (const line of lines) {
+    const match = line.match(/instagram\.com\/([^/?#]+)/)
+    const brand = match ? match[1] : null
+    const key = brand ?? '__misc__'
+    if (!map.has(key)) map.set(key, { brand, lines: [] })
+    map.get(key).lines.push(line)
+  }
+  return [...map.values()]
 }
 
 export default function UploadStep({ onFiles, onScrapedItems }) {
@@ -46,17 +55,22 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     addFiles(e.dataTransfer.files)
   }
 
-  // Scrape handler
+  // Scrape handler — runs one Apify job per brand in parallel
   const handleScrape = async () => {
-    const lines = scrapeInput.split('\n').map((l) => l.trim()).filter(Boolean)
-    if (lines.length === 0) return
+    const groups = parseBrandGroups(scrapeInput)
+    if (groups.length === 0) return
     setScrapeStatus('running')
     setScrapeError(null)
     try {
-      const run = await startSeederScrape(lines, resultsLimit)
-      const completed = await pollUntilDone(run)
-      const items = await getDatasetItems(completed.defaultDatasetId)
-      onScrapedItems(items, extractBrandFromInput(scrapeInput))
+      const brandedResults = await Promise.all(
+        groups.map(async ({ brand, lines }) => {
+          const run = await startSeederScrape(lines, resultsLimit)
+          const completed = await pollUntilDone(run)
+          const items = await getDatasetItems(completed.defaultDatasetId)
+          return { items, brand: brand || 'scraped' }
+        })
+      )
+      onScrapedItems(brandedResults)
     } catch (err) {
       setScrapeError(err.message)
       setScrapeStatus('error')
@@ -189,14 +203,27 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
                   </button>
                 ))}
               </div>
-              <span className="text-xs text-ink/30">~${(resultsLimit * 0.01).toFixed(0)} Apify cost</span>
+              <span className="text-xs text-ink/30">~${(resultsLimit * 0.01).toFixed(0)} per brand</span>
             </div>
 
-            {scrapeInput.trim() && (
-              <p className="text-xs text-ink/40 mb-4">
-                Brand detected: <span className="font-mono text-ink/70">{extractBrandFromInput(scrapeInput) || '—'}</span>
-              </p>
-            )}
+            {scrapeInput.trim() && (() => {
+              const groups = parseBrandGroups(scrapeInput)
+              const brands = groups.map(g => g.brand).filter(Boolean)
+              return (
+                <div className="mb-4 px-3 py-2 bg-mist/40 rounded-lg">
+                  <p className="text-xs text-ink/40 mb-1">
+                    {groups.length} scrape job{groups.length > 1 ? 's' : ''} · ~${(groups.length * resultsLimit * 0.01).toFixed(0)} total
+                  </p>
+                  {brands.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {brands.map(b => (
+                        <span key={b} className="font-mono text-xs bg-white border border-mist px-2 py-0.5 rounded text-ink/70">{b}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {scrapeStatus === 'error' && (
               <div className="flex items-start gap-3 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-sm mb-4">

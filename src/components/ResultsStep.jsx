@@ -635,26 +635,24 @@ export default function ResultsStep({ results, influencers, config }) {
               return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
             case 'live_median_likes':
               if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
-              if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
-              return <p className="font-mono text-sm text-ink">{s.medianLikes != null ? s.medianLikes.toLocaleString() : '—'}</p>
+              if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
+              if (r.xlsxMedianLikes != null) return (
+                <div>
+                  <p className="font-mono text-sm text-ink">{r.xlsxMedianLikes.toLocaleString()}</p>
+                  <p className="font-mono text-xs text-ink/25">export</p>
+                </div>
+              )
+              return <p className="font-mono text-sm text-ink/30">—</p>
             case 'live_median_views':
               if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
-              if (!s) return <p className="font-mono text-sm text-ink/30">—</p>
-              return <p className="font-mono text-sm text-ink">{s.medianViews != null ? s.medianViews.toLocaleString() : '—'}</p>
-            case 'live_hidden_likes':
-              if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
-              if (s) return (
+              if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
+              if (r.xlsxMedianViews != null) return (
                 <div>
-                  <p className="font-mono text-sm text-ink">{s.hiddenCount}</p>
-                  {s.totalScraped > 0 && <p className="font-mono text-xs text-ink/30">of {s.totalScraped}</p>}
+                  <p className="font-mono text-sm text-ink">{r.xlsxMedianViews.toLocaleString()}</p>
+                  <p className="font-mono text-xs text-ink/25">export</p>
                 </div>
               )
-              return (
-                <div>
-                  <p className="font-mono text-sm text-ink">{r.xlsxHiddenCount ?? '—'}</p>
-                  {r.xlsxRecentCount > 0 && <p className="font-mono text-xs text-ink/30">of {r.xlsxRecentCount}</p>}
-                </div>
-              )
+              return <p className="font-mono text-sm text-ink/30">—</p>
             case 'sample_post_url':
               return r.samplePostUrl ? (
                 <a href={r.samplePostUrl} target="_blank" rel="noreferrer"

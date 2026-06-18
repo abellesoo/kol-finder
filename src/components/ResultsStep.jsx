@@ -127,16 +127,15 @@ const TABLE_COLUMNS = [
   { id: 'scraped_post_comments', label: 'Post Comments',   width: '1fr',                                                       exportIds: ['scraped_post_comments'] },
   { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
   { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
+  { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
+  { id: 'ai_verdict',            label: 'AI Verdict',      width: '2fr',                                                       exportIds: ['ai_verdict'] },
+  { id: 'approve',               label: 'Approve',         width: '1fr',                                                       exportIds: ['approve'] },
+  { id: 'reachout_status',       label: 'Reach-out Status',width: '1fr',                                                       exportIds: ['reachout_status'] },
+  { id: 'remarks',               label: 'Remarks',         width: '1fr',                                                       exportIds: ['remarks'] },
 ]
 
-// Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
-const ALWAYS_EXPORT_IDS = [
-  'brand',
-  'username', 'instagram_url',
-  'niche_signals',
-  'ai_verdict',
-  'approve', 'reachout_status', 'remarks',
-]
+// Only true always-on identifiers — everything else is picker-controlled
+const ALWAYS_EXPORT_IDS = ['username', 'instagram_url']
 
 
 function ScoreBadge({ score }) {
@@ -303,6 +302,14 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <p className="text-xs text-ink/70 line-clamp-2">{r.bio || '—'}</p>
         case 'sample_caption':
           return <p className="text-xs text-ink/70 line-clamp-2">{r.sampleCaption || '—'}</p>
+        case 'niche_signals':
+          return <p className="font-mono text-xs text-ink/60">{(r.nicheSignals || []).join(', ') || '—'}</p>
+        case 'ai_verdict':
+          return <p className="text-xs text-ink/70 line-clamp-2">{r.aiVerdict || '—'}</p>
+        case 'approve':
+        case 'reachout_status':
+        case 'remarks':
+          return <p className="font-mono text-xs text-ink/30">— export only</p>
         default:
           return null
       }

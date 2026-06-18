@@ -1,17 +1,12 @@
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
 
-// Priority columns shown first; remaining data columns follow
-const PRIORITY_IDS = [
-  'username', 'fullName', 'instagram_url', 'follower_count',
-  'live_median_likes', 'live_median_views', 'sample_post_url', 'bio', 'sample_caption',
-  'approve', 'reachout_status', 'remarks',
-]
-
 export const EXPORT_COLUMNS = [
-  { id: 'username',          label: 'username',          getValue: (r)            => r.username },
+  { id: 'brand',             label: 'Brand',              getValue: (r, inf)       => inf.sourceBrand || '' },
+  { id: 'username',          label: 'username',           getValue: (r)            => r.username },
   { id: 'fullName',          label: 'fullName',           getValue: (r, inf)       => inf.fullName || '' },
   { id: 'instagram_url',     label: 'instagram_url',      getValue: (r)            => `https://instagram.com/${r.username}` },
+  { id: 'account_location',  label: 'location',           getValue: (r, inf)       => inf.accountLocation || '' },
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
   { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
   { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => live?.medianViews ?? '' },
@@ -21,7 +16,6 @@ export const EXPORT_COLUMNS = [
   { id: 'overall',           label: 'overall',            getValue: (r)            => r.overall ?? '' },
   { id: 'relevancy_score',   label: 'relevancy_score',    getValue: (r)            => r.scores?.relevancy ?? '' },
   { id: 'engagement_score',  label: 'engagement_score',   getValue: (r)            => r.scores?.engagement ?? '' },
-  { id: 'location_score',    label: 'location_score',     getValue: (r)            => r.scores?.location ?? '' },
   { id: 'bot_risk_score',    label: 'bot_risk_score',     getValue: (r)            => r.scores?.botRisk ?? '' },
   { id: 'avg_likes',         label: 'avg_likes',          getValue: (r, inf)       => inf.avgLikes ?? '' },
   { id: 'avg_comments',      label: 'avg_comments',       getValue: (r, inf)       => inf.avgComments ?? '' },
@@ -29,16 +23,16 @@ export const EXPORT_COLUMNS = [
   { id: 'video_ratio',       label: 'video_ratio_%',      getValue: (r, inf)       => inf.videoRatio ?? '' },
   { id: 'verdict',           label: 'verdict',            getValue: (r)            => r.verdict || '' },
   { id: 'flags',             label: 'flags',              getValue: (r)            => (r.flags || []).join(', ') },
-  { id: 'location_signals',  label: 'location_signals',   getValue: (r)            => (r.locationSignals || []).join(', ') },
   { id: 'niche_signals',     label: 'niche_signals',      getValue: (r)            => (r.nicheSignals || []).join(', ') },
-  { id: 'live_hidden_likes', label: 'hidden_likes',        getValue: (r, inf, live) => live?.hiddenCount ?? '' },
-  { id: 'sample_post_url',  label: 'scraped_post',       getValue: (r, inf)       => inf.samplePostUrl || '' },
+  { id: 'live_hidden_likes', label: 'hidden_likes',       getValue: (r, inf, live) => live?.hiddenCount ?? '' },
+  { id: 'sample_post_url',   label: 'scraped_post',       getValue: (r, inf)       => inf.samplePostUrl || '' },
   { id: 'scraped_post_likes',    label: 'scraped_post_likes',    getValue: (r, inf) => inf.samplePostLikes ?? '' },
   { id: 'scraped_post_comments', label: 'scraped_post_comments', getValue: (r, inf) => inf.samplePostComments ?? '' },
   { id: 'scraped_post_plays',    label: 'scraped_post_plays',    getValue: (r, inf) => inf.samplePostPlays ?? '' },
-  { id: 'bio',              label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
-  { id: 'sample_caption',   label: 'scraped_caption',    getValue: (r, inf)       => inf.sampleCaption || '' },
-  { id: 'engagement_rate',  label: 'engagement_rate',    getValue: (r, inf)       => inf.engagementRate != null ? `${inf.engagementRate}%` : (inf.avgLikes ?? '') },
+  { id: 'bio',               label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
+  { id: 'sample_caption',    label: 'scraped_caption',    getValue: (r, inf)       => inf.sampleCaption || '' },
+  { id: 'engagement_rate',   label: 'engagement_rate',    getValue: (r, inf)       => inf.engagementRate != null ? `${inf.engagementRate}%` : (inf.avgLikes ?? '') },
+  { id: 'ai_verdict',        label: 'AI Deep-Dive verdict', getValue: (r)          => r.aiVerdict || '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)
@@ -48,6 +42,9 @@ const REACHOUT_OPTIONS   = ['Not sent', 'Sent', 'To Review', 'Waiting for Reply'
 const HEADER_FILL        = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }
 const HEADER_FONT        = { bold: true }
 
+// Soft color palette for brand column — cycles if more than 5 brands
+const BRAND_COLORS = ['FFFCE5CF', 'FFD5E8D4', 'FFDAE8FC', 'FFE1D5E7', 'FFFFD7D7']
+
 export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}) {
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
@@ -56,10 +53,16 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
     ? EXPORT_COLUMNS.filter((c) => selectedColumnIds.includes(c.id))
     : EXPORT_COLUMNS
 
-  const urlColIndex = cols.findIndex((c) => c.id === 'instagram_url') + 1
+  const brandColIndex    = cols.findIndex((c) => c.id === 'brand') + 1
+  const urlColIndex      = cols.findIndex((c) => c.id === 'instagram_url') + 1
   const samplePostColIndex = cols.findIndex((c) => c.id === 'sample_post_url') + 1
-  const approveColIndex = cols.findIndex((c) => c.id === 'approve') + 1
+  const approveColIndex  = cols.findIndex((c) => c.id === 'approve') + 1
   const reachoutColIndex = cols.findIndex((c) => c.id === 'reachout_status') + 1
+
+  // Derive unique brands from the influencer list for the dropdown + color map
+  const uniqueBrands = [...new Set(influencers.map((inf) => inf.sourceBrand).filter(Boolean))]
+  const brandColorMap = {}
+  uniqueBrands.forEach((b, i) => { brandColorMap[b] = BRAND_COLORS[i % BRAND_COLORS.length] })
 
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Results')
@@ -83,6 +86,21 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
 
   // Freeze first row
   ws.views = [{ state: 'frozen', ySplit: 1 }]
+
+  // Brand column: dropdown + per-brand color
+  if (brandColIndex > 0 && uniqueBrands.length > 0) {
+    for (let i = 2; i <= results.length + 1; i++) {
+      const cell = ws.getCell(i, brandColIndex)
+      const brand = cell.value
+      const color = brandColorMap[brand] || BRAND_COLORS[0]
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } }
+      cell.dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`"${uniqueBrands.join(',')}"`],
+      }
+    }
+  }
 
   // Hyperlinks in instagram_url column
   if (urlColIndex > 0) {

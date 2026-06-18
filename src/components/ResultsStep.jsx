@@ -1,14 +1,15 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
+import { fetchAiVerdicts } from '../lib/aiApi'
 
 const COLUMN_INFO = {
   overall: {
     title: 'Overall Score (0–100)',
     lines: [
-      '50% Engagement Score + 50% Relevancy Score.',
+      '80% Engagement Score + 20% Relevancy Score.',
       'Each sub-score is 0–10; combined and scaled to 0–100.',
       '· 70+ = strong match',
       '· 45–69 = possible',
@@ -35,19 +36,6 @@ const COLUMN_INFO = {
       '· ~4 = micro (~50 likes)',
       '· ~6–7 = mid-tier (~500–1k likes)',
       '· ~9–10 = large (10k+ likes)',
-    ],
-  },
-  location: {
-    title: 'Location Score (0–10)',
-    lines: [
-      'How likely the account is based in your target location.',
-      'Scans captions, hashtags, and tagged locations for local signals',
-      '(place names, local brands, currency, language markers).',
-      'For Taiwan: traditional Chinese + putonghua/voiceover signals',
-      'give an additional boost.',
-      '· 8–10 = strong local presence',
-      '· 4–7 = some signals',
-      '· 0–3 = weak or no local signal',
     ],
   },
   engagement: {
@@ -127,7 +115,7 @@ const TABLE_COLUMNS = [
   { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
   { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
   { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
-  { id: 'location_score',        label: 'Location',        width: '1fr', sortKey: 'location',     infoKey: 'location',         exportIds: ['location_score'] },
+  { id: 'account_location',      label: 'Location',        width: '1fr',                                                       exportIds: ['account_location'] },
   { id: 'engagement',            label: 'Eng. Rate',       width: '1fr', sortKey: 'engagement',   infoKey: 'engagement',       exportIds: ['engagement_rate'] },
   { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
   { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', infoKey: 'live_median_likes',                         exportIds: ['live_median_likes'] },
@@ -142,7 +130,8 @@ const TABLE_COLUMNS = [
 // Always included in export regardless of column picker (identifiers + workflow + extra signals user requested)
 const ALWAYS_EXPORT_IDS = [
   'username', 'instagram_url',
-  'niche_signals', 'location_signals',
+  'niche_signals',
+  'ai_verdict',
   'approve', 'reachout_status', 'remarks',
 ]
 
@@ -231,7 +220,10 @@ function ColumnPicker({ selected, onChange }) {
 }
 
 const CACHE_KEY = 'kol_live_stats_v1'
+const AI_CACHE_KEY = 'kol_ai_verdicts_v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+
+const AI_DEFAULT_TOP_N = 50
 
 // A cache entry is only valid if it has at least some real scraped data
 function hasRealData(stats) {
@@ -245,6 +237,15 @@ function readCache() {
 function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
+
+function readAiCache() {
+  try { return JSON.parse(localStorage.getItem(AI_CACHE_KEY) || '{}') } catch { return {} }
+}
+function writeAiCache(cache) {
+  try { localStorage.setItem(AI_CACHE_KEY, JSON.stringify(cache)) } catch {}
+}
+// Cache key: account + brief combo so different campaigns don't share verdicts
+function aiCacheKey(username, brief) { return `${username}::${brief.trim()}` }
 
 export default function ResultsStep({ results, influencers, config }) {
   const [sortKey, setSortKey] = useState('overall')
@@ -272,6 +273,25 @@ export default function ResultsStep({ results, influencers, config }) {
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
 
+  // AI Deep-Dive state
+  const [aiVerdicts, setAiVerdicts] = useState(() => {
+    const cache = readAiCache()
+    const now = Date.now()
+    const valid = {}
+    const brief = config?.campaignBrief || ''
+    for (const [k, entry] of Object.entries(cache)) {
+      if (now - entry.ts < CACHE_TTL_MS && k.endsWith(`::${brief.trim()}`)) {
+        const username = k.slice(0, k.length - brief.trim().length - 2)
+        valid[username] = entry.verdict
+      }
+    }
+    return valid
+  })
+  const [aiStatus, setAiStatus] = useState('idle') // idle | loading | done | error
+  const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 })
+  const [aiError, setAiError] = useState(null)
+  const [aiTopN, setAiTopN] = useState(AI_DEFAULT_TOP_N)
+
   // Build enriched list
   const infMap = useMemo(() => {
     const m = {}
@@ -286,15 +306,16 @@ export default function ResultsStep({ results, influencers, config }) {
       const engScore = hasLive
         ? computeLiveEngagementScore(live.medianLikes, live.medianViews)
         : (r.scores?.engagement ?? 0)
-      const overall = Math.round((engScore + (r.scores?.relevancy ?? 0)) * 5)
+      const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
       return {
         ...r,
         ...infMap[r.username],
         scores: { ...r.scores, engagement: engScore },
         overall,
+        aiVerdict: aiVerdicts[r.username] || null,
       }
     })
-  }, [results, infMap, liveStats])
+  }, [results, infMap, liveStats, aiVerdicts])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
@@ -367,6 +388,60 @@ export default function ResultsStep({ results, influencers, config }) {
   }, [])
 
 
+  const handleAiDeepDive = useCallback(async () => {
+    const brief = config?.campaignBrief || ''
+    const cache = readAiCache()
+    const now = Date.now()
+
+    // Pick top-N from current filtered list, skip already-cached
+    const candidates = filtered
+      .slice(0, aiTopN)
+      .filter((r) => {
+        const entry = cache[aiCacheKey(r.username, brief)]
+        return !entry || now - entry.ts >= CACHE_TTL_MS
+      })
+
+    if (candidates.length === 0) {
+      setAiStatus('done')
+      return
+    }
+
+    setAiStatus('loading')
+    setAiProgress({ done: 0, total: candidates.length })
+    setAiError(null)
+
+    // Send in batches of 10 matching the Worker's internal batch size
+    const BATCH = 10
+    const updatedCache = { ...readAiCache() }
+    const updatedVerdicts = { ...aiVerdicts }
+    try {
+      for (let i = 0; i < candidates.length; i += BATCH) {
+        const batch = candidates.slice(i, i + BATCH)
+        const accounts = batch.map((r) => {
+          const inf = infMap[r.username] || {}
+          return {
+            username: r.username,
+            captions: inf.sampleCaptions || [],
+            hashtags: inf.hashtags || [],
+            bio: inf.bio || '',
+          }
+        })
+        const verdicts = await fetchAiVerdicts(accounts, brief)
+        for (const { username, verdict } of verdicts) {
+          updatedVerdicts[username] = verdict
+          updatedCache[aiCacheKey(username, brief)] = { verdict, ts: Date.now() }
+        }
+        setAiVerdicts({ ...updatedVerdicts })
+        setAiProgress({ done: Math.min(i + BATCH, candidates.length), total: candidates.length })
+      }
+      writeAiCache(updatedCache)
+      setAiStatus('done')
+    } catch (err) {
+      setAiError(err.message)
+      setAiStatus('error')
+    }
+  }, [filtered, aiTopN, config, infMap, aiVerdicts])
+
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
       {/* Header */}
@@ -384,8 +459,51 @@ export default function ResultsStep({ results, influencers, config }) {
             {enriched.length - highCount - midCount} low score
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          {/* AI Deep-Dive button */}
+          {aiStatus === 'loading' ? (
+            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
+              <Loader2 size={15} className="animate-spin" />
+              AI Deep-Dive {aiProgress.done}/{aiProgress.total}
+            </div>
+          ) : aiStatus === 'error' ? (
+            <button
+              onClick={handleAiDeepDive}
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all"
+            >
+              <Sparkles size={15} />
+              Retry AI
+            </button>
+          ) : (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleAiDeepDive}
+                className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
+              >
+                <Sparkles size={15} />
+                AI Deep-Dive
+                {aiStatus === 'done' && Object.keys(aiVerdicts).length > 0 && (
+                  <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+                    {Object.keys(aiVerdicts).length}
+                  </span>
+                )}
+              </button>
+              <div className="relative group">
+                <span className="flex items-center gap-1 px-2 py-2 text-xs text-ink/40 font-mono">
+                  top
+                  <input
+                    type="number"
+                    value={aiTopN}
+                    onChange={(e) => setAiTopN(Math.max(1, Number(e.target.value)))}
+                    className="w-12 px-1 py-0.5 border border-mist rounded text-xs font-mono text-ink bg-white focus:outline-none focus:border-accent text-center"
+                    min="1"
+                    max={filtered.length}
+                  />
+                </span>
+              </div>
+            </div>
+          )}
           {liveStatus === 'loading' ? (
             <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
               <Loader2 size={15} className="animate-spin" />
@@ -438,7 +556,7 @@ export default function ResultsStep({ results, influencers, config }) {
           <Filter size={12} />
           Filter:
         </div>
-        {['all', 'hk-based', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map((f) => (
+        {['all', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map((f) => (
           <button
             key={f}
             onClick={() => setFilterFlag(f)}
@@ -463,6 +581,13 @@ export default function ResultsStep({ results, influencers, config }) {
         </div>
       </div>
 
+      {/* AI Deep-Dive error */}
+      {aiStatus === 'error' && (
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
+          AI Deep-Dive failed: {aiError}
+        </div>
+      )}
+
       {/* Live stats error */}
       {liveStatus === 'error' && (
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">
@@ -484,8 +609,6 @@ export default function ResultsStep({ results, influencers, config }) {
               return <ScoreBadge score={r.overall} />
             case 'relevancy_score':
               return <MiniBar value={r.scores?.relevancy ?? 0} color="bg-rose/70" />
-            case 'location_score':
-              return <MiniBar value={r.scores?.location ?? 0} color="bg-sage/70" />
             case 'engagement':
               return (
                 <div>
@@ -506,6 +629,8 @@ export default function ResultsStep({ results, influencers, config }) {
               const val = (s?.followerCount ?? r.followerCount)
               return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
             }
+            case 'account_location':
+              return <p className="font-mono text-sm text-ink">{r.accountLocation || '—'}</p>
             case 'engagement_score':
               return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
             case 'live_median_likes':
@@ -627,15 +752,23 @@ export default function ResultsStep({ results, influencers, config }) {
             {expandedRow === r.username && (
               <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
                 <div>
-                  <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">AI Verdict</p>
-                  <p className="text-ink/80 leading-relaxed">{r.verdict || '—'}</p>
-
-                  {r.hkSignals?.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">HK Signals</p>
-                      <p className="text-xs text-ink/60">{r.hkSignals.join(' · ')}</p>
+                  {r.aiVerdict ? (
+                    <div className="mb-3">
+                      <p className="text-xs font-mono text-accent/70 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Sparkles size={10} /> AI Deep-Dive
+                      </p>
+                      <p className="text-ink/80 leading-relaxed">{r.aiVerdict}</p>
+                    </div>
+                  ) : (
+                    <div className="mb-3">
+                      <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">AI Deep-Dive</p>
+                      <p className="text-xs text-ink/30">Not yet run — click AI Deep-Dive in the header.</p>
                     </div>
                   )}
+
+                  <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Scoring Verdict</p>
+                  <p className="text-ink/60 text-xs leading-relaxed">{r.verdict || '—'}</p>
+
                 </div>
                 <div>
                   {r.nicheSignals?.length > 0 && (

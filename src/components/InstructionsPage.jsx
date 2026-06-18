@@ -118,7 +118,7 @@ export default function InstructionsPage() {
         <div className="bg-mist/30 border border-mist rounded-xl px-5 py-4 mb-6">
           <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-sm text-ink/80">
-            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= (Engagement Score + Relevancy Score) × 5</p>
+            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 3) <span className="text-ink/40 text-xs">· before live fetch</span></p>
             <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 5 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
@@ -144,8 +144,8 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
-            formula="(engagement + relevancy) × 5"
-            description="Equal 50/50 blend of the two sub-scores below. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail."
+            formula="(engagement × 8) + (relevancy × 2)"
+            description="80% Engagement Score + 20% Relevancy Score. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail."
           />
           <ScoreRow
             name="Engagement Score"
@@ -158,12 +158,6 @@ export default function InstructionsPage() {
             range="0 – 10"
             formula="5 + (hits in target niches) − (off-niche categories with hits)"
             description="Starts at a neutral baseline of 5, reflecting that any account in the dataset has already shown some affinity with the competitor's content. Adds 1 point per keyword match found in the account's hashtags, captions, and display name, using niche-specific keyword lists (e.g. 'skincare', '護膚', 'makeup', '化妝'). Deducts 1 point per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness signals scores lower than a pure-niche account. Score is capped at 0–10."
-          />
-          <ScoreRow
-            name="Location Score"
-            range="0 – 10 · informational"
-            formula="min(10, location signal hits × 2.5)"
-            description="Not included in the Overall Score — shown as an informational column for filtering and sorting. Scans hashtags, captions, and tagged location names for location-specific signals: place names, local landmarks, local retailers, and language markers. Each unique signal found adds 2.5 points, capped at 10. For Taiwan specifically, accounts that combine traditional Chinese language signals (繁體, 正體, 國語) with Mandarin voiceover indicators (普通話, 配音) receive an additional +4 boost, as this combination is a strong regional marker."
           />
           <ScoreRow
             name="Bot Risk Score"

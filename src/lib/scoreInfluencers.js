@@ -7,23 +7,6 @@ const NICHE_KEYWORDS = {
   food: ['food', 'eat', 'restaurant', 'recipe', 'cooking', 'foodie', '美食', '食物', '餐廳', '食'],
 }
 
-const HK_SIGNALS = [
-  '香港', 'hk', 'hong kong', 'hongkong', '萬寧', '屈臣氏', '莎莎', 'sasa', 'watsons', 'mannings',
-  'causeway bay', 'mong kok', 'tsim sha tsui', 'central', 'admiralty', 'tst', 'cwb',
-  '銅鑼灣', '旺角', '尖沙咀', '中環', '灣仔', 'cantonese', '廣東話', '粵語',
-]
-const TW_SIGNALS = ['台灣', 'taiwan', '台北', 'taipei', '高雄', '台中', 'nt$', '國語', '台語', '繁體', '正體']
-const TW_PUTONGHUA_SIGNALS = ['普通話', 'putonghua', '普通話配音', '國語配音', 'mandarin voiceover', '配音', '旁白']
-const SG_SIGNALS = ['singapore', '新加坡', 'sg', 'sgd', 'orchard', 'sentosa']
-const MO_SIGNALS = ['macau', 'macao', '澳門', 'mo']
-
-const LOCATION_SIGNAL_MAP = {
-  'Hong Kong': HK_SIGNALS,
-  'Taiwan': TW_SIGNALS,
-  'Singapore': SG_SIGNALS,
-  'Macau': MO_SIGNALS,
-}
-
 function textContainsAny(text, keywords) {
   const lower = text.toLowerCase()
   return keywords.filter((kw) => lower.includes(kw.toLowerCase()))
@@ -77,31 +60,6 @@ function scoreRelevancy(inf, targetNiches) {
   return { score, signals: [...new Set(signals)].slice(0, 5) }
 }
 
-function scoreLocation(inf, locationTarget) {
-  const signals = LOCATION_SIGNAL_MAP[locationTarget] || []
-  const allText = [
-    ...inf.hashtags,
-    ...inf.sampleCaptions,
-    ...(inf.locationNames || []),
-  ].join(' ')
-
-  const found = textContainsAny(allText, signals)
-  let score = Math.min(10, found.length * 2.5)
-
-  if (locationTarget === 'Taiwan') {
-    const hasTraditional = textContainsAny(allText, ['繁體', '正體', '國語', '台語']).length > 0
-    const hasPutonghua = textContainsAny(allText, TW_PUTONGHUA_SIGNALS).length > 0
-    if (hasTraditional && hasPutonghua) {
-      score = Math.min(10, score + 4)
-    }
-  }
-
-  return {
-    score,
-    signals: [...new Set(found)].slice(0, 5),
-  }
-}
-
 function scoreBotRisk(inf) {
   const likes = inf.avgLikes || 0
   const comments = inf.avgComments || 0
@@ -114,9 +72,8 @@ function scoreBotRisk(inf) {
   return { score: 5 }
 }
 
-function buildFlags(inf, relevancyScore, locationScore, botScore, config) {
+function buildFlags(inf, relevancyScore, botScore, config) {
   const flags = []
-  if (locationScore.score >= 5) flags.push(`${config.locationTarget.toLowerCase().replace(' ', '-')}-based`)
   if ((inf.videoRatio || 0) >= 0.5) flags.push('video-creator')
   if (relevancyScore.score >= 7) {
     const niches = config.niches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0])
@@ -139,20 +96,17 @@ export async function scoreInfluencers(influencers, config) {
   return influencers.map((inf) => {
     const engagement = scoreEngagement(inf)
     const relevancy = scoreRelevancy(inf, config.niches)
-    const location = scoreLocation(inf, config.locationTarget)
     const botRisk = scoreBotRisk(inf)
 
-    // Overall = 50% Engagement Score + 50% Relevancy Score (each 0–10, total 0–100)
-    const overall = Math.round((engagement.score + relevancy.score) * 5)
+    // Overall = 80% Engagement Score + 20% Relevancy Score (each 0–10, total 0–100)
+    const overall = Math.round(engagement.score * 8 + relevancy.score * 2)
 
-    const flags = buildFlags(inf, relevancy, location, botRisk, config)
+    const flags = buildFlags(inf, relevancy, botRisk, config)
 
     const verdictParts = []
-    if (location.score >= 6) verdictParts.push(`Strong ${config.locationTarget} signals`)
-    else if (location.score >= 3) verdictParts.push(`Some ${config.locationTarget} signals`)
-    else verdictParts.push(`Weak ${config.locationTarget} presence`)
     if (relevancy.score >= 7) verdictParts.push('strong niche fit')
     else if (relevancy.score >= 5) verdictParts.push('some niche relevancy')
+    else verdictParts.push('weak niche relevancy')
     if (botRisk.score <= 3) verdictParts.push('possible bot activity')
 
     return {
@@ -160,13 +114,11 @@ export async function scoreInfluencers(influencers, config) {
       scores: {
         relevancy: parseFloat(relevancy.score.toFixed(1)),
         engagement: engagement.score,
-        location: Math.round(location.score),
         botRisk: Math.round(botRisk.score),
       },
       overall,
       verdict: verdictParts.join(', ') + '.',
       flags,
-      locationSignals: location.signals,
       nicheSignals: relevancy.signals,
     }
   })

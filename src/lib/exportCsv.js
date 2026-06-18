@@ -32,15 +32,37 @@ export const EXPORT_COLUMNS = [
   { id: 'bio',               label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
   { id: 'sample_caption',    label: 'scraped_caption',    getValue: (r, inf)       => inf.sampleCaption || '' },
   { id: 'engagement_rate',   label: 'engagement_rate',    getValue: (r, inf)       => inf.engagementRate != null ? `${inf.engagementRate}%` : (inf.avgLikes ?? '') },
-  { id: 'ai_verdict',        label: 'AI Deep-Dive verdict', getValue: (r)          => r.aiVerdict || '' },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)
 
 const APPROVE_OPTIONS    = ['Yes', 'No']
-const REACHOUT_OPTIONS   = ['Not sent', 'Sent', 'To Review', 'Waiting for Reply', 'Accepted', 'Rejected', 'Shipped', 'Posted']
+const REACHOUT_OPTIONS   = ['Not sent', 'Sent', 'Accept', 'Reject', 'Waiting for reply', 'To Review', 'Posted', 'Shipped', 'no reply after follow-up']
 const HEADER_FILL        = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }
 const HEADER_FONT        = { bold: true }
+
+// Conditional formatting colors for each reach-out status (bgColor for CF rules)
+const REACHOUT_COLORS = {
+  'Sent':                    'FFE0E0E0',
+  'Accept':                  'FF93C47D',
+  'Reject':                  'FFE06666',
+  'Waiting for reply':       'FF9FC5E8',
+  'To Review':               'FF4A86C8',
+  'Posted':                  'FFFFD966',
+  'Shipped':                 'FF8E7CC3',
+  'no reply after follow-up':'FFD9D2E9',
+  'Not sent':                'FF434343',
+}
+
+function colIndexToLetter(n) {
+  let s = ''
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
 
 // Soft color palette for brand column — cycles if more than 5 brands
 const BRAND_COLORS = ['FFFCE5CF', 'FFD5E8D4', 'FFDAE8FC', 'FFE1D5E7', 'FFFFD7D7']
@@ -145,6 +167,26 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
         formulae: [`"${REACHOUT_OPTIONS.join(',')}"`],
       }
     }
+    // Conditional formatting so colours update automatically when user picks a status
+    const col = colIndexToLetter(reachoutColIndex)
+    const ref = `${col}2:${col}${results.length + 1}`
+    REACHOUT_OPTIONS.forEach((status, priority) => {
+      const argb = REACHOUT_COLORS[status]
+      if (!argb) return
+      ws.addConditionalFormatting({
+        ref,
+        rules: [{
+          priority: priority + 1,
+          type: 'cellIs',
+          operator: 'equal',
+          formulae: [`"${status}"`],
+          style: {
+            fill: { type: 'pattern', pattern: 'solid', bgColor: { argb } },
+            font: status === 'Not sent' ? { color: { argb: 'FFFFFFFF' } } : {},
+          },
+        }],
+      })
+    })
   }
 
   const buffer = await wb.xlsx.writeBuffer()

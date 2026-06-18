@@ -127,13 +127,10 @@ const TABLE_COLUMNS = [
   { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
   { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
   { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
-  { id: 'approve',               label: 'Approve',         width: '1fr',                                                       exportIds: ['approve'] },
-  { id: 'reachout_status',       label: 'Reach-out Status',width: '1fr',                                                       exportIds: ['reachout_status'] },
-  { id: 'remarks',               label: 'Remarks',         width: '1fr',                                                       exportIds: ['remarks'] },
 ]
 
-// Only true always-on identifiers — everything else is picker-controlled
-const ALWAYS_EXPORT_IDS = ['username', 'instagram_url']
+// Always exported regardless of column picker — operational columns the user fills in Excel
+const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks']
 
 
 function ScoreBadge({ score }) {

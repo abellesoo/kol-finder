@@ -127,7 +127,6 @@ const TABLE_COLUMNS = [
   { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
   { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
   { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
-  { id: 'dm_status',             label: 'DM Status',       width: '1fr',                                                       exportIds: ['dm_status'] },
 ]
 
 const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks', 'dm_status', 'dm_draft']
@@ -351,11 +350,11 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         <span>Account</span>
         {visibleCols.map((col) => (
           col.sortKey ? (
-            <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center gap-1 hover:text-ink">
+            <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center justify-center gap-1 hover:text-ink">
               {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
             </button>
           ) : (
-            <span key={col.id} className="flex items-center gap-1">
+            <span key={col.id} className="flex items-center justify-center gap-1">
               {col.label}{col.infoKey && <InfoTooltip column={col.infoKey} />}
             </span>
           )
@@ -398,7 +397,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
               </div>
             </div>
             {visibleCols.map((col) => (
-              <div key={col.id} className="min-w-0 overflow-hidden">{renderCell(col, r)}</div>
+              <div key={col.id} className="min-w-0 overflow-hidden flex items-center justify-center">{renderCell(col, r)}</div>
             ))}
           </div>
 
@@ -451,7 +450,11 @@ export default function ResultsStep({ results, influencers, config }) {
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
-  const [selectedColumns, setSelectedColumns] = useState(TABLE_COLUMNS.map((c) => c.id))
+  const [selectedColumns, setSelectedColumns] = useState([
+    'brand', 'overall', 'relevancy_score', 'engagement_score',
+    'engagement', 'live_median_likes', 'live_median_views',
+    'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
+  ])
 
   // Selection + share state
   const [selectionMode, setSelectionMode] = useState(false)

@@ -10,7 +10,7 @@ export const EXPORT_COLUMNS = [
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
   { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
   { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => live?.medianViews ?? '' },
-  { id: 'approve',           label: 'Approve Yes/No',     getValue: ()                      => '' },
+  { id: 'approve',           label: 'Approve Yes/No',     getValue: (r, inf, live, rs)      => rs?.status === 'approved' ? 'Yes' : rs?.status === 'rejected' ? 'No' : '' },
   { id: 'reachout_status',   label: 'Reach-out Status',   getValue: ()                      => 'Not sent' },
   { id: 'remarks',           label: 'Remarks',            getValue: ()                      => '' },
   { id: 'dm_status',         label: 'DM Status',          getValue: (r, inf, live, rs)      => rs?.dm_status ? { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }[rs.dm_status] || rs.dm_status : '' },

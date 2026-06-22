@@ -581,6 +581,8 @@ export default function ResultsStep({ results, influencers, config }) {
           flags: r.flags || [],
           nicheSignals: r.nicheSignals || [],
           verdict: r.verdict || '',
+          medianLikes: r.medianLikes ?? null,
+          medianViews: r.medianViews ?? null,
         }))
 
       const { data, error } = await supabase

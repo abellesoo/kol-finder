@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, Share2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
+import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ASSISTANT_ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
@@ -119,9 +119,13 @@ function renderAssistantCell(col, account) {
     case 'follower_count':
       return <p className="font-mono text-xs text-ink/70">{account.followerCount?.toLocaleString() || '—'}</p>
     case 'live_median_likes':
+      return account.medianLikes != null
+        ? <p className="font-mono text-sm text-ink">{account.medianLikes.toLocaleString()}</p>
+        : <p className="font-mono text-xs text-ink/20">—</p>
     case 'live_median_views':
-      // Not stored in Supabase — only available after a live Apify fetch
-      return <p className="font-mono text-xs text-ink/20">—</p>
+      return account.medianViews != null
+        ? <p className="font-mono text-sm text-ink">{account.medianViews.toLocaleString()}</p>
+        : <p className="font-mono text-xs text-ink/20">—</p>
     case 'sample_post_url':
       return account.samplePostUrl ? (
         <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
@@ -158,7 +162,7 @@ function AssistantView({ accounts, reviewState, campaignBrief }) {
     // Same format as ResultsStep: ALWAYS_EXPORT_IDS + selected column exportIds
     // approval and dm_draft already covered by ALWAYS_EXPORT_IDS (approve, dm_status, dm_draft)
     const exportIds = [
-      ...ALWAYS_EXPORT_IDS.filter(id => id !== 'dm_status'),
+      ...ASSISTANT_ALWAYS_EXPORT_IDS,
       ...TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id)).flatMap(c => c.exportIds),
     ]
     exportToCsv(accounts, accounts, exportIds, {}, reviewState).catch(console.error)
@@ -419,6 +423,12 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         )}
         {col('scraped_post_plays') && account.samplePostPlays != null && (
           <span>{account.samplePostPlays.toLocaleString()} plays</span>
+        )}
+        {col('live_median_likes') && account.medianLikes != null && (
+          <span>{account.medianLikes.toLocaleString()} med. likes</span>
+        )}
+        {col('live_median_views') && account.medianViews != null && (
+          <span>{account.medianViews.toLocaleString()} med. views</span>
         )}
       </div>
 

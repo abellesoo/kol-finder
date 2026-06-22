@@ -24,5 +24,8 @@ export const DEFAULT_SELECTED_COLUMNS = [
   'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
 ]
 
-// Always included in every export regardless of column picker selection.
+// Always included in Step 3 (ResultsStep) export — includes dm_status for tracking.
 export const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks', 'dm_status', 'dm_draft']
+
+// Always included in the assistant return view export — dm_status excluded, DM Draft kept.
+export const ASSISTANT_ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks', 'dm_draft']

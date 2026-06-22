@@ -7,4 +7,4 @@ if (!url || !key) {
   console.warn('Supabase env vars missing — shared review features will not work')
 }
 
-export const supabase = createClient(url || '', key || '')
+export const supabase = url && key ? createClient(url, key) : null

@@ -50,9 +50,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           APIFY_API_KEY: ${{ secrets.APIFY_API_KEY }}
-      - name: Sync Anthropic key into Worker secret
-        run: echo "$ANTHROPIC_API_KEY" | npx wrangler@latest secret put ANTHROPIC_API_KEY
+      - name: Sync DeepSeek key into Worker secret
+        run: echo "$DEEPSEEK_API_KEY" | npx wrangler@latest secret put DEEPSEEK_API_KEY
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

@@ -1,6 +1,6 @@
 const BASE = 'https://api.apify.com/v2'
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages'
-const CLAUDE_MODEL = 'claude-sonnet-4-6'
+const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions'
+const DEEPSEEK_MODEL = 'deepseek-chat'
 
 function corsHeaders(origin) {
   const isAllowed = origin === 'https://abellesoo.github.io' || origin.startsWith('http://localhost:')
@@ -72,8 +72,8 @@ export default {
     // Body: { username, bio, hashtags, sampleCaptions, campaignBrief }
     // Returns: { draft }  — HK Traditional Chinese DM draft
     if (pathname === '/draft-dm' && request.method === 'POST') {
-      const ANTHROPIC_KEY = env.ANTHROPIC_API_KEY
-      if (!ANTHROPIC_KEY) return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500, origin)
+      const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
+      if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
 
       const { username, bio, hashtags = [], sampleCaptions = [], campaignBrief = '' } = await request.json()
       if (!username) return json({ error: 'username required' }, 400, origin)
@@ -102,15 +102,14 @@ ${captionText || '—'}
 
 只需輸出 DM 內文，不要任何解釋、標題或格式符號。`
 
-      const res = await fetch(ANTHROPIC_API, {
+      const res = await fetch(DEEPSEEK_API, {
         method: 'POST',
         headers: {
-          'x-api-key': ANTHROPIC_KEY,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_KEY}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: CLAUDE_MODEL,
+          model: DEEPSEEK_MODEL,
           max_tokens: 512,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -118,11 +117,11 @@ ${captionText || '—'}
 
       if (!res.ok) {
         const errBody = await res.text()
-        return json({ error: `Anthropic error ${res.status}: ${errBody}` }, 502, origin)
+        return json({ error: `DeepSeek error ${res.status}: ${errBody}` }, 502, origin)
       }
 
       const aiRes = await res.json()
-      const draft = aiRes.content?.[0]?.text?.trim() || ''
+      const draft = aiRes.choices?.[0]?.message?.content?.trim() || ''
       return json({ draft }, 200, origin)
     }
 

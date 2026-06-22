@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { LayoutDashboard, Search, Clock, HelpCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { LayoutDashboard, Search, Clock, HelpCircle, Users, LogOut } from 'lucide-react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
@@ -7,6 +7,9 @@ import DashboardPage from './components/DashboardPage'
 import InstructionsPage from './components/InstructionsPage'
 import HistoryPage from './components/HistoryPage'
 import ReviewPage from './components/ReviewPage'
+import LoginPage from './components/LoginPage'
+import TeamPage from './components/TeamPage'
+import { supabase } from './lib/supabase'
 import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
@@ -14,13 +17,24 @@ import { saveSession } from './lib/sessionHistory'
 const REVIEW_ID = new URLSearchParams(window.location.search).get('review')
 const VIEW_PARAM = new URLSearchParams(window.location.search).get('view')
 
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'seeder', label: 'Seeder', icon: Search },
-  { id: 'history', label: 'History', icon: Clock },
-]
+function navItemsForRole(role) {
+  const items = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
+    { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
+    { id: 'team', label: 'Team', icon: Users, adminOnly: true },
+  ]
+  return items.filter((item) => {
+    if (item.adminOnly) return role === 'admin'
+    if (item.restricted) return !item.restricted.includes(role)
+    return true
+  })
+}
 
-function Sidebar({ mode, onNav }) {
+function Sidebar({ mode, onNav, user, role, onSignOut }) {
+  const navItems = navItemsForRole(role)
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
+
   return (
     <aside
       style={{ width: 220, minWidth: 220 }}
@@ -31,7 +45,7 @@ function Sidebar({ mode, onNav }) {
       </div>
 
       <nav className="flex-1 px-3 py-3 flex flex-col gap-0.5">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+        {navItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => onNav(id)}
@@ -67,15 +81,25 @@ function Sidebar({ mode, onNav }) {
         >
           how it works ↗
         </a>
-        <div className="px-3 pt-2 pb-1 text-xs text-ink/25 font-mono">
-          markato.com
+
+        {/* User info + sign out */}
+        <div className="px-3 pt-3 mt-1 border-t border-mist/60">
+          <p className="text-xs font-medium text-ink/70 truncate">{displayName}</p>
+          <p className="text-xs text-ink/30 font-mono truncate">{user?.email}</p>
+          <button
+            onClick={onSignOut}
+            className="mt-2 flex items-center gap-1.5 text-xs text-ink/30 hover:text-rose transition-colors"
+          >
+            <LogOut size={11} />
+            Sign out
+          </button>
         </div>
       </div>
     </aside>
   )
 }
 
-function MainApp() {
+function MainApp({ user, role, onSignOut }) {
   const [mode, setMode] = useState('dashboard')
   const [step, setStep] = useState('upload')
   const [fileNames, setFileNames] = useState([])
@@ -165,10 +189,11 @@ function MainApp() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar mode={mode} onNav={setMode} />
+      <Sidebar mode={mode} onNav={setMode} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
         {mode === 'dashboard' && <DashboardPage />}
         {mode === 'help' && <InstructionsPage />}
+        {mode === 'team' && <TeamPage />}
         {mode === 'history' && (
           <HistoryPage onLoadSeederSession={handleLoadSeederSession} />
         )}
@@ -230,5 +255,78 @@ export default function App() {
   if (REVIEW_ID) {
     return <ReviewPage reviewId={REVIEW_ID} view={VIEW_PARAM} />
   }
-  return <MainApp />
+  return <AuthGate />
+}
+
+function AuthGate() {
+  const [authState, setAuthState] = useState({ loading: true, user: null, role: null, error: null })
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthState({ loading: false, user: null, role: null, error: null })
+      return
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        resolveUser(session.user)
+      } else {
+        setAuthState({ loading: false, user: null, role: null, error: null })
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        resolveUser(session.user)
+      } else {
+        setAuthState((prev) => ({ ...prev, loading: false, user: null, role: null }))
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function resolveUser(user) {
+    if (!user.email.endsWith('@markato.com')) {
+      await supabase.auth.signOut()
+      setAuthState({ loading: false, user: null, role: null, error: 'Only @markato.com accounts are allowed.' })
+      return
+    }
+
+    // Get existing role, or create user row with default role
+    let { data: record } = await supabase.from('users').select('role').eq('id', user.id).single()
+    if (!record) {
+      const { data: inserted } = await supabase
+        .from('users')
+        .insert({ id: user.id, email: user.email, role: 'assistant_bm' })
+        .select('role')
+        .single()
+      record = inserted
+    }
+
+    setAuthState({ loading: false, user, role: record?.role || 'assistant_bm', error: null })
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
+
+  // No Supabase configured (local dev) — skip auth
+  if (!supabase) {
+    return <MainApp user={null} role="admin" onSignOut={() => {}} />
+  }
+
+  if (authState.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="font-mono text-xs text-ink/30 tracking-widest uppercase">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!authState.user) {
+    return <LoginPage error={authState.error} />
+  }
+
+  return <MainApp user={authState.user} role={authState.role} onSignOut={handleSignOut} />
 }

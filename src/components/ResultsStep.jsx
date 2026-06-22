@@ -477,32 +477,43 @@ export default function ResultsStep({ results, influencers, config }) {
         ? computeLiveEngagementScore(live.medianLikes, live.medianViews)
         : (r.scores?.engagement ?? 0)
       const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
-      return { ...r, ...infMap[r.username], scores: { ...r.scores, engagement: engScore }, overall }
+      return {
+        ...r, ...infMap[r.username],
+        scores: { ...r.scores, engagement: engScore },
+        overall,
+        medianLikes: live?.medianLikes ?? r.xlsxMedianLikes ?? null,
+        medianViews: live?.medianViews ?? r.xlsxMedianViews ?? null,
+      }
     })
   }, [results, infMap, liveStats])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
     if (filterFlag !== 'all') list = list.filter((r) => (r.flags || []).includes(filterFlag))
-    list = [...list].sort((a, b) => {
-      const av = sortKey === 'overall' ? a.overall
-        : sortKey === 'relevancy' ? (a.scores?.relevancy ?? 0)
-        : sortKey === 'eng_score' ? (a.scores?.engagement ?? 0)
-        : sortKey === 'engagement' ? (a.engagementRate ?? a.totalEngagement ?? 0)
-        : a.overall
-      const bv = sortKey === 'overall' ? b.overall
-        : sortKey === 'relevancy' ? (b.scores?.relevancy ?? 0)
-        : sortKey === 'eng_score' ? (b.scores?.engagement ?? 0)
-        : sortKey === 'engagement' ? (b.engagementRate ?? b.totalEngagement ?? 0)
-        : b.overall
-      return sortDir === 'desc' ? bv - av : av - bv
-    })
+    if (sortKey) {
+      const getVal = (r) =>
+        sortKey === 'overall'             ? r.overall
+        : sortKey === 'relevancy'         ? (r.scores?.relevancy ?? 0)
+        : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
+        : sortKey === 'engagement'        ? (r.engagementRate ?? r.totalEngagement ?? 0)
+        : sortKey === 'live_median_likes' ? (r.medianLikes ?? -1)
+        : sortKey === 'live_median_views' ? (r.medianViews ?? -1)
+        : r.overall
+      list = [...list].sort((a, b) =>
+        sortDir === 'desc' ? getVal(b) - getVal(a) : getVal(a) - getVal(b)
+      )
+    }
     return list
   }, [enriched, sortKey, sortDir, filterFlag, minScore])
 
   const toggleSort = (key) => {
-    if (sortKey === key) setSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-    else { setSortKey(key); setSortDir('desc') }
+    if (sortKey === key) {
+      if (sortDir === 'desc') setSortDir('asc')
+      else setSortKey(null) // third click resets to original scored order
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
   }
 
   const highCount = enriched.filter((r) => r.overall >= 70).length

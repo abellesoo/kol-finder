@@ -158,7 +158,7 @@ function AssistantView({ accounts, reviewState, campaignBrief }) {
     // Same format as ResultsStep: ALWAYS_EXPORT_IDS + selected column exportIds
     // approval and dm_draft already covered by ALWAYS_EXPORT_IDS (approve, dm_status, dm_draft)
     const exportIds = [
-      ...ALWAYS_EXPORT_IDS,
+      ...ALWAYS_EXPORT_IDS.filter(id => id !== 'dm_status'),
       ...TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id)).flatMap(c => c.exportIds),
     ]
     exportToCsv(accounts, accounts, exportIds, {}, reviewState).catch(console.error)

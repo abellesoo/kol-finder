@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Share2, Check, Copy, X } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
+import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
 import { supabase } from '../lib/supabase'
@@ -111,25 +112,7 @@ function InfoTooltip({ column }) {
   )
 }
 
-const TABLE_COLUMNS = [
-  { id: 'brand',                 label: 'Brand',           width: '1fr',                                                       exportIds: ['brand'] },
-  { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
-  { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
-  { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
-  { id: 'account_location',      label: 'Location',        width: '1fr',                                                       exportIds: ['account_location'] },
-  { id: 'engagement',            label: 'Eng. Rate',       width: '1fr', sortKey: 'engagement',   infoKey: 'engagement',       exportIds: ['engagement_rate'] },
-  { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
-  { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', infoKey: 'live_median_likes',                         exportIds: ['live_median_likes'] },
-  { id: 'live_median_views',     label: 'Med. Views',      width: '1fr', infoKey: 'live_median_views',                         exportIds: ['live_median_views'] },
-  { id: 'sample_post_url',       label: 'Scraped Post',    width: '1fr',                                                       exportIds: ['sample_post_url'] },
-  { id: 'scraped_post_likes',    label: 'Post Likes',      width: '1fr',                                                       exportIds: ['scraped_post_likes'] },
-  { id: 'scraped_post_comments', label: 'Post Comments',   width: '1fr',                                                       exportIds: ['scraped_post_comments'] },
-  { id: 'scraped_post_plays',    label: 'Post Plays',      width: '1fr',                                                       exportIds: ['scraped_post_plays'] },
-  { id: 'sample_caption',        label: 'Scraped Caption', width: '2fr',                                                       exportIds: ['sample_caption'] },
-  { id: 'niche_signals',         label: 'Niche Signals',   width: '1fr',                                                       exportIds: ['niche_signals'] },
-]
-
-const ALWAYS_EXPORT_IDS = ['username', 'instagram_url', 'approve', 'reachout_status', 'remarks', 'dm_status', 'dm_draft']
+// TABLE_COLUMNS, ALWAYS_EXPORT_IDS imported from ../lib/columnDefs
 
 const DM_STATUS_STYLES = {
   'not_sent':    'bg-ink/10 text-ink/50',
@@ -450,11 +433,7 @@ export default function ResultsStep({ results, influencers, config }) {
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
-  const [selectedColumns, setSelectedColumns] = useState([
-    'brand', 'overall', 'relevancy_score', 'engagement_score',
-    'engagement', 'live_median_likes', 'live_median_views',
-    'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
-  ])
+  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
 
   // Selection + share state
   const [selectionMode, setSelectionMode] = useState(false)

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, Share2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
+import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
@@ -13,24 +14,6 @@ const DM_STATUS_STYLES = {
   replied:     'bg-green-100 text-green-700',
   no_response: 'bg-rose/10 text-rose/70',
 }
-
-const REVIEW_COLUMNS = [
-  { id: 'follower_count',  label: 'Followers' },
-  { id: 'engagement_rate', label: 'Eng. Rate' },
-  { id: 'avg_likes',       label: 'Avg Likes' },
-  { id: 'location',        label: 'Location' },
-  { id: 'niche_signals',   label: 'Niche Tags' },
-  { id: 'sample_post',     label: 'Sample Post' },
-  { id: 'bio',             label: 'Bio' },
-  { id: 'hashtags',        label: 'Hashtags' },
-]
-const DEFAULT_REVIEW_COLUMNS = ['follower_count', 'engagement_rate', 'avg_likes', 'location', 'niche_signals', 'sample_post']
-
-// Column IDs passed to exportToCsv for the assistant return view
-const ASSISTANT_EXPORT_COLS = [
-  'username', 'instagram_url', 'brand', 'overall', 'engagement_rate', 'avg_likes',
-  'niche_signals', 'sample_post_url', 'approve', 'dm_status', 'dm_draft',
-]
 
 async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignBrief }) {
   const res = await fetch(`${PROXY}/draft-dm`, {
@@ -47,6 +30,24 @@ async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignB
   return draft
 }
 
+// Shared primitives (mirrors ResultsStep)
+function ScoreBadge({ score }) {
+  const cls = score >= 70 ? 'score-high' : score >= 45 ? 'score-mid' : 'score-low'
+  return <span className={`score-badge ${cls}`}>{score}</span>
+}
+
+function MiniBar({ value, max = 10, color = 'bg-accent' }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-16 h-1.5 bg-mist rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />
+      </div>
+      <span className="font-mono text-xs text-ink/50">{value}</span>
+    </div>
+  )
+}
+
+// ColumnPicker — same pattern and TABLE_COLUMNS as ResultsStep
 function ColumnPicker({ selected, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -65,13 +66,19 @@ function ColumnPicker({ selected, onChange }) {
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-2 px-3 py-1.5 border border-mist rounded-lg text-xs text-ink/60 hover:border-ink/30 hover:text-ink transition-all"
       >
-        <Columns size={13} /> Columns
+        <Columns size={13} />
+        Columns
+        {selected.length < TABLE_COLUMNS.length && (
+          <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+            {selected.length}
+          </span>
+        )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-mist rounded-xl shadow-lg z-10 p-3">
-          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Show columns</p>
+        <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-mist rounded-xl shadow-lg z-20 p-3">
+          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Show / export columns</p>
           <div className="space-y-1">
-            {REVIEW_COLUMNS.map((col) => (
+            {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
                 <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent" />
                 <span className="font-mono text-xs text-ink/70">{col.label}</span>
@@ -79,11 +86,192 @@ function ColumnPicker({ selected, onChange }) {
             ))}
           </div>
           <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(REVIEW_COLUMNS.map(c => c.id))} className="text-xs text-ink/40 hover:text-ink transition-colors">Select all</button>
+            <button onClick={() => onChange(TABLE_COLUMNS.map(c => c.id))} className="text-xs text-ink/40 hover:text-ink transition-colors">Select all</button>
             <button onClick={() => onChange([])} className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto">Clear</button>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Render a single cell value for the AssistantView table.
+// Mirrors ResultsStep renderCell but reads from the stored account object (no live stats).
+function renderAssistantCell(col, account) {
+  switch (col.id) {
+    case 'brand':
+      return <p className="font-mono text-xs text-ink/70 truncate">{account.sourceBrand || '—'}</p>
+    case 'overall':
+      return <ScoreBadge score={account.overall} />
+    case 'relevancy_score':
+      return <MiniBar value={account.scores?.relevancy ?? 0} color="bg-rose/70" />
+    case 'engagement_score':
+      return <MiniBar value={account.scores?.engagement ?? 0} />
+    case 'account_location':
+      return <p className="font-mono text-xs text-ink/70">{account.accountLocation || '—'}</p>
+    case 'engagement':
+      return account.engagementRate != null ? (
+        <div>
+          <p className="font-mono text-sm text-ink">{account.engagementRate}%</p>
+          <p className="font-mono text-xs text-ink/30">{(account.avgLikes || 0).toLocaleString()} avg likes</p>
+        </div>
+      ) : <p className="font-mono text-xs text-ink/30">—</p>
+    case 'follower_count':
+      return <p className="font-mono text-xs text-ink/70">{account.followerCount?.toLocaleString() || '—'}</p>
+    case 'live_median_likes':
+    case 'live_median_views':
+      // Not stored in Supabase — only available after a live Apify fetch
+      return <p className="font-mono text-xs text-ink/20">—</p>
+    case 'sample_post_url':
+      return account.samplePostUrl ? (
+        <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
+          className="font-mono text-xs text-accent hover:underline flex items-center gap-1">
+          View post <ExternalLink size={10} />
+        </a>
+      ) : <p className="font-mono text-xs text-ink/20">—</p>
+    case 'scraped_post_likes':
+      return <p className="font-mono text-xs text-ink/70">{account.samplePostLikes?.toLocaleString() ?? '—'}</p>
+    case 'scraped_post_comments':
+      return <p className="font-mono text-xs text-ink/70">{account.samplePostComments?.toLocaleString() ?? '—'}</p>
+    case 'scraped_post_plays':
+      return <p className="font-mono text-xs text-ink/70">{account.samplePostPlays?.toLocaleString() ?? '—'}</p>
+    case 'sample_caption':
+      return <p className="text-xs text-ink/60 line-clamp-2">{account.sampleCaption || '—'}</p>
+    case 'niche_signals':
+      return account.nicheSignals?.length > 0
+        ? <p className="text-xs text-ink/60">{account.nicheSignals.join(', ')}</p>
+        : <p className="font-mono text-xs text-ink/20">—</p>
+    default:
+      return <p className="font-mono text-xs text-ink/20">—</p>
+  }
+}
+
+// Read-only view rendered when the assistant opens the return link (?view=assistant)
+function AssistantView({ accounts, reviewState, campaignBrief }) {
+  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
+
+  const approvedCount = Object.values(reviewState).filter(e => e.status === 'approved').length
+  const rejectedCount = Object.values(reviewState).filter(e => e.status === 'rejected').length
+  const pendingCount = accounts.length - approvedCount - rejectedCount
+
+  const handleExport = () => {
+    // Same format as ResultsStep: ALWAYS_EXPORT_IDS + selected column exportIds
+    // approval and dm_draft already covered by ALWAYS_EXPORT_IDS (approve, dm_status, dm_draft)
+    const exportIds = [
+      ...ALWAYS_EXPORT_IDS,
+      ...TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id)).flatMap(c => c.exportIds),
+    ]
+    exportToCsv(accounts, accounts, exportIds, {}, reviewState).catch(console.error)
+  }
+
+  const statusConfig = {
+    approved: { label: 'Approved', cls: 'bg-sage/10 text-sage border-sage/30' },
+    rejected: { label: 'Rejected', cls: 'bg-rose/10 text-rose/70 border-rose/20' },
+    pending:  { label: 'Pending',  cls: 'bg-ink/5 text-ink/40 border-ink/10' },
+  }
+
+  const visibleCols = TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id))
+  // Account (2fr) + selected columns + Approval Status (1fr) + DM Draft (2fr)
+  const gridTemplate = `2fr ${visibleCols.map(c => c.width).join(' ')} 1fr 2fr`
+
+  return (
+    <div className="min-h-screen bg-paper px-6 py-10 max-w-screen-xl mx-auto">
+      {/* Header */}
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Review Results · Read Only</p>
+          <h1 className="text-2xl font-semibold text-ink mb-1">{accounts.length} accounts reviewed</h1>
+          <p className="text-sm text-ink/50">
+            <span className="text-sage font-medium">{approvedCount} approved</span>
+            {' · '}
+            <span className="text-rose/70 font-medium">{rejectedCount} rejected</span>
+            {' · '}
+            {pendingCount} pending
+          </p>
+          {campaignBrief && (
+            <div className="mt-4 px-4 py-3 bg-mist/50 rounded-xl max-w-xl">
+              <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Campaign brief</p>
+              <p className="text-sm text-ink/70">{campaignBrief}</p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          <button onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all">
+            <Download size={15} /> Export XLSX
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="border border-mist rounded-xl overflow-x-auto">
+        {/* Header row */}
+        <div
+          className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
+          <span>Account</span>
+          {visibleCols.map(col => (
+            <span key={col.id} className="flex items-center justify-center gap-1">{col.label}</span>
+          ))}
+          <span className="flex items-center justify-center">Status</span>
+          <span>DM Draft</span>
+        </div>
+
+        {accounts.map((account) => {
+          const rs = reviewState[account.username]
+          const status = rs?.status || 'pending'
+          const cfg = statusConfig[status]
+          return (
+            <div
+              key={account.username}
+              className="grid gap-3 px-4 py-3.5 border-b border-mist/50 items-center last:border-0"
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              {/* Account — fixed */}
+              <div className="min-w-0">
+                <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
+                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1">
+                  @{account.username} <ExternalLink size={11} className="opacity-40" />
+                </a>
+                {account.fullName && <p className="text-xs text-ink/40 truncate">{account.fullName}</p>}
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(account.flags || []).slice(0, 2).map(f => (
+                    <span key={f} className={`tag text-xs ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic selected columns */}
+              {visibleCols.map(col => (
+                <div key={col.id} className="min-w-0 overflow-hidden flex items-center justify-center">
+                  {renderAssistantCell(col, account)}
+                </div>
+              ))}
+
+              {/* Pinned: Approval Status */}
+              <div className="flex items-center justify-center">
+                <span className={`px-2 py-0.5 rounded-full text-xs border font-mono ${cfg.cls}`}>
+                  {cfg.label}
+                </span>
+              </div>
+
+              {/* Pinned: DM Draft */}
+              <div className="min-w-0">
+                {rs?.dm_draft
+                  ? <p className="text-xs text-ink/60 line-clamp-2">{rs.dm_draft}</p>
+                  : <span className="text-xs text-ink/20 font-mono">—</span>
+                }
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="mt-6 text-xs text-ink/20 font-mono text-center">
+        Read-only · Changes made by brand manager are reflected here
+      </p>
     </div>
   )
 }
@@ -206,36 +394,39 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         </div>
       </div>
 
-      {/* Stats row — column-controlled */}
+      {/* Stats row — driven by TABLE_COLUMNS selection */}
       <div className="px-5 pb-3 flex flex-wrap gap-4 text-xs font-mono text-ink/50">
-        {col('location') && account.accountLocation && <span>📍 {account.accountLocation}</span>}
+        {col('account_location') && account.accountLocation && <span>📍 {account.accountLocation}</span>}
         {col('follower_count') && account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
-        {col('engagement_rate') && account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
-        {col('avg_likes') && account.avgLikes != null && <span>~{account.avgLikes.toLocaleString()} avg likes</span>}
+        {col('engagement') && account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
+        {col('engagement') && account.avgLikes != null && <span>~{account.avgLikes.toLocaleString()} avg likes</span>}
+        {col('relevancy_score') && account.scores?.relevancy != null && <span>Relevancy {account.scores.relevancy}/10</span>}
+        {col('engagement_score') && account.scores?.engagement != null && <span>Eng score {account.scores.engagement}/10</span>}
         {col('niche_signals') && account.nicheSignals?.length > 0 && (
           <span>{account.nicheSignals.slice(0, 3).join(' · ')}</span>
         )}
-        {col('sample_post') && account.samplePostUrl && (
+        {col('sample_post_url') && account.samplePostUrl && (
           <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
             className="text-accent hover:underline flex items-center gap-0.5">
             Sample post <ExternalLink size={10} />
           </a>
         )}
+        {col('scraped_post_likes') && account.samplePostLikes != null && (
+          <span>{account.samplePostLikes.toLocaleString()} post likes</span>
+        )}
+        {col('scraped_post_comments') && account.samplePostComments != null && (
+          <span>{account.samplePostComments.toLocaleString()} comments</span>
+        )}
+        {col('scraped_post_plays') && account.samplePostPlays != null && (
+          <span>{account.samplePostPlays.toLocaleString()} plays</span>
+        )}
       </div>
 
-      {/* Bio — column-controlled */}
-      {col('bio') && account.bio && (
+      {/* Caption — shown separately when selected */}
+      {col('sample_caption') && account.sampleCaption && (
         <div className="px-5 pb-3">
-          <p className="text-xs text-ink/50 line-clamp-2">{account.bio}</p>
-        </div>
-      )}
-
-      {/* Hashtags — column-controlled */}
-      {col('hashtags') && account.hashtags?.length > 0 && (
-        <div className="px-5 pb-3 flex flex-wrap gap-1">
-          {account.hashtags.slice(0, 8).map((h) => (
-            <span key={h} className="tag text-xs">#{h}</span>
-          ))}
+          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Scraped Caption</p>
+          <p className="text-xs text-ink/50 line-clamp-3">{account.sampleCaption}</p>
         </div>
       )}
 
@@ -287,114 +478,6 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   )
 }
 
-// Read-only view rendered when the assistant opens the return link (?view=assistant)
-function AssistantView({ accounts, reviewState, campaignBrief }) {
-  const approvedCount = Object.values(reviewState).filter(e => e.status === 'approved').length
-  const rejectedCount = Object.values(reviewState).filter(e => e.status === 'rejected').length
-  const pendingCount = accounts.length - approvedCount - rejectedCount
-
-  const handleExport = () => {
-    // Pass accounts as both results and influencers — all fields live on the stored object
-    exportToCsv(accounts, accounts, ASSISTANT_EXPORT_COLS, {}, reviewState).catch(console.error)
-  }
-
-  const statusConfig = {
-    approved: { label: 'Approved', cls: 'bg-sage/10 text-sage border-sage/30' },
-    rejected: { label: 'Rejected', cls: 'bg-rose/10 text-rose/70 border-rose/20' },
-    pending:  { label: 'Pending',  cls: 'bg-ink/5 text-ink/40 border-ink/10' },
-  }
-
-  return (
-    <div className="min-h-screen bg-paper px-6 py-10 max-w-6xl mx-auto">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Review Results · Read Only</p>
-          <h1 className="text-2xl font-semibold text-ink mb-1">{accounts.length} accounts reviewed</h1>
-          <p className="text-sm text-ink/50">
-            <span className="text-sage font-medium">{approvedCount} approved</span>
-            {' · '}
-            <span className="text-rose/70 font-medium">{rejectedCount} rejected</span>
-            {' · '}
-            {pendingCount} pending
-          </p>
-          {campaignBrief && (
-            <div className="mt-4 px-4 py-3 bg-mist/50 rounded-xl max-w-xl">
-              <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Campaign brief</p>
-              <p className="text-sm text-ink/70">{campaignBrief}</p>
-            </div>
-          )}
-        </div>
-        <button onClick={handleExport}
-          className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all flex-shrink-0">
-          <Download size={15} /> Export XLSX
-        </button>
-      </div>
-
-      <div className="border border-mist rounded-xl overflow-x-auto">
-        {/* Header row */}
-        <div
-          className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
-          style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr' }}
-        >
-          <span>Account</span>
-          <span className="text-center">Brand</span>
-          <span className="text-center">Score</span>
-          <span className="text-center">Avg Likes</span>
-          <span className="text-center">Status</span>
-          <span>DM Draft</span>
-        </div>
-
-        {accounts.map((account) => {
-          const rs = reviewState[account.username]
-          const status = rs?.status || 'pending'
-          const cfg = statusConfig[status]
-          return (
-            <div
-              key={account.username}
-              className="grid gap-3 px-4 py-3.5 border-b border-mist/50 items-center last:border-0"
-              style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 2fr' }}
-            >
-              <div className="min-w-0">
-                <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
-                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1">
-                  @{account.username} <ExternalLink size={11} className="opacity-40" />
-                </a>
-                {account.fullName && <p className="text-xs text-ink/40 truncate">{account.fullName}</p>}
-              </div>
-              <div className="flex justify-center">
-                <span className="font-mono text-xs text-ink/60 truncate max-w-full">{account.sourceBrand || '—'}</span>
-              </div>
-              <div className="flex justify-center">
-                <span className={`score-badge ${account.overall >= 70 ? 'score-high' : account.overall >= 45 ? 'score-mid' : 'score-low'}`}>
-                  {account.overall}
-                </span>
-              </div>
-              <div className="flex justify-center">
-                <span className="font-mono text-xs text-ink/60">
-                  {account.avgLikes != null ? `~${account.avgLikes.toLocaleString()}` : '—'}
-                </span>
-              </div>
-              <div className="flex justify-center">
-                <span className={`px-2 py-0.5 rounded-full text-xs border font-mono ${cfg.cls}`}>
-                  {cfg.label}
-                </span>
-              </div>
-              <div className="min-w-0">
-                {rs?.dm_draft
-                  ? <p className="text-xs text-ink/60 line-clamp-2">{rs.dm_draft}</p>
-                  : <span className="text-xs text-ink/20 font-mono">—</span>
-                }
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <p className="mt-6 text-xs text-ink/20 font-mono text-center">Read-only view · Changes made by brand manager are reflected here</p>
-    </div>
-  )
-}
-
 export default function ReviewPage({ reviewId, view }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -402,7 +485,7 @@ export default function ReviewPage({ reviewId, view }) {
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_REVIEW_COLUMNS)
+  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
   const [returnLinkCopied, setReturnLinkCopied] = useState(false)
 
   useEffect(() => {
@@ -486,7 +569,6 @@ export default function ReviewPage({ reviewId, view }) {
 
   return (
     <div className="min-h-screen bg-paper px-6 py-10 max-w-3xl mx-auto">
-      {/* Header */}
       <div className="mb-8">
         <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">KOL Review</p>
         <div className="flex items-start justify-between gap-4">
@@ -520,7 +602,6 @@ export default function ReviewPage({ reviewId, view }) {
         )}
       </div>
 
-      {/* Account cards */}
       <div className="space-y-4">
         {accounts.map((account) => (
           <AccountCard

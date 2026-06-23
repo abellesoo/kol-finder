@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Share2, Check, Copy, X } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Send, Check, X } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { fetchBatchStats } from '../lib/apifyApi'
@@ -192,35 +192,6 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
-// Share modal — shows the generated link and a copy button
-function ShareModal({ url, onClose }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-  return (
-    <div className="fixed inset-0 bg-ink/40 z-50 flex items-center justify-center p-6" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-ink">Share link created</h2>
-          <button onClick={onClose} className="text-ink/30 hover:text-ink"><X size={18} /></button>
-        </div>
-        <p className="text-xs text-ink/50 mb-3">Send this link to the brand manager. They can approve or reject each account without logging in.</p>
-        <div className="flex items-center gap-2 p-3 bg-mist/40 rounded-lg border border-mist mb-4">
-          <p className="font-mono text-xs text-ink/70 truncate flex-1">{url}</p>
-          <button onClick={copy} className="flex items-center gap-1 text-xs text-accent hover:text-accent/70 flex-shrink-0 transition-colors">
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-        <button onClick={onClose} className="w-full py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all">Done</button>
-      </div>
-    </div>
-  )
-}
 
 function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
@@ -439,12 +410,9 @@ export default function ResultsStep({ results, influencers, config }) {
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedAccounts, setSelectedAccounts] = useState(new Set())
   const [shareStatus, setShareStatus] = useState('idle') // idle | loading | done | error
-  const [shareUrl, setShareUrl] = useState(null)
-  const [shareId, setShareId] = useState(null)
 
-  // Review state synced from Supabase (Phase 4)
-  const [reviewState, setReviewState] = useState({}) // { username: { status, dm_status, dm_draft } }
-  const [syncStatus, setSyncStatus] = useState('idle') // idle | loading | done | error
+  // Review state (kept for column rendering; populated if this session had a prior share)
+  const [reviewState] = useState({})
 
   const [liveStats, setLiveStats] = useState(() => {
     const cache = readCache()
@@ -556,7 +524,7 @@ export default function ResultsStep({ results, influencers, config }) {
     setSelectedAccounts(new Set(filtered.map((r) => r.username)))
   }
 
-  // Share selected accounts to Supabase
+  // Send selected accounts to the Review Queue
   const handleShare = async () => {
     if (selectedAccounts.size === 0) return
     setShareStatus('loading')
@@ -585,51 +553,29 @@ export default function ResultsStep({ results, influencers, config }) {
           medianViews: r.medianViews ?? null,
         }))
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('shared_results')
         .insert({
           campaign_brief: config?.campaignBrief || '',
           accounts: accountsToShare,
           review_state: {},
         })
-        .select('id')
-        .single()
 
       if (error) throw new Error(error.message)
-
-      const base = window.location.origin + window.location.pathname
-      const url = `${base}?review=${data.id}`
-      setShareUrl(url)
-      setShareId(data.id)
       setShareStatus('done')
+      setTimeout(() => {
+        setShareStatus('idle')
+        setSelectionMode(false)
+        setSelectedAccounts(new Set())
+      }, 3000)
     } catch (err) {
-      console.error('Share failed:', err)
+      console.error('Send for review failed:', err)
       setShareStatus('error')
     }
   }
 
-  // Sync review state from Supabase (Phase 4)
-  const handleSync = useCallback(async () => {
-    if (!shareId) return
-    setSyncStatus('loading')
-    try {
-      const { data, error } = await supabase
-        .from('shared_results')
-        .select('review_state')
-        .eq('id', shareId)
-        .single()
-      if (error) throw new Error(error.message)
-      setReviewState(data.review_state || {})
-      setSyncStatus('done')
-    } catch (err) {
-      console.error('Sync failed:', err)
-      setSyncStatus('error')
-    }
-  }, [shareId])
-
   return (
     <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
-      {shareUrl && <ShareModal url={shareUrl} onClose={() => setShareUrl(null)} />}
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
@@ -647,15 +593,20 @@ export default function ResultsStep({ results, influencers, config }) {
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
 
-          {/* Selection + Share controls */}
+          {/* Selection + Send for Review controls */}
           {!selectionMode ? (
             <button
               onClick={() => setSelectionMode(true)}
               className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
             >
-              <Share2 size={15} />
-              Share for review
+              <Send size={15} />
+              Send for Review
             </button>
+          ) : shareStatus === 'done' ? (
+            <div className="flex items-center gap-2 px-4 py-2 bg-sage/10 border border-sage/30 rounded-lg">
+              <Check size={15} className="text-sage" />
+              <span className="text-sm text-sage font-medium">Sent to Review Queue</span>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <button onClick={handleSelectAll} className="text-xs text-ink/40 hover:text-ink font-mono px-2 py-1 border border-mist rounded">
@@ -667,27 +618,14 @@ export default function ResultsStep({ results, influencers, config }) {
                 disabled={selectedAccounts.size === 0 || shareStatus === 'loading'}
                 className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm hover:bg-accent/80 transition-all disabled:opacity-40"
               >
-                {shareStatus === 'loading' ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
-                {shareStatus === 'loading' ? 'Sharing…' : 'Create link'}
+                {shareStatus === 'loading' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                {shareStatus === 'loading' ? 'Sending…' : 'Send for Review'}
               </button>
               <button onClick={() => { setSelectionMode(false); setSelectedAccounts(new Set()) }}
                 className="text-xs text-ink/40 hover:text-ink px-2 py-1 border border-mist rounded">
                 Cancel
               </button>
             </div>
-          )}
-
-          {/* Sync button (shows once a share exists) */}
-          {shareId && (
-            <button
-              onClick={handleSync}
-              disabled={syncStatus === 'loading'}
-              className="flex items-center gap-2 px-3 py-2 border border-mist rounded-lg text-sm text-ink/50 hover:border-ink/30 hover:text-ink transition-all"
-              title="Sync approval + DM status from the review link"
-            >
-              {syncStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Sync reviews
-            </button>
           )}
 
           {/* Live stats */}
@@ -748,12 +686,12 @@ export default function ResultsStep({ results, influencers, config }) {
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Live fetch failed: {liveError}</div>
       )}
       {shareStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Failed to create share link. Check your Supabase env vars.</div>
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Failed to send for review. Check your Supabase env vars.</div>
       )}
 
-      {selectionMode && (
+      {selectionMode && shareStatus !== 'done' && (
         <div className="mb-4 px-4 py-3 bg-accent-dim/20 border border-accent/20 rounded-xl text-xs text-accent/80">
-          Tick the accounts you want the brand manager to review, then click <strong>Create link</strong>.
+          Tick the accounts you want the brand manager to review, then click <strong>Send for Review</strong>.
         </div>
       )}
 

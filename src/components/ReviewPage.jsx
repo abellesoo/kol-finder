@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, Share2 } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ASSISTANT_ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
+import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
@@ -95,190 +95,7 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
-// Render a single cell value for the AssistantView table.
-// Mirrors ResultsStep renderCell but reads from the stored account object (no live stats).
-function renderAssistantCell(col, account) {
-  switch (col.id) {
-    case 'brand':
-      return <p className="font-mono text-xs text-ink/70 truncate">{account.sourceBrand || '—'}</p>
-    case 'overall':
-      return <ScoreBadge score={account.overall} />
-    case 'relevancy_score':
-      return <MiniBar value={account.scores?.relevancy ?? 0} color="bg-rose/70" />
-    case 'engagement_score':
-      return <MiniBar value={account.scores?.engagement ?? 0} />
-    case 'account_location':
-      return <p className="font-mono text-xs text-ink/70">{account.accountLocation || '—'}</p>
-    case 'engagement':
-      return account.engagementRate != null ? (
-        <div>
-          <p className="font-mono text-sm text-ink">{account.engagementRate}%</p>
-          <p className="font-mono text-xs text-ink/30">{(account.avgLikes || 0).toLocaleString()} avg likes</p>
-        </div>
-      ) : <p className="font-mono text-xs text-ink/30">—</p>
-    case 'follower_count':
-      return <p className="font-mono text-xs text-ink/70">{account.followerCount?.toLocaleString() || '—'}</p>
-    case 'live_median_likes':
-      return account.medianLikes != null
-        ? <p className="font-mono text-sm text-ink">{account.medianLikes.toLocaleString()}</p>
-        : <p className="font-mono text-xs text-ink/20">—</p>
-    case 'live_median_views':
-      return account.medianViews != null
-        ? <p className="font-mono text-sm text-ink">{account.medianViews.toLocaleString()}</p>
-        : <p className="font-mono text-xs text-ink/20">—</p>
-    case 'sample_post_url':
-      return account.samplePostUrl ? (
-        <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
-          className="font-mono text-xs text-accent hover:underline flex items-center gap-1">
-          View post <ExternalLink size={10} />
-        </a>
-      ) : <p className="font-mono text-xs text-ink/20">—</p>
-    case 'scraped_post_likes':
-      return <p className="font-mono text-xs text-ink/70">{account.samplePostLikes?.toLocaleString() ?? '—'}</p>
-    case 'scraped_post_comments':
-      return <p className="font-mono text-xs text-ink/70">{account.samplePostComments?.toLocaleString() ?? '—'}</p>
-    case 'scraped_post_plays':
-      return <p className="font-mono text-xs text-ink/70">{account.samplePostPlays?.toLocaleString() ?? '—'}</p>
-    case 'sample_caption':
-      return <p className="text-xs text-ink/60 line-clamp-2">{account.sampleCaption || '—'}</p>
-    case 'niche_signals':
-      return account.nicheSignals?.length > 0
-        ? <p className="text-xs text-ink/60">{account.nicheSignals.join(', ')}</p>
-        : <p className="font-mono text-xs text-ink/20">—</p>
-    default:
-      return <p className="font-mono text-xs text-ink/20">—</p>
-  }
-}
 
-// Read-only view rendered when the assistant opens the return link (?view=assistant)
-function AssistantView({ accounts, reviewState, campaignBrief }) {
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
-
-  const approvedCount = Object.values(reviewState).filter(e => e.status === 'approved').length
-  const rejectedCount = Object.values(reviewState).filter(e => e.status === 'rejected').length
-  const pendingCount = accounts.length - approvedCount - rejectedCount
-
-  const handleExport = () => {
-    // Same format as ResultsStep: ALWAYS_EXPORT_IDS + selected column exportIds
-    // approval and dm_draft already covered by ALWAYS_EXPORT_IDS (approve, dm_status, dm_draft)
-    const exportIds = [
-      ...ASSISTANT_ALWAYS_EXPORT_IDS,
-      ...TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id)).flatMap(c => c.exportIds),
-    ]
-    exportToCsv(accounts, accounts, exportIds, {}, reviewState).catch(console.error)
-  }
-
-  const statusConfig = {
-    approved: { label: 'Approved', cls: 'bg-sage/10 text-sage border-sage/30' },
-    rejected: { label: 'Rejected', cls: 'bg-rose/10 text-rose/70 border-rose/20' },
-    pending:  { label: 'Pending',  cls: 'bg-ink/5 text-ink/40 border-ink/10' },
-  }
-
-  const visibleCols = TABLE_COLUMNS.filter(c => selectedColumns.includes(c.id))
-  // Account (2fr) + selected columns + Approval Status (1fr) + DM Draft (2fr)
-  const gridTemplate = `2fr ${visibleCols.map(c => c.width).join(' ')} 1fr 2fr`
-
-  return (
-    <div className="min-h-screen bg-paper px-6 py-10 max-w-screen-xl mx-auto">
-      {/* Header */}
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Review Results · Read Only</p>
-          <h1 className="text-2xl font-semibold text-ink mb-1">{accounts.length} accounts reviewed</h1>
-          <p className="text-sm text-ink/50">
-            <span className="text-sage font-medium">{approvedCount} approved</span>
-            {' · '}
-            <span className="text-rose/70 font-medium">{rejectedCount} rejected</span>
-            {' · '}
-            {pendingCount} pending
-          </p>
-          {campaignBrief && (
-            <div className="mt-4 px-4 py-3 bg-mist/50 rounded-xl max-w-xl">
-              <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Campaign brief</p>
-              <p className="text-sm text-ink/70">{campaignBrief}</p>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
-          <button onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all">
-            <Download size={15} /> Export XLSX
-          </button>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="border border-mist rounded-xl overflow-x-auto">
-        {/* Header row */}
-        <div
-          className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
-          style={{ gridTemplateColumns: gridTemplate }}
-        >
-          <span>Account</span>
-          {visibleCols.map(col => (
-            <span key={col.id} className="flex items-center justify-center gap-1">{col.label}</span>
-          ))}
-          <span className="flex items-center justify-center">Status</span>
-          <span>DM Draft</span>
-        </div>
-
-        {accounts.map((account) => {
-          const rs = reviewState[account.username]
-          const status = rs?.status || 'pending'
-          const cfg = statusConfig[status]
-          return (
-            <div
-              key={account.username}
-              className="grid gap-3 px-4 py-3.5 border-b border-mist/50 items-center last:border-0"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              {/* Account — fixed */}
-              <div className="min-w-0">
-                <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
-                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1">
-                  @{account.username} <ExternalLink size={11} className="opacity-40" />
-                </a>
-                {account.fullName && <p className="text-xs text-ink/40 truncate">{account.fullName}</p>}
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {(account.flags || []).slice(0, 2).map(f => (
-                    <span key={f} className={`tag text-xs ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Dynamic selected columns */}
-              {visibleCols.map(col => (
-                <div key={col.id} className="min-w-0 overflow-hidden flex items-center justify-center">
-                  {renderAssistantCell(col, account)}
-                </div>
-              ))}
-
-              {/* Pinned: Approval Status */}
-              <div className="flex items-center justify-center">
-                <span className={`px-2 py-0.5 rounded-full text-xs border font-mono ${cfg.cls}`}>
-                  {cfg.label}
-                </span>
-              </div>
-
-              {/* Pinned: DM Draft */}
-              <div className="min-w-0">
-                {rs?.dm_draft
-                  ? <p className="text-xs text-ink/60 line-clamp-2">{rs.dm_draft}</p>
-                  : <span className="text-xs text-ink/20 font-mono">—</span>
-                }
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <p className="mt-6 text-xs text-ink/20 font-mono text-center">
-        Read-only · Changes made by brand manager are reflected here
-      </p>
-    </div>
-  )
-}
 
 function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedColumns }) {
   const status = reviewEntry?.status || 'pending'
@@ -488,7 +305,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   )
 }
 
-export default function ReviewPage({ reviewId, view }) {
+export default function ReviewPage({ reviewId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [campaignBrief, setCampaignBrief] = useState('')
@@ -496,7 +313,6 @@ export default function ReviewPage({ reviewId, view }) {
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
-  const [returnLinkCopied, setReturnLinkCopied] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -540,14 +356,6 @@ export default function ReviewPage({ reviewId, view }) {
     })
   }, [persistUpdate])
 
-  const handleShareBack = useCallback(async () => {
-    const url = new URL(window.location.href)
-    url.searchParams.set('view', 'assistant')
-    await navigator.clipboard.writeText(url.toString()).catch(() => {})
-    setReturnLinkCopied(true)
-    setTimeout(() => setReturnLinkCopied(false), 2500)
-  }, [])
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -560,16 +368,16 @@ export default function ReviewPage({ reviewId, view }) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <div className="text-center max-w-sm">
-          <p className="text-lg font-semibold text-ink mb-2">Link not found</p>
+          {onBack && (
+            <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-ink/40 hover:text-ink mb-6 mx-auto transition-colors">
+              <ArrowLeft size={13} /> Back to queue
+            </button>
+          )}
+          <p className="text-lg font-semibold text-ink mb-2">Review not found</p>
           <p className="text-sm text-ink/50">{error}</p>
         </div>
       </div>
     )
-  }
-
-  // Assistant return view — read-only
-  if (view === 'assistant') {
-    return <AssistantView accounts={accounts} reviewState={reviewState} campaignBrief={campaignBrief} />
   }
 
   // Brand manager approval view
@@ -580,6 +388,11 @@ export default function ReviewPage({ reviewId, view }) {
   return (
     <div className="min-h-screen bg-paper px-6 py-10 max-w-3xl mx-auto">
       <div className="mb-8">
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-ink/40 hover:text-ink mb-4 transition-colors">
+            <ArrowLeft size={13} /> Back to queue
+          </button>
+        )}
         <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">KOL Review</p>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -595,13 +408,6 @@ export default function ReviewPage({ reviewId, view }) {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
-            <button
-              onClick={handleShareBack}
-              className="flex items-center gap-2 px-3 py-1.5 border border-mist rounded-lg text-xs text-ink/60 hover:border-ink/30 hover:text-ink transition-all"
-            >
-              {returnLinkCopied ? <Check size={13} className="text-sage" /> : <Share2 size={13} />}
-              {returnLinkCopied ? 'Link copied!' : 'Share back'}
-            </button>
           </div>
         </div>
         {campaignBrief && (

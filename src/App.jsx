@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, Search, Clock, HelpCircle, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, Search, Clock, HelpCircle, Users, LogOut, ClipboardList, Send } from 'lucide-react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
@@ -7,6 +7,8 @@ import DashboardPage from './components/DashboardPage'
 import InstructionsPage from './components/InstructionsPage'
 import HistoryPage from './components/HistoryPage'
 import ReviewPage from './components/ReviewPage'
+import ReviewQueuePage from './components/ReviewQueuePage'
+import ReadyToSendPage from './components/ReadyToSendPage'
 import LoginPage from './components/LoginPage'
 import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
@@ -14,14 +16,13 @@ import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
-const REVIEW_ID = new URLSearchParams(window.location.search).get('review')
-const VIEW_PARAM = new URLSearchParams(window.location.search).get('view')
-
 function navItemsForRole(role) {
   const items = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
     { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
+    { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
+    { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
     { id: 'team', label: 'Team', icon: Users, adminOnly: true },
   ]
   return items.filter((item) => {
@@ -34,6 +35,8 @@ function navItemsForRole(role) {
 function Sidebar({ mode, onNav, user, role, onSignOut }) {
   const navItems = navItemsForRole(role)
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
+  // review_detail is entered from review_queue — keep queue highlighted
+  const activeId = mode === 'review_detail' ? 'review_queue' : mode
 
   return (
     <aside
@@ -50,12 +53,12 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
             key={id}
             onClick={() => onNav(id)}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left w-full ${
-              mode === id
+              activeId === id
                 ? 'bg-accent/10 text-accent'
                 : 'text-ink/50 hover:text-ink hover:bg-mist/60'
             }`}
           >
-            <Icon size={16} strokeWidth={mode === id ? 2 : 1.5} />
+            <Icon size={16} strokeWidth={activeId === id ? 2 : 1.5} />
             {label}
           </button>
         ))}
@@ -65,12 +68,12 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
         <button
           onClick={() => onNav('help')}
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left w-full ${
-            mode === 'help'
+            activeId === 'help'
               ? 'bg-accent/10 text-accent'
               : 'text-ink/50 hover:text-ink hover:bg-mist/60'
           }`}
         >
-          <HelpCircle size={16} strokeWidth={mode === 'help' ? 2 : 1.5} />
+          <HelpCircle size={16} strokeWidth={activeId === 'help' ? 2 : 1.5} />
           Help
         </button>
         <a
@@ -101,6 +104,7 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 
 function MainApp({ user, role, onSignOut }) {
   const [mode, setMode] = useState('dashboard')
+  const [openReviewId, setOpenReviewId] = useState(null)
   const [step, setStep] = useState('upload')
   const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
@@ -187,13 +191,33 @@ function MainApp({ user, role, onSignOut }) {
 
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
+  const handleNav = (newMode) => {
+    setMode(newMode)
+    if (newMode !== 'review_detail') setOpenReviewId(null)
+  }
+
+  const handleOpenReview = (id) => {
+    setOpenReviewId(id)
+    setMode('review_detail')
+  }
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar mode={mode} onNav={setMode} user={user} role={role} onSignOut={onSignOut} />
+      <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
         {mode === 'dashboard' && <DashboardPage />}
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && <TeamPage />}
+        {mode === 'review_queue' && (
+          <ReviewQueuePage onOpenReview={handleOpenReview} />
+        )}
+        {mode === 'review_detail' && openReviewId && (
+          <ReviewPage
+            reviewId={openReviewId}
+            onBack={() => { setMode('review_queue'); setOpenReviewId(null) }}
+          />
+        )}
+        {mode === 'ready_to_send' && <ReadyToSendPage />}
         {mode === 'history' && (
           <HistoryPage onLoadSeederSession={handleLoadSeederSession} />
         )}
@@ -252,9 +276,6 @@ function MainApp({ user, role, onSignOut }) {
 }
 
 export default function App() {
-  if (REVIEW_ID) {
-    return <ReviewPage reviewId={REVIEW_ID} view={VIEW_PARAM} />
-  }
   return <AuthGate />
 }
 

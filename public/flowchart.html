@@ -8,31 +8,31 @@
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #0c0c0c;
+      background: #F7F5F1;
       font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
       height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      color: #e0e0e0;
+      color: #1a1a1a;
     }
 
     /* ── HEADER ── */
     header {
       padding: 13px 28px;
-      border-bottom: 1px solid #1c1c1c;
+      border-bottom: 1px solid #E8E3DB;
       display: flex;
       align-items: center;
       gap: 14px;
       flex-shrink: 0;
-      background: #0c0c0c;
+      background: #F7F5F1;
     }
 
     .logo {
       font-size: 10px;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: #3a3a3a;
+      color: #aaa;
       font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
@@ -40,19 +40,19 @@
       width: 3px;
       height: 3px;
       border-radius: 50%;
-      background: #2a2a2a;
+      background: #D5CFC5;
     }
 
     .page-title {
       font-size: 12px;
-      color: #4a4a4a;
+      color: #999;
       letter-spacing: 0.04em;
     }
 
     .hint {
       margin-left: auto;
       font-size: 11px;
-      color: #2e2e2e;
+      color: #bbb;
       font-family: 'SF Mono', monospace;
     }
 
@@ -91,7 +91,7 @@
       font-size: 9px;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: #2e2e2e;
+      color: #bbb;
       font-family: 'SF Mono', monospace;
       top: 14px;
       z-index: 1;
@@ -113,8 +113,8 @@
       user-select: none;
     }
 
-    .node:hover  { filter: brightness(1.1); transform: translateY(-1px); }
-    .node.active { outline: 2px solid rgba(255,255,255,0.28); outline-offset: 3px; }
+    .node:hover  { filter: brightness(0.95); transform: translateY(-1px); }
+    .node.active { outline: 2px solid rgba(0,0,0,0.2); outline-offset: 3px; }
 
     .node-label {
       font-size: 12px;
@@ -153,9 +153,9 @@
     .sidebar {
       width: 375px;
       flex-shrink: 0;
-      border-left: 1px solid #181818;
+      border-left: 1px solid #E8E3DB;
       overflow-y: auto;
-      background: #0c0c0c;
+      background: #F7F5F1;
       display: flex;
       flex-direction: column;
     }
@@ -166,7 +166,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #242424;
+      color: #ccc;
       font-size: 12px;
       text-align: center;
       padding: 40px;
@@ -213,7 +213,7 @@
       font-size: 9px;
       text-transform: uppercase;
       letter-spacing: 0.13em;
-      color: #323232;
+      color: #aaa;
       font-family: 'SF Mono', monospace;
       margin-bottom: 7px;
     }
@@ -221,18 +221,18 @@
     .section-text {
       font-size: 13px;
       line-height: 1.68;
-      color: #7a7a7a;
+      color: #555;
     }
 
     .output-pill {
       display: inline-block;
-      background: #151515;
-      border: 1px solid #252525;
+      background: #EDEAE4;
+      border: 1px solid #E0DBD3;
       border-radius: 5px;
       padding: 5px 11px;
       font-size: 11px;
       font-family: 'SF Mono', monospace;
-      color: #555;
+      color: #666;
       margin-top: 2px;
       word-break: break-word;
     }
@@ -245,18 +245,18 @@
     }
 
     .weight-chip {
-      background: #141414;
-      border: 1px solid #202020;
+      background: #EDEAE4;
+      border: 1px solid #E0DBD3;
       border-radius: 7px;
       padding: 9px 11px;
       font-size: 11px;
       font-family: 'SF Mono', monospace;
-      color: #505050;
+      color: #666;
     }
 
     .weight-chip strong {
       display: block;
-      color: #909090;
+      color: #333;
       font-size: 12px;
       margin-bottom: 2px;
       font-weight: 600;
@@ -265,10 +265,10 @@
     /* scrollbar */
     .sidebar::-webkit-scrollbar { width: 4px; }
     .sidebar::-webkit-scrollbar-track { background: transparent; }
-    .sidebar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: #D5CFC5; border-radius: 4px; }
     .chart-container::-webkit-scrollbar { width: 6px; height: 6px; }
     .chart-container::-webkit-scrollbar-track { background: transparent; }
-    .chart-container::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 4px; }
+    .chart-container::-webkit-scrollbar-thumb { background: #D5CFC5; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -277,7 +277,7 @@
   <span class="logo">KOL Finder</span>
   <div class="divider-dot"></div>
   <span class="page-title">System Flow</span>
-  <a href="https://abellesoo.github.io/kol-finder/" target="_blank" style="margin-left:auto;font-size:11px;color:#3a3a3a;font-family:'SF Mono',monospace;text-decoration:none;letter-spacing:0.04em;" onmouseover="this.style.color='#888'" onmouseout="this.style.color='#3a3a3a'">↗ live site</a>
+  <a href="https://abellesoo.github.io/kol-finder/" target="_blank" style="margin-left:auto;font-size:11px;color:#bbb;font-family:'SF Mono',monospace;text-decoration:none;letter-spacing:0.04em;" onmouseover="this.style.color='#555'" onmouseout="this.style.color='#bbb'">↗ live site</a>
   <span class="hint">click a node →</span>
 </header>
 
@@ -404,7 +404,7 @@ const nodes = [
   },
   {
     id: 'compute', label: 'computeStats',
-    sub: 'Filter to last 90 days',
+    sub: 'Filter to last 3 months',
     type: 'process', x: 516, y: 452, w: 172, h: 54,
   },
   {
@@ -525,7 +525,7 @@ const details = {
     title: 'Fetch Live Stats',
     colorType: 'opt',
     badge: 'optional · costs ~$0.01/account',
-    what: 'Triggers a parallelised Apify reel scraper batch through the Cloudflare Worker proxy. Scrapes the 10 most recent posts for every account in the current results, computing median likes and median views. Results are cached in localStorage for 7 days — re-running within that window skips already-cached accounts. Upgrades the Engagement Score and Overall Score in real time as each account completes.',
+    what: 'Triggers a parallelised Apify Instagram Scraper batch (chunks of 50) through the Cloudflare Worker proxy. Scrapes up to 10 recent posts per account, computing median likes and median views. Results are cached in localStorage for 7 days — re-running within that window skips already-cached accounts. Upgrades the Engagement Score and Overall Score in real time as each chunk completes.',
     output: 'liveStats map: { [username]: { medianLikes, medianViews, hiddenCount, followerCount } }',
   },
   ai_dive: {
@@ -645,16 +645,16 @@ function render() {
   svg.innerHTML = `
     <defs>
       <marker id="arr"      markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L7,3 z" fill="#2c2c2c"/>
+        <path d="M0,0 L0,6 L7,3 z" fill="#999"/>
       </marker>
       <marker id="arr-api"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L7,3 z" fill="#1e3a7a"/>
+        <path d="M0,0 L0,6 L7,3 z" fill="#4a7fd4"/>
       </marker>
       <marker id="arr-opt"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L7,3 z" fill="#6a4a9a"/>
+        <path d="M0,0 L0,6 L7,3 z" fill="#8b5ccc"/>
       </marker>
       <marker id="arr-info" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L7,3 z" fill="#1e1e1e"/>
+        <path d="M0,0 L0,6 L7,3 z" fill="#bbb"/>
       </marker>
     </defs>
   `
@@ -663,7 +663,7 @@ function render() {
   const sep = document.createElementNS(ns, 'line')
   sep.setAttribute('x1', '472'); sep.setAttribute('y1', '28')
   sep.setAttribute('x2', '472'); sep.setAttribute('y2', '660')
-  sep.setAttribute('stroke', '#181818')
+  sep.setAttribute('stroke', '#D5CFC5')
   sep.setAttribute('stroke-width', '1')
   sep.setAttribute('stroke-dasharray', '5 5')
   svg.appendChild(sep)
@@ -674,22 +674,22 @@ function render() {
     path.setAttribute('d', buildPath(e))
     path.setAttribute('fill', 'none')
     if (e.style === 'api') {
-      path.setAttribute('stroke', '#1e3a7a')
+      path.setAttribute('stroke', '#4a7fd4')
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('stroke-dasharray', '4 3')
       path.setAttribute('marker-end', 'url(#arr-api)')
     } else if (e.style === 'opt') {
-      path.setAttribute('stroke', '#3d2a5a')
+      path.setAttribute('stroke', '#8b5ccc')
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('stroke-dasharray', '5 3')
       path.setAttribute('marker-end', 'url(#arr-opt)')
     } else if (e.style === 'info') {
-      path.setAttribute('stroke', '#1e1e1e')
+      path.setAttribute('stroke', '#bbb')
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('stroke-dasharray', '3 3')
       path.setAttribute('marker-end', 'url(#arr-info)')
     } else {
-      path.setAttribute('stroke', '#282828')
+      path.setAttribute('stroke', '#999')
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('marker-end', 'url(#arr)')
     }

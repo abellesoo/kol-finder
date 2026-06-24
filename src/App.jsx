@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutDashboard, Search, Clock, HelpCircle, Users, LogOut, ClipboardList, Send } from 'lucide-react'
+import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send } from 'lucide-react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
@@ -95,6 +95,15 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 
       {/* Nav groups */}
       <nav className="flex-1 py-[6px] flex flex-col overflow-y-auto">
+        <div className="px-[10px] mb-[2px]">
+          <NavButton
+            id="help"
+            label="Instructions"
+            Icon={BookOpen}
+            isActive={activeId === 'help'}
+            onClick={() => onNav('help')}
+          />
+        </div>
         {groups.map((group, gi) => (
           <div key={group.label} className={gi > 0 ? 'mt-[2px]' : ''}>
             <p className="font-mono text-[9px] tracking-[.16em] text-[#B0A693] uppercase px-[20px] pb-[4px] pt-[10px]">
@@ -118,13 +127,6 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 
       {/* Footer nav */}
       <div className="px-[10px] pb-[4px] flex flex-col gap-[2px]">
-        <NavButton
-          id="help"
-          label="Help"
-          Icon={HelpCircle}
-          isActive={activeId === 'help'}
-          onClick={() => onNav('help')}
-        />
         {/* User block — only shown when logged in */}
         {user && (
         <div className="mt-[4px] pt-[12px] pb-[10px] border-t border-mist">
@@ -152,7 +154,7 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 }
 
 function MainApp({ user, role, onSignOut }) {
-  const [mode, setMode] = useState('dashboard')
+  const [mode, setMode] = useState('help')
   const [openReviewId, setOpenReviewId] = useState(null)
   const [step, setStep] = useState('upload')
   const [fileNames, setFileNames] = useState([])

@@ -160,12 +160,14 @@ function MainApp({ user, role, onSignOut }) {
   const [results, setResults] = useState([])
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
+  const [currentSessionId, setCurrentSessionId] = useState(null)
 
   const handleLoadSeederSession = (session) => {
     setFileNames(session.fileNames)
     setConfig(session.config)
     setInfluencers(session.influencers)
     setResults(session.results)
+    setCurrentSessionId(session.id)
     setStep('results')
     setMode('seeder')
   }
@@ -232,7 +234,9 @@ function MainApp({ user, role, onSignOut }) {
       }
       setResults(allResults)
       setStep('results')
-      saveSession({ fileNames, config: cfg, results: allResults, influencers }).catch(console.error)
+      saveSession({ fileNames, config: cfg, results: allResults, influencers })
+        .then((id) => setCurrentSessionId(id))
+        .catch(console.error)
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
     }
@@ -315,7 +319,7 @@ function MainApp({ user, role, onSignOut }) {
               />
             )}
             {step === 'results' && (
-              <ResultsStep results={results} influencers={influencers} config={config} />
+              <ResultsStep results={results} influencers={influencers} config={config} sessionId={currentSessionId} />
             )}
           </>
         )}

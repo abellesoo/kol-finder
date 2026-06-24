@@ -4,6 +4,7 @@ import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { fetchBatchStats } from '../lib/apifyApi'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
+import { updateSessionLiveStats } from '../lib/sessionHistory'
 import { supabase } from '../lib/supabase'
 import TableErrorBoundary from './TableErrorBoundary'
 
@@ -386,7 +387,7 @@ function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
 
-export default function ResultsStep({ results, influencers, config }) {
+export default function ResultsStep({ results, influencers, config, sessionId }) {
   const [sortKey, setSortKey] = useState('overall')
   const [sortDir, setSortDir] = useState('desc')
   const [filterFlag, setFilterFlag] = useState('all')
@@ -409,11 +410,19 @@ export default function ResultsStep({ results, influencers, config }) {
     for (const [u, entry] of Object.entries(cache)) {
       if (now - entry.ts < CACHE_TTL_MS && hasRealData(entry.stats)) valid[u] = entry.stats
     }
+    // Seed from saved results (persisted after a prior live fetch)
+    for (const r of results) {
+      if (!valid[r.username] && (r.medianLikes != null || r.medianViews != null)) {
+        valid[r.username] = { medianLikes: r.medianLikes ?? null, medianViews: r.medianViews ?? null }
+      }
+    }
     return valid
   })
   const [liveStatus, setLiveStatus] = useState(() => {
     const cache = readCache()
-    const hasCached = results.some((r) => hasRealData(cache[r.username]?.stats))
+    const hasCached = results.some(
+      (r) => hasRealData(cache[r.username]?.stats) || r.medianLikes != null || r.medianViews != null
+    )
     return hasCached ? 'done' : 'idle'
   })
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
@@ -494,6 +503,7 @@ export default function ResultsStep({ results, influencers, config }) {
       writeCache(updated)
       setLiveStats((prev) => ({ ...prev, ...statsMap }))
       setLiveStatus('done')
+      updateSessionLiveStats(sessionId, statsMap).catch(console.error)
     } catch (err) {
       setLiveError(err.message)
       setLiveStatus('error')

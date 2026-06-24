@@ -232,7 +232,7 @@ function MainApp({ user, role, onSignOut }) {
       }
       setResults(allResults)
       setStep('results')
-      saveSession({ fileNames, config: cfg, results: allResults, influencers })
+      saveSession({ fileNames, config: cfg, results: allResults, influencers }).catch(console.error)
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
     }

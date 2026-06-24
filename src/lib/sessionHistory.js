@@ -1,69 +1,81 @@
-const HISTORY_KEY = 'kol_session_history'
-const LOOKUP_KEY = 'kol_lookup_history'
-const MAX_SESSIONS = 5
-const MAX_LOOKUPS = 30
+import { supabase } from './supabase'
 
-export function saveSession({ fileNames, config, results, influencers }) {
-  try {
-    const history = loadHistory()
-    const session = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      fileNames,
-      accountCount: results.length,
-      config,
-      results,
-      // Strip large text fields — only needed for scoring, not display
-      influencers: influencers.map(({ captions, sampleCaptions, ...rest }) => rest),
-    }
-    const updated = [session, ...history].slice(0, MAX_SESSIONS)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
-  } catch {}
-}
+const LOCAL_KEY = 'kol_session_history'
+const MAX_SESSIONS = 20
 
-export function loadHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
-  } catch {
-    return []
+// ── Supabase-backed session history (shared across all users) ──────────────
+
+export async function saveSession({ fileNames, config, results, influencers }) {
+  const session = {
+    id: Date.now(),
+    file_names: fileNames || [],
+    account_count: results.length,
+    config,
+    results,
+    influencers: influencers.map(({ captions, sampleCaptions, ...rest }) => rest),
+  }
+
+  if (supabase) {
+    await supabase.from('sessions').insert(session)
+  } else {
+    try {
+      const existing = loadLocalHistory()
+      localStorage.setItem(LOCAL_KEY, JSON.stringify([session, ...existing].slice(0, MAX_SESSIONS)))
+    } catch {}
   }
 }
 
-export function deleteSession(id) {
-  try {
-    const updated = loadHistory().filter((s) => s.id !== id)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
-  } catch {}
+export async function loadHistory() {
+  if (supabase) {
+    const { data } = await supabase
+      .from('sessions')
+      .select('id, file_names, account_count, config, created_at')
+      .order('created_at', { ascending: false })
+      .limit(MAX_SESSIONS)
+    return (data || []).map(normalizeRow)
+  }
+  return loadLocalHistory()
 }
 
-export function saveLookup({ username, stats }) {
-  try {
-    const history = loadLookupHistory()
-    const entry = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      username,
-      medianLikes: stats.medianLikes,
-      medianViews: stats.medianViews,
-      hiddenCount: stats.hiddenCount,
-      total: stats.total,
-    }
-    const updated = [entry, ...history.filter((e) => e.username !== username)].slice(0, MAX_LOOKUPS)
-    localStorage.setItem(LOOKUP_KEY, JSON.stringify(updated))
-  } catch {}
+export async function loadSessionFull(id) {
+  if (supabase) {
+    const { data } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('id', id)
+      .single()
+    return data ? normalizeRow(data) : null
+  }
+  return loadLocalHistory().find((s) => s.id === id) || null
 }
 
-export function loadLookupHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(LOOKUP_KEY) || '[]')
-  } catch {
-    return []
+export async function deleteSession(id) {
+  if (supabase) {
+    await supabase.from('sessions').delete().eq('id', id)
+  } else {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(loadLocalHistory().filter((s) => s.id !== id)))
+    } catch {}
   }
 }
 
-export function deleteLookup(id) {
+// Normalise Supabase row (snake_case) → shape the rest of the app expects
+function normalizeRow(row) {
+  return {
+    id: row.id,
+    date: row.created_at || new Date(row.id).toISOString(),
+    fileNames: row.file_names || [],
+    accountCount: row.account_count || 0,
+    config: row.config || {},
+    results: row.results || [],
+    influencers: row.influencers || [],
+  }
+}
+
+function loadLocalHistory() {
   try {
-    const updated = loadLookupHistory().filter((e) => e.id !== id)
-    localStorage.setItem(LOOKUP_KEY, JSON.stringify(updated))
-  } catch {}
+    return JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]')
+  } catch {
+    return []
+  }
 }

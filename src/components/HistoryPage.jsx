@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Trash2 } from 'lucide-react'
-import { loadHistory, deleteSession } from '../lib/sessionHistory'
+import { useState, useEffect } from 'react'
+import { Trash2, Loader2 } from 'lucide-react'
+import { loadHistory, loadSessionFull, deleteSession } from '../lib/sessionHistory'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -18,12 +18,35 @@ function formatConfig(config) {
 }
 
 export default function HistoryPage({ onLoadSeederSession }) {
-  const [sessions, setSessions] = useState(() => loadHistory())
+  const [sessions, setSessions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [loadingId, setLoadingId] = useState(null)
 
-  const handleDeleteSession = (e, id) => {
+  useEffect(() => {
+    loadHistory().then((data) => {
+      setSessions(data)
+      setLoading(false)
+    })
+  }, [])
+
+  const handleDeleteSession = async (e, id) => {
     e.stopPropagation()
-    deleteSession(id)
+    await deleteSession(id)
     setSessions((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  const handleClickSession = async (session) => {
+    if (loadingId) return
+    // If results already loaded (localStorage path), use directly
+    if (session.results?.length > 0) {
+      onLoadSeederSession(session)
+      return
+    }
+    // Otherwise fetch full row from Supabase
+    setLoadingId(session.id)
+    const full = await loadSessionFull(session.id)
+    setLoadingId(null)
+    if (full) onLoadSeederSession(full)
   }
 
   return (
@@ -38,7 +61,12 @@ export default function HistoryPage({ onLoadSeederSession }) {
           <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Seeder sessions</p>
         </div>
 
-        {sessions.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-10 gap-2 text-faint">
+            <Loader2 size={14} className="animate-spin" />
+            <span className="text-sm">Loading…</span>
+          </div>
+        ) : sessions.length === 0 ? (
           <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
             No seeder sessions yet
           </p>
@@ -47,7 +75,7 @@ export default function HistoryPage({ onLoadSeederSession }) {
             {sessions.map((session) => (
               <div
                 key={session.id}
-                onClick={() => onLoadSeederSession(session)}
+                onClick={() => handleClickSession(session)}
                 className="flex items-center justify-between px-[16px] py-[12px] border border-card-edge rounded-[12px] bg-white hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
               >
                 <div className="min-w-0">
@@ -65,13 +93,16 @@ export default function HistoryPage({ onLoadSeederSession }) {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={(e) => handleDeleteSession(e, session.id)}
-                  className="ml-3 flex-shrink-0 text-faint hover:text-rose transition-colors"
-                  title="Delete session"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex items-center gap-2 ml-3 flex-shrink-0">
+                  {loadingId === session.id && <Loader2 size={13} className="animate-spin text-accent/50" />}
+                  <button
+                    onClick={(e) => handleDeleteSession(e, session.id)}
+                    className="text-faint hover:text-rose transition-colors"
+                    title="Delete session"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

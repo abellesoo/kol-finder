@@ -487,6 +487,14 @@ export default function ResultsStep({ results, influencers, config }) {
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
 
+  // Auto-fetch live stats when the results page first loads
+  useEffect(() => {
+    if (liveStatus === 'idle' && results.length > 0) {
+      handleFetchLive(results.map((r) => r.username))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleFetchLive = useCallback(async (usernames, { force = false } = {}) => {
     const cache = readCache()
     const now = Date.now()
@@ -646,8 +654,8 @@ export default function ResultsStep({ results, influencers, config }) {
             </button>
           ) : (
             <button onClick={() => handleFetchLive(results.map((r) => r.username))}
-              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
-              <RefreshCw size={14} /> Fetch Live Stats
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
+              <RefreshCw size={14} /> Refresh
             </button>
           )}
 

@@ -1,5 +1,3 @@
-import * as XLSX from 'xlsx'
-
 // Signal lists for location inference when structured city/country fields are absent.
 // Keyed by display name; the entry with the most keyword hits wins.
 const LOCATION_SIGNALS = {
@@ -232,11 +230,12 @@ function detectBrandFromRows(rows) {
  * Returns an array of influencer objects, one per unique ownerUsername.
  */
 export function parseApifyXlsx(file, brandName = null) {
-  const brand = brandName || null // null triggers auto-detect inside
+  const brand = brandName || null
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        const XLSX = await import('xlsx')
         const data = new Uint8Array(e.target.result)
         const wb = XLSX.read(data, { type: 'array' })
         const ws = wb.Sheets[wb.SheetNames[0]]

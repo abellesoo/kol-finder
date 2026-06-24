@@ -15,6 +15,7 @@
   .score-high {
     @apply bg-sage text-white;
   }
+  /* UNCERTAIN: score-mid uses accent for "possible" score tier badge — data viz, not CTA */
   .score-mid {
     @apply bg-accent text-white;
   }

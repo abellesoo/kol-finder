@@ -20,6 +20,31 @@ function parseBrandGroups(inputText) {
   return [...map.values()]
 }
 
+function StepProgress({ current }) {
+  const steps = [
+    { num: 1, label: 'Get Data' },
+    { num: 2, label: 'Configure' },
+    { num: 3, label: 'Results' },
+  ]
+  return (
+    <div className="flex items-center mb-8">
+      {steps.map((s, i) => (
+        <div key={s.num} className="flex items-center">
+          <div className="flex items-center gap-2">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${
+              s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
+            }`}>{s.num}</span>
+            <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === current ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function UploadStep({ onFiles, onScrapedItems }) {
   const [tab, setTab] = useState('upload') // 'upload' | 'scrape'
 
@@ -81,10 +106,10 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   const isLoading = scrapeStatus === 'running'
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="max-w-lg w-full">
-        <div className="text-center mb-8">
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-3">Step 1 of 3</p>
+    <div className="px-8 py-8">
+      <div className="max-w-[720px]">
+        <StepProgress current={1} />
+        <div className="mb-8">
           <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-2">Get your dataset</h1>
           <p className="text-muted text-[14px]">
             Have an existing Apify export? Upload it. Starting a new scrape? Paste URLs or hashtags directly.
@@ -92,7 +117,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex items-center gap-[5px] bg-[#E9E4D9] rounded-[11px] p-[5px] mb-6">
+        <div className="flex items-center gap-1 bg-[#E9E4D9] rounded-[11px] p-1 mb-6">
           {[
             { id: 'upload', label: 'Upload XLSX' },
             { id: 'scrape', label: 'Scrape URLs / Hashtags' },
@@ -100,7 +125,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex-1 py-[8px] rounded-[8px] text-[13.5px] font-medium transition-all ${
+              className={`flex-1 py-2 rounded-[8px] text-[13.5px] font-medium transition-all ${
                 tab === id ? 'bg-white text-ink shadow-sm font-semibold' : 'text-[#9A917F] hover:text-ink'
               }`}
             >
@@ -116,7 +141,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
               Use this if you already ran a scrape in Apify Console and downloaded the .xlsx export.
             </p>
             <div
-              className="border-2 border-dashed rounded-[18px] p-10 cursor-pointer transition-all bg-[#FBF9F4] border-[#DDD6C7] hover:border-accent hover:bg-[#FAF5EA]"
+              className="border-2 border-dashed rounded-[18px] p-10 cursor-pointer transition-all bg-[#FBF9F4] border-[#DDD6C7] hover:border-ink/40 hover:bg-surface"
               onClick={() => inputRef.current?.click()}
               onDragOver={(e) => { e.preventDefault() }}
               onDrop={handleDrop}
@@ -140,9 +165,9 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             {files.length > 0 && (
               <div className="mt-5 text-left space-y-2">
                 {files.map((f) => (
-                  <div key={f.name} className="flex items-center justify-between px-[12px] py-[10px] bg-white border border-card-edge rounded-[10px]">
+                  <div key={f.name} className="flex items-center justify-between px-3 py-2 bg-white border border-card-edge rounded-[10px]">
                     <div className="flex items-center gap-2 min-w-0">
-                      <FileSpreadsheet size={14} className="text-accent flex-shrink-0" />
+                      <FileSpreadsheet size={14} className="text-muted flex-shrink-0" />
                       <span className="font-mono text-[12px] text-body truncate">{f.name}</span>
                     </div>
                     <button onClick={() => removeFile(f.name)} className="ml-2 text-faint hover:text-ink/60 flex-shrink-0">
@@ -156,7 +181,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             {files.length > 0 && (
               <button
                 onClick={() => onFiles(files)}
-                className="mt-5 w-full flex items-center justify-center gap-2 py-[13px] rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all"
+                className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all"
               >
                 Parse {files.length} file{files.length > 1 ? 's' : ''}
                 <ChevronRight size={16} />
@@ -181,7 +206,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
                 disabled={isLoading}
                 rows={6}
                 placeholder={`https://www.instagram.com/p/ABC123/\nhttps://www.instagram.com/brandname/tagged/\n#skincare\n#beauty`}
-                className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-accent resize-none placeholder:text-faint disabled:opacity-50"
+                className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint disabled:opacity-50"
               />
             </div>
 
@@ -235,7 +260,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             <button
               onClick={handleScrape}
               disabled={isLoading || !scrapeInput.trim()}
-              className="w-full flex items-center justify-center gap-2 py-[13px] rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
@@ -258,7 +283,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
           </>
         )}
 
-        <p className="mt-6 text-[11px] text-faint font-mono text-center">
+        <p className="mt-6 text-[11px] text-faint font-mono">
           Scraper: Instagram Scraper by Apify · Post-level export
         </p>
       </div>

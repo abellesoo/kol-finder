@@ -15,38 +15,75 @@ export default function LoginPage({ error }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-paper px-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-10 text-center">
+    <div className="min-h-screen flex">
+      {/* Left panel — brand */}
+      <div className="hidden md:flex md:w-[55%] flex-col bg-sidebar px-12 py-10">
+        <div>
           <img
             src="/kol-finder/markato-logo.png"
             alt="Markato"
-            style={{ width: 120, mixBlendMode: 'multiply', opacity: 0.85 }}
-            className="mx-auto mb-4"
+            style={{ width: 100, mixBlendMode: 'multiply', opacity: 0.85 }}
           />
-          <h1 className="text-[24px] font-bold tracking-[-0.02em] text-ink mb-1">Seeding Studio</h1>
-          <p className="text-[14px] text-muted">Sign in with your markato.com account</p>
+        </div>
+        <div className="flex-1 flex flex-col justify-center">
+          <p className="font-mono text-[9px] tracking-[.18em] text-faint uppercase mb-4">Seeding Studio</p>
+          <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink mb-3 leading-tight">
+            Find, score and approve<br />KOL seeding candidates —<br />all in one place.
+          </h1>
+          <ul className="mt-6 space-y-3">
+            {[
+              'Score accounts automatically',
+              'Send for brand manager review',
+              'Draft and send DMs',
+            ].map((item) => (
+              <li key={item} className="flex items-center gap-3 text-[13.5px] text-muted">
+                <span className="w-1.5 h-1.5 rounded-full bg-faint flex-shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* Right panel — sign in */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-surface px-6 py-10">
+        {/* Mobile logo */}
+        <div className="md:hidden mb-8 text-center">
+          <img
+            src="/kol-finder/markato-logo.png"
+            alt="Markato"
+            style={{ width: 100, mixBlendMode: 'multiply', opacity: 0.85 }}
+            className="mx-auto mb-3"
+          />
+          <h1 className="text-[22px] font-bold tracking-[-0.02em] text-ink">Seeding Studio</h1>
         </div>
 
-        {error && (
-          <div className="mb-4 px-4 py-3 rounded-[10px] bg-rose/10 border border-rose/20 text-sm text-rose text-center">
-            {error}
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <h2 className="text-[22px] font-bold tracking-[-0.02em] text-ink mb-1">Sign in</h2>
+            <p className="text-[14px] text-muted">Use your markato.com account to continue</p>
           </div>
-        )}
 
-        <button
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-3 px-4 py-[13px] border border-card-edge rounded-[12px] bg-white hover:bg-surface transition-all text-[13.5px] font-medium text-ink shadow-sm disabled:opacity-50"
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-            <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-            <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
-            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
-          </svg>
-          {loading ? 'Redirecting...' : 'Sign in with Google'}
-        </button>
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-[10px] bg-rose/10 border border-rose/20 text-sm text-rose text-center">
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleGoogleSignIn}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-[13px] border border-card-edge rounded-[12px] bg-white hover:bg-paper transition-all text-[13.5px] font-medium text-ink shadow-sm disabled:opacity-50"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+              <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+              <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z" fill="#EA4335"/>
+            </svg>
+            {loading ? 'Redirecting...' : 'Sign in with Google'}
+          </button>
+        </div>
       </div>
     </div>
   )

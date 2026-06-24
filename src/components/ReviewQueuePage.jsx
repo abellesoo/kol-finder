@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, RefreshCw, ArrowRight } from 'lucide-react'
+import { Loader2, RefreshCw, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function formatDate(isoStr) {
@@ -35,7 +35,7 @@ export default function ReviewQueuePage({ onOpenReview }) {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-accent" />
+        <Loader2 size={24} className="animate-spin text-faint" />
       </div>
     )
   }
@@ -61,9 +61,10 @@ export default function ReviewQueuePage({ onOpenReview }) {
       )}
 
       {rows.length === 0 && !error && (
-        <div className="text-center py-24">
-          <p className="text-[13.5px] text-muted">No submissions yet.</p>
-          <p className="text-[11px] text-faint mt-1 font-mono">Use "Send for Review" in the Seeder to add accounts here.</p>
+        <div className="flex flex-col items-center py-24">
+          <CheckCircle2 size={32} className="text-faint mb-4" />
+          <h2 className="text-[17px] font-semibold text-ink mb-2">All caught up</h2>
+          <p className="text-[13.5px] text-muted text-center">No accounts are waiting for brand manager review right now</p>
         </div>
       )}
 

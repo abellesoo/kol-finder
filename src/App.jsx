@@ -33,6 +33,12 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Help',
+    items: [
+      { id: 'help', label: 'Instructions', icon: BookOpen },
+    ],
+  },
+  {
     label: 'Admin',
     items: [
       { id: 'team', label: 'Team', icon: Users, adminOnly: true },
@@ -59,7 +65,7 @@ function NavButton({ id, label, Icon, isActive, onClick }) {
       )}
       <button
         onClick={onClick}
-        className={`flex items-center gap-[10px] w-full pl-[16px] pr-[11px] py-[8px] rounded-[9px] text-[13.5px] text-left transition-all ${
+        className={`flex items-center gap-3 w-full pl-4 pr-3 py-2 rounded-[9px] text-[13.5px] text-left transition-all ${
           isActive
             ? 'bg-white text-ink font-semibold shadow-sm'
             : 'text-[#7B7464] font-medium hover:bg-white/50 hover:text-ink'
@@ -84,7 +90,7 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
       className="flex flex-col h-screen sticky top-0 border-r border-mist bg-sidebar shrink-0"
     >
       {/* Logo */}
-      <div className="px-[18px] py-[14px] border-b border-mist">
+      <div className="px-4 py-3 border-b border-mist">
         <img
           src="/kol-finder/markato-logo.png"
           alt="Markato"
@@ -94,22 +100,13 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
       </div>
 
       {/* Nav groups */}
-      <nav className="flex-1 py-[6px] flex flex-col overflow-y-auto">
-        <div className="px-[10px] mb-[2px]">
-          <NavButton
-            id="help"
-            label="Instructions"
-            Icon={BookOpen}
-            isActive={activeId === 'help'}
-            onClick={() => onNav('help')}
-          />
-        </div>
+      <nav className="flex-1 py-2 flex flex-col overflow-y-auto">
         {groups.map((group, gi) => (
-          <div key={group.label} className={gi > 0 ? 'mt-[2px]' : ''}>
-            <p className="font-mono text-[9px] tracking-[.16em] text-[#B0A693] uppercase px-[20px] pb-[4px] pt-[10px]">
+          <div key={group.label} className={gi > 0 ? 'mt-0' : ''}>
+            <p className="font-mono text-[9px] tracking-[.16em] text-[#B0A693] uppercase px-5 pb-2 pt-2">
               {group.label}
             </p>
-            <div className="flex flex-col gap-[2px] px-[10px]">
+            <div className="flex flex-col gap-0 px-3">
               {group.items.map(({ id, label, icon: Icon }) => (
                 <NavButton
                   key={id}
@@ -126,12 +123,12 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
       </nav>
 
       {/* Footer nav */}
-      <div className="px-[10px] pb-[4px] flex flex-col gap-[2px]">
+      <div className="px-3 pb-2 flex flex-col gap-0">
         {/* User block — only shown when logged in */}
         {user && (
-        <div className="mt-[4px] pt-[12px] pb-[10px] border-t border-mist">
-          <div className="flex items-center gap-[8px]">
-            <div className="w-[28px] h-[28px] bg-accent rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 leading-none">
+        <div className="mt-0 pt-3 pb-2 border-t border-mist">
+          <div className="flex items-center gap-2">
+            <div className="w-[28px] h-[28px] bg-ink rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 leading-none">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
@@ -140,7 +137,7 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
             </div>
             <button
               onClick={onSignOut}
-              className="text-faint hover:text-rose transition-colors flex-shrink-0 ml-[2px]"
+              className="text-faint hover:text-rose transition-colors flex-shrink-0 ml-0"
               title="Sign out"
             >
               <LogOut size={14} />
@@ -260,7 +257,7 @@ function MainApp({ user, role, onSignOut }) {
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
-        {mode === 'dashboard' && <DashboardPage />}
+        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} />}
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && <TeamPage />}
         {mode === 'review_queue' && (
@@ -274,13 +271,24 @@ function MainApp({ user, role, onSignOut }) {
         )}
         {mode === 'ready_to_send' && <ReadyToSendPage />}
         {mode === 'history' && (
-          <HistoryPage onLoadSeederSession={handleLoadSeederSession} />
+          <HistoryPage onLoadSeederSession={handleLoadSeederSession} onNavigate={handleNav} />
         )}
         {mode === 'seeder' && (
           <>
             {step === 'scoring' && (
-              <div className="flex-1 flex flex-col items-center justify-center px-6 py-20">
-                <div className="max-w-sm w-full text-center">
+              <div className="px-8 py-8">
+                <div className="flex items-center mb-8">
+                  {[{ num: 1, label: 'Get Data' }, { num: 2, label: 'Configure' }, { num: 3, label: 'Results' }].map((s, i, arr) => (
+                    <div key={s.num} className="flex items-center">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${s.num === 3 ? 'bg-accent text-white' : 'bg-mist text-body'}`}>{s.num}</span>
+                        <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === 3 ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
+                      </div>
+                      {i < arr.length - 1 && <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />}
+                    </div>
+                  ))}
+                </div>
+                <div className="max-w-sm">
                   <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-6">Scoring accounts</p>
                   {progress.error ? (
                     <div className="text-rose text-sm mb-4">
@@ -297,7 +305,7 @@ function MainApp({ user, role, onSignOut }) {
                     <>
                       <div className="w-full h-1.5 bg-mist rounded-full overflow-hidden mb-3">
                         <div
-                          className="h-full bg-accent rounded-full transition-all duration-300"
+                          className="h-full bg-ink rounded-full transition-all duration-300"
                           style={{ width: `${pct}%` }}
                         />
                       </div>

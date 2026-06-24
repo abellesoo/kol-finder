@@ -1,5 +1,3 @@
-import ExcelJS from 'exceljs'
-import { saveAs } from 'file-saver'
 
 export const EXPORT_COLUMNS = [
   { id: 'brand',             label: 'Brand',              getValue: (r, inf)       => inf.sourceBrand || '' },
@@ -70,6 +68,10 @@ function colIndexToLetter(n) {
 const BRAND_COLORS = ['FFFCE5CF', 'FFD5E8D4', 'FFDAE8FC', 'FFE1D5E7', 'FFFFD7D7']
 
 export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}, reviewState = {}, options = {}) {
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ])
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
 

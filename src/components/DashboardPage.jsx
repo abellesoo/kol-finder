@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, AlertCircle } from 'lucide-react'
+import { ArrowRight, AlertCircle, Rocket } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { loadHistory } from '../lib/sessionHistory'
 
@@ -19,7 +19,7 @@ function KpiCard({ label, value, sub }) {
   )
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({ onNavigate }) {
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState([])
@@ -68,6 +68,26 @@ export default function DashboardPage() {
   })
 
   const hasAttention = pendingReview > 0 || dmReady > 0
+
+  const isEmpty = campaigns.length === 0 && sessions.length === 0 && !loading
+
+  if (isEmpty) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-24">
+        <Rocket size={32} className="text-faint mb-4" />
+        <h2 className="text-[17px] font-semibold text-ink mb-2">No campaigns yet</h2>
+        <p className="text-[13.5px] text-muted mb-6 text-center">Run your first seeding session to see results here</p>
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate('seeder')}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+          >
+            Start a session <ArrowRight size={14} />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="px-[48px] py-[40px] pb-[64px] max-w-[1080px] mx-auto w-full">
@@ -165,7 +185,7 @@ export default function DashboardPage() {
                   <span className="font-mono text-[11.5px] text-faint">{formatDate(c.created_at)}</span>
                   <a
                     href={url}
-                    className="flex items-center justify-center text-[#C2BAA8] hover:text-accent transition-colors"
+                    className="flex items-center justify-center text-[#C2BAA8] hover:text-ink transition-colors"
                     title="View results"
                   >
                     <ArrowRight size={14} />

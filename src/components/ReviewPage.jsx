@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
@@ -60,7 +60,7 @@ function ColumnPicker({ selected, onChange }) {
         <Columns size={13} />
         Columns
         {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
         )}
@@ -71,7 +71,7 @@ function ColumnPicker({ selected, onChange }) {
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
                 <span className="font-mono text-[11px] text-body">{col.label}</span>
               </label>
             ))}
@@ -96,11 +96,30 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   const [drafting, setDrafting] = useState(false)
   const [draftError, setDraftError] = useState(null)
   const [localDraft, setLocalDraft] = useState(dmDraft)
+  const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
+  const [notesSaving, setNotesSaving] = useState(false)
+  const notesTimerRef = useRef(null)
 
   useEffect(() => { setLocalDraft(dmDraft) }, [dmDraft])
+  useEffect(() => { setLocalNotes(reviewEntry?.notes || '') }, [reviewEntry?.notes])
+
+  // Helper so every onUpdate call includes the full current entry
+  const entry = (overrides) => ({
+    status, dm_status: dmStatus, dm_draft: localDraft, notes: localNotes, ...overrides,
+  })
+
+  const handleNotesChange = (val) => {
+    setLocalNotes(val)
+    setNotesSaving(true)
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+    notesTimerRef.current = setTimeout(() => {
+      onUpdate(account.username, entry({ notes: val }))
+      setNotesSaving(false)
+    }, 800)
+  }
 
   const handleApprove = async () => {
-    onUpdate(account.username, { status: 'approved', dm_status: dmStatus, dm_draft: localDraft })
+    onUpdate(account.username, entry({ status: 'approved' }))
     setDrafting(true)
     setDraftError(null)
     try {
@@ -112,7 +131,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         campaignBrief,
       })
       setLocalDraft(draft)
-      onUpdate(account.username, { status: 'approved', dm_status: 'not_sent', dm_draft: draft })
+      onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
     } catch (err) {
       setDraftError(err.message)
     } finally {
@@ -121,7 +140,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   }
 
   const handleReject = () => {
-    onUpdate(account.username, { status: 'rejected', dm_status: dmStatus, dm_draft: localDraft })
+    onUpdate(account.username, entry({ status: 'rejected' }))
   }
 
   const isPending = status === 'pending'
@@ -141,7 +160,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
-              className="font-semibold text-[13.5px] text-ink hover:text-accent flex items-center gap-1">
+              className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1">
               @{account.username} <ExternalLink size={11} className="opacity-40" />
             </a>
             {account.sourceBrand && (
@@ -158,7 +177,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
 
         <div className="flex flex-col items-end gap-2 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className={`text-[18px] font-bold font-mono ${account.overall >= 70 ? 'text-sage' : account.overall >= 45 ? 'text-accent' : 'text-faint'}`}>
+            <span className={`text-[18px] font-bold font-mono ${account.overall >= 70 ? 'text-sage' : account.overall >= 45 ? 'text-body' : 'text-faint'}`}>
               {account.overall}
             </span>
             <span className="text-[11px] text-faint font-mono">/ 100</span>
@@ -204,7 +223,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         )}
         {col('sample_post_url') && account.samplePostUrl && (
           <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
-            className="text-accent hover:underline flex items-center gap-0.5">
+            className="text-body hover:underline flex items-center gap-0.5">
             Sample post <ExternalLink size={10} />
           </a>
         )}
@@ -233,6 +252,21 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         </div>
       )}
 
+      {/* Notes / Remarks — always visible */}
+      <div className="border-t border-card-edge/60 px-5 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">Notes / Remarks</p>
+          {notesSaving && <span className="text-[10px] font-mono text-faint">Saving…</span>}
+        </div>
+        <textarea
+          value={localNotes}
+          onChange={(e) => handleNotesChange(e.target.value)}
+          rows={2}
+          placeholder="Add notes for the team…"
+          className="w-full px-3 py-2 border border-card-edge rounded-[8px] text-[12px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+        />
+      </div>
+
       {/* DM Draft — only when approved */}
       {isApproved && (
         <div className="border-t border-card-edge/60 px-5 py-4">
@@ -251,16 +285,242 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                 value={localDraft}
                 onChange={(e) => {
                   setLocalDraft(e.target.value)
-                  onUpdate(account.username, { status: 'approved', dm_status: dmStatus, dm_draft: e.target.value })
+                  onUpdate(account.username, entry({ status: 'approved', dm_draft: e.target.value }))
                 }}
                 rows={5}
-                className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-accent resize-none"
+                className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
               />
             </>
           )}
         </div>
       )}
     </div>
+  )
+}
+
+function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
+  const status = reviewEntry?.status || 'pending'
+  const dmStatus = reviewEntry?.dm_status || 'not_sent'
+  const dmDraft = reviewEntry?.dm_draft || ''
+  const [expanded, setExpanded] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  const [draftError, setDraftError] = useState(null)
+  const [localDraft, setLocalDraft] = useState(dmDraft)
+  const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
+  const [notesSaving, setNotesSaving] = useState(false)
+  const notesTimerRef = useRef(null)
+
+  useEffect(() => { setLocalDraft(dmDraft) }, [dmDraft])
+  useEffect(() => { setLocalNotes(reviewEntry?.notes || '') }, [reviewEntry?.notes])
+
+  const entry = (overrides) => ({
+    status, dm_status: dmStatus, dm_draft: localDraft, notes: localNotes, ...overrides,
+  })
+
+  const handleNotesChange = (val) => {
+    setLocalNotes(val)
+    setNotesSaving(true)
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+    notesTimerRef.current = setTimeout(() => {
+      onUpdate(account.username, entry({ notes: val }))
+      setNotesSaving(false)
+    }, 800)
+  }
+
+  const handleApprove = async (e) => {
+    e.stopPropagation()
+    setExpanded(true)
+    onUpdate(account.username, entry({ status: 'approved' }))
+    setDrafting(true)
+    setDraftError(null)
+    try {
+      const draft = await fetchDmDraft({
+        username: account.username,
+        bio: account.bio,
+        hashtags: account.hashtags,
+        sampleCaptions: account.sampleCaption ? [account.sampleCaption] : [],
+        campaignBrief,
+      })
+      setLocalDraft(draft)
+      onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
+    } catch (err) {
+      setDraftError(err.message)
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const handleReject = (e) => {
+    e.stopPropagation()
+    onUpdate(account.username, entry({ status: 'rejected' }))
+  }
+
+  const handleUndo = (e) => {
+    e.stopPropagation()
+    onUpdate(account.username, entry({ status: 'pending' }))
+  }
+
+  const nicheTags = (account.nicheSignals || []).slice(0, 2)
+  const isPending = status === 'pending'
+  const isApproved = status === 'approved'
+  const isRejected = status === 'rejected'
+
+  return (
+    <>
+      <div
+        className={`grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
+          isApproved ? 'bg-[#F5F8F4]/50' : isRejected ? 'opacity-60' : ''
+        }`}
+        style={{ gridTemplateColumns: '2fr 80px 90px 1fr 140px' }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className="min-w-0">
+          <a
+            href={`https://instagram.com/${account.username}`}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1"
+          >
+            @{account.username} <ExternalLink size={11} className="opacity-30" />
+          </a>
+          {account.fullName && <p className="text-xs text-faint truncate">{account.fullName}</p>}
+        </div>
+        <div className="flex justify-center">
+          <ScoreBadge score={account.overall} />
+        </div>
+        <p className="font-mono text-sm text-ink text-center">
+          {account.avgLikes != null ? account.avgLikes.toLocaleString() : '—'}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {nicheTags.map((t) => (
+            <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+          {isPending && (
+            <>
+              <button
+                onClick={handleReject}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-[8px] border border-rose/40 text-rose text-[12px] hover:bg-rose/10 transition-all"
+              >
+                <X size={11} /> Reject
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={drafting}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all disabled:opacity-50"
+              >
+                {drafting ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                Approve
+              </button>
+            </>
+          )}
+          {isApproved && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
+              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
+            </div>
+          )}
+          {isRejected && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
+              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
+            </div>
+          )}
+        </div>
+      </div>
+      {expanded && (
+        <>
+        <div className="px-4 py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
+          <div>
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Stats</p>
+            <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted">
+              {account.accountLocation && <span>📍 {account.accountLocation}</span>}
+              {account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
+              {account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
+              {account.avgLikes != null && <span>~{account.avgLikes.toLocaleString()} avg likes</span>}
+            </div>
+            {account.bio && (
+              <div className="mt-3">
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Bio</p>
+                <p className="text-[12px] text-body">{account.bio}</p>
+              </div>
+            )}
+            {account.sampleCaption && (
+              <div className="mt-3">
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Sample Caption</p>
+                <p className="text-[12px] text-body line-clamp-3">{account.sampleCaption}</p>
+              </div>
+            )}
+          </div>
+          <div>
+            {account.nicheSignals?.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Niche Signals</p>
+                <p className="text-[12px] text-body">{account.nicheSignals.join(' · ')}</p>
+              </div>
+            )}
+            {account.hashtags?.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Hashtags</p>
+                <div className="flex flex-wrap gap-1">
+                  {account.hashtags.slice(0, 10).map((h) => (
+                    <span key={h} className="tag">#{h}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {account.samplePostUrl && (
+              <a href={account.samplePostUrl} target="_blank" rel="noreferrer"
+                className="text-[12px] text-body hover:underline flex items-center gap-1">
+                Sample post <ExternalLink size={10} />
+              </a>
+            )}
+            {isApproved && (
+              <div className="mt-3">
+                {drafting && (
+                  <div className="flex items-center gap-2 text-[11px] text-faint">
+                    <Loader2 size={13} className="animate-spin" /> Generating DM draft…
+                  </div>
+                )}
+                {draftError && <p className="text-[11px] text-rose">Draft failed: {draftError}</p>}
+                {localDraft && !drafting && (
+                  <>
+                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">DM Draft</p>
+                    <textarea
+                      value={localDraft}
+                      onChange={(e) => {
+                        setLocalDraft(e.target.value)
+                        onUpdate(account.username, entry({ status: 'approved', dm_draft: e.target.value }))
+                      }}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-card-edge rounded-[10px] text-[12px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Notes — always visible in expanded row */}
+        <div className="px-4 pb-4 bg-surface border-b border-[#F0ECE2]">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em]">Notes / Remarks</p>
+            {notesSaving && <span className="text-[10px] font-mono text-faint">Saving…</span>}
+          </div>
+          <textarea
+            value={localNotes}
+            onChange={(e) => handleNotesChange(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            rows={2}
+            placeholder="Add notes for the team…"
+            className="w-full px-3 py-2 border border-card-edge rounded-[8px] text-[12px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+          />
+        </div>
+        </>
+      )}
+    </>
   )
 }
 
@@ -275,6 +535,10 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [editingBrief, setEditingBrief] = useState(false)
   const [briefDraft, setBriefDraft] = useState('')
   const briefInputRef = useRef(null)
+  const [viewMode, setViewMode] = useState(null)
+  // Refs so persistUpdate can always read latest values without stale closures
+  const bmNotesRef = useRef('')
+  const reviewStateRef = useRef({})
 
   useEffect(() => {
     async function load() {
@@ -288,18 +552,31 @@ export default function ReviewPage({ reviewId, onBack }) {
         setLoading(false)
         return
       }
+      const accs = data.accounts || []
+      const rs = data.review_state || {}
+      // Notes are stored inside review_state under __notes__ to avoid schema changes
+      const notes = typeof rs.__notes__ === 'string' ? rs.__notes__ : ''
+      const accountState = Object.fromEntries(Object.entries(rs).filter(([k]) => k !== '__notes__'))
       setCampaignBrief(data.campaign_brief || '')
-      setAccounts(data.accounts || [])
-      setReviewState(data.review_state || {})
+      setAccounts(accs)
+      setReviewState(accountState)
+      reviewStateRef.current = accountState
+      setBmNotes(notes)
+      bmNotesRef.current = notes
+      setViewMode(accs.length > 20 ? 'table' : 'cards')
       setLoading(false)
     }
     load()
   }, [reviewId])
 
   const persistUpdate = useCallback(async (newState) => {
+    reviewStateRef.current = newState
     setSaving(true)
     try {
-      await supabase.from('shared_results').update({ review_state: newState }).eq('id', reviewId)
+      // Always preserve notes when writing review_state
+      await supabase.from('shared_results')
+        .update({ review_state: { ...newState, __notes__: bmNotesRef.current } })
+        .eq('id', reviewId)
     } catch (e) {
       console.error('Failed to persist review state', e)
     } finally {
@@ -338,7 +615,7 @@ export default function ReviewPage({ reviewId, onBack }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-accent" />
+        <Loader2 size={24} className="animate-spin text-faint" />
       </div>
     )
   }
@@ -386,6 +663,21 @@ export default function ReviewPage({ reviewId, onBack }) {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* View mode toggle */}
+            <div className="flex items-center bg-mist rounded-[9px] p-1 gap-1">
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-[7px] text-[12px] font-medium transition-all ${viewMode === 'cards' ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                <LayoutGrid size={13} /> Cards
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-[7px] text-[12px] font-medium transition-all ${viewMode === 'table' ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                <Table2 size={13} /> Table
+              </button>
+            </div>
             <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
           </div>
         </div>
@@ -410,7 +702,7 @@ export default function ReviewPage({ reviewId, onBack }) {
                 onChange={(e) => setBriefDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Escape') cancelEditBrief() }}
                 rows={3}
-                className="w-full text-[13px] text-ink bg-white border border-accent rounded-[8px] px-3 py-2 focus:outline-none resize-none"
+                className="w-full text-[13px] text-ink bg-white border border-ink/30 rounded-[8px] px-3 py-2 focus:outline-none resize-none"
               />
               <div className="flex gap-2 mt-2">
                 <button onClick={commitBrief} className="flex items-center gap-1 px-3 py-1 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 transition-all">
@@ -425,20 +717,45 @@ export default function ReviewPage({ reviewId, onBack }) {
             <p className="text-[13px] text-body whitespace-pre-wrap">{campaignBrief || <span className="text-faint italic">No brief — click pencil to add one</span>}</p>
           )}
         </div>
+
       </div>
 
-      <div className="space-y-4">
-        {accounts.map((account) => (
-          <AccountCard
-            key={account.username}
-            account={account}
-            reviewEntry={reviewState[account.username]}
-            campaignBrief={campaignBrief}
-            onUpdate={handleUpdate}
-            selectedColumns={selectedColumns}
-          />
-        ))}
-      </div>
+      {viewMode === 'table' ? (
+        <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
+          <div
+            className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
+            style={{ gridTemplateColumns: '2fr 80px 90px 1fr 140px' }}
+          >
+            <span>Account</span>
+            <span className="text-center">Score</span>
+            <span className="text-center">Avg Likes</span>
+            <span>Niches</span>
+            <span />
+          </div>
+          {accounts.map((account) => (
+            <AccountTableRow
+              key={account.username}
+              account={account}
+              reviewEntry={reviewState[account.username]}
+              campaignBrief={campaignBrief}
+              onUpdate={handleUpdate}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {accounts.map((account) => (
+            <AccountCard
+              key={account.username}
+              account={account}
+              reviewEntry={reviewState[account.username]}
+              campaignBrief={campaignBrief}
+              onUpdate={handleUpdate}
+              selectedColumns={selectedColumns}
+            />
+          ))}
+        </div>
+      )}
 
       <p className="mt-8 text-[11px] text-faint font-mono text-center">
         Approve to generate a DM draft · Changes save automatically

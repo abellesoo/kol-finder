@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, Loader2, Pencil, Check, X } from 'lucide-react'
+import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight } from 'lucide-react'
 import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle } from '../lib/sessionHistory'
 
 function formatDate(iso) {
@@ -17,7 +17,7 @@ function formatConfig(config) {
   return parts.join(' · ')
 }
 
-export default function HistoryPage({ onLoadSeederSession }) {
+export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingId, setLoadingId] = useState(null)
@@ -103,16 +103,26 @@ export default function HistoryPage({ onLoadSeederSession }) {
             <span className="text-sm">Loading…</span>
           </div>
         ) : sessions.length === 0 ? (
-          <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
-            No seeder sessions yet
-          </p>
+          <div className="flex flex-col items-center py-16">
+            <Clock size={32} className="text-faint mb-4" />
+            <h2 className="text-[17px] font-semibold text-ink mb-2">No sessions recorded</h2>
+            <p className="text-[13.5px] text-muted mb-6 text-center">Your past seeding sessions will appear here after you run your first score</p>
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('seeder')}
+                className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+              >
+                Go to Seeder <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-2">
             {sessions.map((session) => (
               <div
                 key={session.id}
                 onClick={() => handleClickSession(session)}
-                className="flex items-center justify-between px-[16px] py-[12px] border border-card-edge rounded-[12px] bg-white hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
+                className="flex items-center justify-between px-[16px] py-[12px] border border-card-edge rounded-[12px] bg-white hover:border-ink/30 hover:bg-surface cursor-pointer transition-all group"
               >
                 <div className="min-w-0 flex-1">
                   {editingId === session.id ? (
@@ -123,10 +133,10 @@ export default function HistoryPage({ onLoadSeederSession }) {
                       onKeyDown={handleKeyDown}
                       onClick={(e) => e.stopPropagation()}
                       placeholder="Session name…"
-                      className="text-[13.5px] font-medium text-ink bg-transparent border-b border-accent outline-none w-full max-w-xs"
+                      className="text-[13.5px] font-medium text-ink bg-transparent border-b border-ink/40 outline-none w-full max-w-xs"
                     />
                   ) : (
-                    <p className="text-[13.5px] font-medium text-ink group-hover:text-accent transition-colors">
+                    <p className="text-[13.5px] font-medium text-ink group-hover:text-ink/70 transition-colors">
                       {session.config?.sessionTitle || `${session.accountCount} accounts`}
                       {!session.config?.sessionTitle && formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}
                     </p>
@@ -142,7 +152,7 @@ export default function HistoryPage({ onLoadSeederSession }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                  {loadingId === session.id && <Loader2 size={13} className="animate-spin text-accent/50" />}
+                  {loadingId === session.id && <Loader2 size={13} className="animate-spin text-faint" />}
                   {editingId === session.id ? (
                     <>
                       <button

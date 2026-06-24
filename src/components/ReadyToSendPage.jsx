@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns } from 'lucide-react'
+import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
@@ -36,7 +36,7 @@ function ColumnPicker({ selected, onChange }) {
         <Columns size={14} />
         Columns
         {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
         )}
@@ -47,7 +47,7 @@ function ColumnPicker({ selected, onChange }) {
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
                 <span className="font-mono text-[11px] text-body">{col.label}</span>
               </label>
             ))}
@@ -139,7 +139,7 @@ export default function ReadyToSendPage() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-accent" />
+        <Loader2 size={24} className="animate-spin text-faint" />
       </div>
     )
   }
@@ -185,9 +185,10 @@ export default function ReadyToSendPage() {
       )}
 
       {items.length === 0 && !error && (
-        <div className="text-center py-24">
-          <p className="text-[13.5px] text-muted">No approved accounts yet.</p>
-          <p className="text-[11px] text-faint mt-1 font-mono">Accounts appear here once a brand manager approves them in the Review Queue.</p>
+        <div className="flex flex-col items-center py-24">
+          <SendHorizonal size={32} className="text-faint mb-4" />
+          <h2 className="text-[17px] font-semibold text-ink mb-2">Nothing ready to send</h2>
+          <p className="text-[13.5px] text-muted text-center">Accounts approved by your brand manager will appear here with their drafted DMs</p>
         </div>
       )}
 
@@ -203,7 +204,7 @@ export default function ReadyToSendPage() {
                   href={`https://instagram.com/${item.username}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="font-semibold text-[13.5px] text-ink hover:text-accent flex items-center gap-1"
+                  className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1"
                 >
                   @{item.username} <ExternalLink size={11} className="opacity-40" />
                 </a>

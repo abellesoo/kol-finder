@@ -91,7 +91,7 @@ function InfoTooltip({ column }) {
         ref={btnRef}
         onMouseEnter={show}
         onMouseLeave={() => setPos(null)}
-        className="text-ink/30 hover:text-accent transition-colors ml-0.5"
+        className="text-ink/30 hover:text-ink transition-colors ml-0.5"
       >
         <Info size={11} />
       </button>
@@ -167,7 +167,7 @@ function ColumnPicker({ selected, onChange }) {
         <Columns size={14} />
         Columns
         {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
         )}
@@ -178,7 +178,7 @@ function ColumnPicker({ selected, onChange }) {
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
               <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
                 <span className="font-mono text-[11px] text-body">{col.label}</span>
               </label>
             ))}
@@ -240,19 +240,19 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         case 'account_location':
           return <p className="font-mono text-sm text-ink">{r.accountLocation || '—'}</p>
         case 'engagement_score':
-          return <MiniBar value={r.scores?.engagement ?? 0} color="bg-accent/70" />
+          return <MiniBar value={r.scores?.engagement ?? 0} color="bg-ink/50" />
         case 'live_median_likes':
-          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
           if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
         case 'live_median_views':
-          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
+          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
           if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
         case 'sample_post_url':
           return r.samplePostUrl ? (
             <a href={r.samplePostUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 font-mono text-xs text-accent hover:underline">
+              className="flex items-center gap-1 font-mono text-xs text-body hover:underline">
               View <ExternalLink size={10} />
             </a>
           ) : <p className="font-mono text-sm text-ink/30">—</p>
@@ -287,7 +287,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 
   return (
     <div className="border border-card-edge rounded-[14px] overflow-x-auto bg-white">
-      <div className="grid gap-3 px-[18px] py-[12px] bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
+      <div className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
         {selectionMode && <span />}
         <span>Account</span>
@@ -310,7 +310,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       {filtered.map((r) => (
         <div key={r.username}>
           <div
-            className="grid gap-3 px-[18px] py-[13px] border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
+            className="grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
           >
@@ -320,7 +320,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
                   type="checkbox"
                   checked={selectedAccounts.has(r.username)}
                   onChange={() => onToggleSelect(r.username)}
-                  className="w-4 h-4 accent-accent cursor-pointer"
+                  className="w-4 h-4 accent-ink cursor-pointer"
                 />
               </div>
             )}
@@ -328,7 +328,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
               <div className="flex items-center gap-2">
                 <a href={`https://instagram.com/${r.username}`} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="font-medium text-sm text-ink hover:text-accent flex items-center gap-1">
+                  className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1">
                   @{r.username} <ExternalLink size={11} className="opacity-40" />
                 </a>
               </div>
@@ -345,7 +345,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           </div>
 
           {expandedRow === r.username && (
-            <div className="px-[18px] py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
+            <div className="px-4 py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
               <div>
                 <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-2">Scoring Verdict</p>
                 <p className="text-body text-[12px] leading-relaxed">{r.verdict || '—'}</p>
@@ -385,6 +385,31 @@ function readCache() {
 }
 function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
+}
+
+function StepProgress({ current }) {
+  const steps = [
+    { num: 1, label: 'Get Data' },
+    { num: 2, label: 'Configure' },
+    { num: 3, label: 'Results' },
+  ]
+  return (
+    <div className="flex items-center mb-6">
+      {steps.map((s, i) => (
+        <div key={s.num} className="flex items-center">
+          <div className="flex items-center gap-2">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${
+              s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
+            }`}>{s.num}</span>
+            <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === current ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function ResultsStep({ results, influencers, config, sessionId }) {
@@ -573,17 +598,18 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   }
 
   return (
-    <div className="min-h-screen px-[40px] py-[36px] max-w-6xl mx-auto">
+    <div className="px-10 py-8 w-full">
+
+      <StepProgress current={3} />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Step 3 of 3 · Results</p>
           <h1 className="text-[25px] font-bold tracking-[-0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-[13.5px] text-muted">
             <span className="text-sage font-semibold">{highCount} strong matches</span>
             {' · '}
-            <span className="text-accent font-semibold">{midCount} possible</span>
+            <span className="text-body font-semibold">{midCount} possible</span>
             {' · '}
             {enriched.length - highCount - midCount} low score
           </p>
@@ -676,7 +702,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[11px] text-faint font-mono">Min score:</span>
           <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
-            min="0" max="100" className="w-16 px-2 py-1 border border-[#E1DBCD] rounded-[8px] text-[12px] font-mono bg-white focus:outline-none focus:border-accent" />
+            min="0" max="100" className="w-16 px-2 py-1 border border-[#E1DBCD] rounded-[8px] text-[12px] font-mono bg-white focus:outline-none focus:border-ink/30" />
         </div>
       </div>
 

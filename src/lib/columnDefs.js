@@ -21,7 +21,7 @@ export const TABLE_COLUMNS = [
 export const DEFAULT_SELECTED_COLUMNS = [
   'brand', 'overall', 'relevancy_score', 'engagement_score',
   'engagement', 'live_median_likes', 'live_median_views',
-  'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
+  'sample_post_url', 'niche_signals',
 ]
 
 // Always included in Step 3 (ResultsStep) export — includes dm_status for tracking.

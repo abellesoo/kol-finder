@@ -243,22 +243,10 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         case 'live_median_likes':
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
           if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
-          if (r.xlsxMedianLikes != null) return (
-            <div>
-              <p className="font-mono text-sm text-ink">{r.xlsxMedianLikes.toLocaleString()}</p>
-              <p className="font-mono text-xs text-ink/25">export</p>
-            </div>
-          )
           return <p className="font-mono text-sm text-ink/30">—</p>
         case 'live_median_views':
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-accent/40" />
           if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
-          if (r.xlsxMedianViews != null) return (
-            <div>
-              <p className="font-mono text-sm text-ink">{r.xlsxMedianViews.toLocaleString()}</p>
-              <p className="font-mono text-xs text-ink/25">export</p>
-            </div>
-          )
           return <p className="font-mono text-sm text-ink/30">—</p>
         case 'sample_post_url':
           return r.samplePostUrl ? (
@@ -487,14 +475,6 @@ export default function ResultsStep({ results, influencers, config }) {
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
 
-  // Auto-fetch live stats when the results page first loads
-  useEffect(() => {
-    if (liveStatus === 'idle' && results.length > 0) {
-      handleFetchLive(results.map((r) => r.username))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   const handleFetchLive = useCallback(async (usernames, { force = false } = {}) => {
     const cache = readCache()
     const now = Date.now()
@@ -654,8 +634,8 @@ export default function ResultsStep({ results, influencers, config }) {
             </button>
           ) : (
             <button onClick={() => handleFetchLive(results.map((r) => r.username))}
-              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
-              <RefreshCw size={14} /> Refresh
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
+              <RefreshCw size={14} /> Fetch Live Stats
             </button>
           )}
 

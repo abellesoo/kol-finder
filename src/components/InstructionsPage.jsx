@@ -84,15 +84,18 @@ export default function InstructionsPage() {
       {/* Tool Overview */}
       <div className="mb-10">
         <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">About this tool</p>
-        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-4">KOL Finder — Seeding Tool</h1>
+        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-4">KOL Finder — Seeding Studio</h1>
         <p className="text-body leading-relaxed mb-3">
-          This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche and how actively engaged their audience is. It works by analysing posts from accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
+          A full end-to-end Instagram KOL seeding workflow — from account discovery to tracked outreach. Source KOL candidates, score and rank them automatically, review and approve as a team, then manage DM outreach in one place.
         </p>
         <p className="text-body leading-relaxed mb-3">
-          You can bring in accounts two ways: upload an <strong>.xlsx</strong> export from Apify, or paste competitor post URLs and hashtags directly — the tool triggers the scrape for you and skips the manual Apify step entirely. Either way, it deduplicates accounts, scores them across Engagement and Relevancy, and produces a ranked table ready to filter, review, and export to Excel.
+          Bring in accounts two ways: upload an Apify <strong>.xlsx</strong> export, or paste competitor post URLs and hashtags directly and let the tool trigger the scrape. Either way, accounts are deduplicated, scored across Engagement and Relevancy, and surfaced in a ranked table ready to filter and shortlist.
+        </p>
+        <p className="text-body leading-relaxed mb-3">
+          From the Results table, move approved accounts into the <strong>Review Queue</strong> for your team to assess, then into <strong>Ready to Send</strong> where you can track DM status per account and coordinate outreach without double-sending.
         </p>
         <p className="text-body leading-relaxed">
-          Optionally, run <strong>AI Deep-Dive</strong> on the top results — this sends account captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Base scoring is deterministic arithmetic computed entirely in your browser; AI is only involved if you explicitly opt in.
+          Optionally run <strong>AI Deep-Dive</strong> on the top results — Claude reviews captions, hashtags, bio, and your campaign brief and returns a qualitative verdict per account. All scoring is deterministic arithmetic in your browser; AI and live data are strictly opt-in.
         </p>
       </div>
 
@@ -107,7 +110,7 @@ export default function InstructionsPage() {
           <li className="flex gap-4">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">1</span>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-ink mb-1">Pull in your accounts</p>
+              <p className="text-[16px] font-bold text-ink mb-1">Pull in your accounts</p>
               <p className="text-[13px] text-body leading-relaxed mb-3">Two ways to bring in data — pick whichever fits your situation:</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
@@ -161,7 +164,7 @@ export default function InstructionsPage() {
                 {n}
               </span>
               <div>
-                <p className="text-[13px] font-semibold text-ink mb-1">{title}</p>
+                <p className="text-[16px] font-bold text-ink mb-1">{title}</p>
                 <p className="text-[13px] text-body leading-relaxed">{text}</p>
               </div>
             </li>
@@ -172,16 +175,24 @@ export default function InstructionsPage() {
 
       {/* Refresh / Cost Warning */}
       <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
-        <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-2">Important — costs</p>
+        <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-3">Important — costs</p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
-          <strong>Fetch Live Stats</strong> triggers a live Apify scrape — approximately <strong>$0.01 per account</strong>. A typical run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-uploading the same dataset within that window won't trigger a new scrape.
+          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM tracking all run at no cost. Only three actions call a paid API:
         </p>
-        <p className="text-[13px] text-body leading-relaxed mb-2">
-          <strong>Direct scrape</strong> (Option A intake) also uses Apify — cost scales with result limit. 200 results costs roughly $0.50–1; 1,000 results costs around $2–3.
-        </p>
-        <p className="text-[13px] text-body leading-relaxed">
-          <strong>AI Deep-Dive</strong> calls Claude via Anthropic's API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief combination, so re-running with the same brief won't re-charge for accounts already processed.
-        </p>
+        <div className="space-y-2 mt-3">
+          <div className="flex gap-3">
+            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Direct scrape</span>
+            <p className="text-[13px] text-body leading-relaxed">Apify Instagram Scraper — cost scales with result limit. 200 results ≈ $0.50–1; 1,000 results ≈ $2–3.</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Fetch Live Stats</span>
+            <p className="text-[13px] text-body leading-relaxed">Apify batch scrape — approximately <strong>$0.01 per account</strong>. A run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-running the same dataset won't re-charge for already-fetched accounts.</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">AI Deep-Dive</span>
+            <p className="text-[13px] text-body leading-relaxed">Anthropic API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief — a different brief generates a fresh verdict even for the same account.</p>
+          </div>
+        </div>
       </div>
 
       {/* Scoring Methodology */}

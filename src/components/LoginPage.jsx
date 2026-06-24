@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-const CHAR_DURATION = 380   // ms each char fades in over
-const CHAR_STAGGER  = 22    // ms between each char start
-const BULLET_GAP    = 380   // ms between each bullet appearing
+const CHAR_DURATION = 380
+const CHAR_STAGGER  = 22
+const BULLET_GAP    = 380
 
-function TextEffect({ children, onComplete }) {
+const LINE1 = 'Find, score and approve KOL seeding candidates —'
+const LINE2 = 'all in one place.'
+
+function TextEffect({ children, offset = 0, onComplete }) {
   const chars = String(children).split('')
 
   useEffect(() => {
     if (!onComplete) return
-    const total = (chars.length - 1) * CHAR_STAGGER + CHAR_DURATION + 80
+    const total = (offset + chars.length - 1) * CHAR_STAGGER + CHAR_DURATION + 80
     const t = setTimeout(onComplete, total)
     return () => clearTimeout(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -25,7 +28,7 @@ function TextEffect({ children, onComplete }) {
             opacity: 0,
             display: 'inline',
             animation: `charFadeUp ${CHAR_DURATION}ms ease forwards`,
-            animationDelay: `${i * CHAR_STAGGER}ms`,
+            animationDelay: `${(offset + i) * CHAR_STAGGER}ms`,
           }}
         >
           {ch === ' ' ? ' ' : ch}
@@ -75,9 +78,9 @@ export default function LoginPage({ error }) {
         <div className="flex-1 flex flex-col justify-center">
           <p className="font-mono text-[9px] tracking-[.18em] text-faint uppercase mb-4">Seeding Studio</p>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink mb-3 leading-tight">
-            <TextEffect onComplete={handleTextComplete}>
-              Find, score and approve KOL seeding candidates — all in one place.
-            </TextEffect>
+            <TextEffect>{LINE1}</TextEffect>
+            <br />
+            <TextEffect offset={LINE1.length + 1} onComplete={handleTextComplete}>{LINE2}</TextEffect>
           </h1>
           <ul className="mt-6 space-y-3">
             {BULLETS.map((item, i) => (

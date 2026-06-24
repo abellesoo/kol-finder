@@ -8,6 +8,11 @@
   }
 }
 
+@keyframes charFadeUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @layer components {
   .score-badge {
     @apply inline-flex items-center justify-center w-[38px] h-[38px] rounded-full font-mono text-[13px] font-semibold leading-none;

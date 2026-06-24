@@ -1,8 +1,55 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+
+const CHAR_DURATION = 380   // ms each char fades in over
+const CHAR_STAGGER  = 22    // ms between each char start
+const BULLET_GAP    = 380   // ms between each bullet appearing
+
+function TextEffect({ children, onComplete }) {
+  const chars = String(children).split('')
+
+  useEffect(() => {
+    if (!onComplete) return
+    const total = (chars.length - 1) * CHAR_STAGGER + CHAR_DURATION + 80
+    const t = setTimeout(onComplete, total)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <>
+      {chars.map((ch, i) => (
+        <span
+          key={i}
+          style={{
+            opacity: 0,
+            display: 'inline',
+            animation: `charFadeUp ${CHAR_DURATION}ms ease forwards`,
+            animationDelay: `${i * CHAR_STAGGER}ms`,
+          }}
+        >
+          {ch === ' ' ? ' ' : ch}
+        </span>
+      ))}
+    </>
+  )
+}
+
+const BULLETS = [
+  'Score accounts automatically',
+  'Send for brand manager review',
+  'Draft and send DMs',
+]
 
 export default function LoginPage({ error }) {
   const [loading, setLoading] = useState(false)
+  const [bulletsVisible, setBulletsVisible] = useState(0)
+
+  const handleTextComplete = useCallback(() => {
+    BULLETS.forEach((_, i) => {
+      setTimeout(() => setBulletsVisible(i + 1), i * BULLET_GAP)
+    })
+  }, [])
 
   const handleGoogleSignIn = async () => {
     setLoading(true)
@@ -28,15 +75,21 @@ export default function LoginPage({ error }) {
         <div className="flex-1 flex flex-col justify-center">
           <p className="font-mono text-[9px] tracking-[.18em] text-faint uppercase mb-4">Seeding Studio</p>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink mb-3 leading-tight">
-            Find, score and approve<br />KOL seeding candidates —<br />all in one place.
+            <TextEffect onComplete={handleTextComplete}>
+              Find, score and approve KOL seeding candidates -- all in one place.
+            </TextEffect>
           </h1>
           <ul className="mt-6 space-y-3">
-            {[
-              'Score accounts automatically',
-              'Send for brand manager review',
-              'Draft and send DMs',
-            ].map((item) => (
-              <li key={item} className="flex items-center gap-3 text-[13.5px] text-muted">
+            {BULLETS.map((item, i) => (
+              <li
+                key={item}
+                className="flex items-center gap-3 text-[13.5px] text-muted"
+                style={{
+                  opacity: bulletsVisible > i ? 1 : 0,
+                  transform: bulletsVisible > i ? 'translateY(0)' : 'translateY(6px)',
+                  transition: 'opacity 400ms ease, transform 400ms ease',
+                }}
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-faint flex-shrink-0" />
                 {item}
               </li>

@@ -9,7 +9,8 @@ export const TABLE_COLUMNS = [
   { id: 'engagement',            label: 'Eng. Rate',       width: '1fr', sortKey: 'engagement',   infoKey: 'engagement',       exportIds: ['engagement_rate'] },
   { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
   { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', sortKey: 'live_median_likes', infoKey: 'live_median_likes',  exportIds: ['live_median_likes'] },
-  { id: 'live_median_views',     label: 'Med. Views',      width: '1fr', sortKey: 'live_median_views', infoKey: 'live_median_views',  exportIds: ['live_median_views'] },
+  { id: 'live_median_views',     label: 'Med. Views',      width: '1fr', sortKey: 'live_median_views',    infoKey: 'live_median_views',    exportIds: ['live_median_views'] },
+  { id: 'live_median_comments',  label: 'Med. Comments',   width: '1fr', sortKey: 'live_median_comments', infoKey: 'live_median_comments', exportIds: ['live_median_comments'] },
   { id: 'sample_post_url',       label: 'Scraped Post',    width: '1fr',                                                       exportIds: ['sample_post_url'] },
   { id: 'scraped_post_likes',    label: 'Post Likes',      width: '1fr',                                                       exportIds: ['scraped_post_likes'] },
   { id: 'scraped_post_comments', label: 'Post Comments',   width: '1fr',                                                       exportIds: ['scraped_post_comments'] },
@@ -20,8 +21,8 @@ export const TABLE_COLUMNS = [
 
 export const DEFAULT_SELECTED_COLUMNS = [
   'brand', 'overall', 'relevancy_score', 'engagement_score',
-  'engagement', 'live_median_likes', 'live_median_views',
-  'sample_post_url', 'niche_signals',
+  'engagement', 'live_median_likes', 'live_median_views', 'live_median_comments',
+  'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
 ]
 
 // Always included in Step 3 (ResultsStep) export — includes dm_status for tracking.

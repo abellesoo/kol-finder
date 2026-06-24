@@ -22,7 +22,7 @@ const COLUMN_INFO = {
   relevancy: {
     title: 'Relevancy Score (0–10)',
     lines: [
-      'Baseline 5. Adds 1 per keyword hit in your target niches.',
+      'Baseline 3. Adds 1 per keyword hit in your target niches.',
       'Deducts 1 per off-niche category that also has keyword hits.',
       'Scans captions, hashtags, and display name.',
       '· 8–10 = strong niche match',
@@ -33,8 +33,8 @@ const COLUMN_INFO = {
   engagement_score: {
     title: 'Engagement Score (0–10)',
     lines: [
-      'Before live fetch: log(1 + avgLikes + avgComments×3)',
-      'After live fetch:  log(1 + medianLikes + medianViews×0.5)',
+      'Before live fetch: log(1 + avgLikes + avgComments×1.5)',
+      'After live fetch:  log(1 + medianLikes + medianViews×0.8)',
       'Live data replaces the export estimate per account.',
       '· ~4 = micro (~50 likes)',
       '· ~6–7 = mid-tier (~500–1k likes)',
@@ -68,6 +68,15 @@ const COLUMN_INFO = {
     lines: [
       'Median video view count across the 10 most recent posts or reels scraped live.',
       'Only video posts (Reels, clips) count — photo-only accounts show —.',
+      'Uses only posts from the past 3 months where available.',
+      'Populated after a live Apify scrape — click Refresh to fetch.',
+    ],
+  },
+  live_median_comments: {
+    title: 'Median Comments (live)',
+    lines: [
+      'Median comment count across the 10 most recent posts or reels scraped live.',
+      'Includes both photo posts and video/Reels — any post with a comment count.',
       'Uses only posts from the past 3 months where available.',
       'Populated after a live Apify scrape — click Refresh to fetch.',
     ],
@@ -249,6 +258,10 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
           if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
+        case 'live_median_comments':
+          if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
+          if (s?.medianComments != null) return <p className="font-mono text-sm text-ink">{s.medianComments.toLocaleString()}</p>
+          return <p className="font-mono text-sm text-ink/30">—</p>
         case 'sample_post_url':
           return r.samplePostUrl ? (
             <a href={r.samplePostUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
@@ -378,7 +391,7 @@ const CACHE_KEY = 'kol_live_stats_v1'
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 function hasRealData(stats) {
-  return stats && (stats.medianLikes != null || stats.medianViews != null || stats.followerCount != null)
+  return stats && (stats.medianLikes != null || stats.medianViews != null || stats.medianComments != null || stats.followerCount != null)
 }
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}') } catch { return {} }
@@ -437,8 +450,8 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     }
     // Seed from saved results (persisted after a prior live fetch)
     for (const r of results) {
-      if (!valid[r.username] && (r.medianLikes != null || r.medianViews != null)) {
-        valid[r.username] = { medianLikes: r.medianLikes ?? null, medianViews: r.medianViews ?? null }
+      if (!valid[r.username] && (r.medianLikes != null || r.medianViews != null || r.medianComments != null)) {
+        valid[r.username] = { medianLikes: r.medianLikes ?? null, medianViews: r.medianViews ?? null, medianComments: r.medianComments ?? null }
       }
     }
     return valid
@@ -446,7 +459,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const [liveStatus, setLiveStatus] = useState(() => {
     const cache = readCache()
     const hasCached = results.some(
-      (r) => hasRealData(cache[r.username]?.stats) || r.medianLikes != null || r.medianViews != null
+      (r) => hasRealData(cache[r.username]?.stats) || r.medianLikes != null || r.medianViews != null || r.medianComments != null
     )
     return hasCached ? 'done' : 'idle'
   })
@@ -473,6 +486,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         overall,
         medianLikes: live?.medianLikes ?? r.xlsxMedianLikes ?? null,
         medianViews: live?.medianViews ?? r.xlsxMedianViews ?? null,
+        medianComments: live?.medianComments ?? null,
       }
     })
   }, [results, infMap, liveStats])
@@ -487,7 +501,8 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
         : sortKey === 'engagement'        ? (r.engagementRate ?? r.totalEngagement ?? 0)
         : sortKey === 'live_median_likes' ? (r.medianLikes ?? -1)
-        : sortKey === 'live_median_views' ? (r.medianViews ?? -1)
+        : sortKey === 'live_median_views'    ? (r.medianViews ?? -1)
+        : sortKey === 'live_median_comments' ? (r.medianComments ?? -1)
         : r.overall
       list = [...list].sort((a, b) =>
         sortDir === 'desc' ? getVal(b) - getVal(a) : getVal(a) - getVal(b)
@@ -574,6 +589,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           verdict: r.verdict || '',
           medianLikes: r.medianLikes ?? null,
           medianViews: r.medianViews ?? null,
+          medianComments: r.medianComments ?? null,
         }))
 
       const { error } = await supabase

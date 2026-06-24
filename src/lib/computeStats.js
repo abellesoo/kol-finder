@@ -33,6 +33,9 @@ export function computeStats(items) {
   )
   const medianViews = median(withViews.map((p) => p.videoViewCount))
 
+  const withComments = postsForMedian.filter((p) => typeof p.commentsCount === 'number' && p.commentsCount >= 0)
+  const medianComments = median(withComments.map((p) => p.commentsCount))
+
   // Follower count — take first non-zero value across items
   const followerCount =
     items.map((p) => Number(p.ownerFollowersCount ?? p.followersCount ?? 0)).find((f) => f > 0) ?? null
@@ -43,6 +46,7 @@ export function computeStats(items) {
     hiddenCount,
     medianLikes,
     medianViews,
+    medianComments,
     followerCount,
     posts: [...recent]
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))

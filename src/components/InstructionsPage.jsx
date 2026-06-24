@@ -203,9 +203,9 @@ export default function InstructionsPage() {
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body">
             <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
-            <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
-            <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 3) <span className="text-ink/40 text-xs">· before live fetch</span></p>
-            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 5 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
+            <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8) <span className="text-ink/40 text-xs">· after live fetch</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
+            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
           </div>
         </div>
 
@@ -234,14 +234,14 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Engagement Score"
             range="0 – 10"
-            formula="Before live: log(1 + avgLikes + avgComments×3)   |   After live: log(1 + medianLikes + medianViews×0.5)"
-            description="Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn't automatically swamp a 1k-like account. Before live stats are fetched, comments are weighted 3× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes and views — median is more robust than average against outlier viral posts. Views are weighted 0.5× since they require less intent than a like. Photo-only accounts contribute 0 for views, which is correct. The Overall Score updates in real time as live data arrives per account."
+            formula="Before live: log(1 + avgLikes + avgComments×1.5)   |   After live: log(1 + medianLikes + medianViews×0.8)"
+            description="Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn't automatically swamp a 1k-like account. Before live stats are fetched, comments are weighted 1.5× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes and views — median is more robust than average against outlier viral posts. Views are weighted 0.8× since they require slightly less intent than a like. Photo-only accounts contribute 0 for views, which is correct. The Overall Score updates in real time as live data arrives per account."
           />
           <ScoreRow
             name="Relevancy Score"
             range="0 – 10"
-            formula="5 + (hits in target niches) − (off-niche categories with hits)"
-            description="Starts at a neutral baseline of 5, reflecting that any account in the dataset has already shown some affinity with the competitor's content. Adds 1 point per keyword match found in the account's hashtags, captions, and display name, using niche-specific keyword lists (e.g. 'skincare', '護膚', 'makeup', '化妝'). Deducts 1 point per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness signals scores lower than a pure-niche account. Score is capped at 0–10."
+            formula="3 + (hits in target niches) − (off-niche categories with hits)"
+            description="Starts at a baseline of 3. Adds 1 point per keyword match found in the account's hashtags, captions, and display name, using niche-specific keyword lists (e.g. 'skincare', '護膚', 'makeup', '化妝'). Deducts 1 point per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness signals scores lower than a pure-niche account. Score is capped at 0–10."
           />
           <ScoreRow
             name="Bot Risk Score"

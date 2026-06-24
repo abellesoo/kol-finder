@@ -101,62 +101,72 @@ export default function InstructionsPage() {
       {/* Seeding Tool Instructions */}
       <Section label="How to use" title="Seeding Tool — Step-by-step">
 
-        {/* Step 1 — two intake paths */}
-        <div className="mb-6">
-          <div className="flex gap-3 items-start mb-3">
+        <ol className="space-y-6">
+
+          {/* Step 1 — two intake paths */}
+          <li className="flex gap-4">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">1</span>
-            <p className="text-[13px] font-semibold text-ink pt-0.5">Bring in your account data — pick one of two paths:</p>
-          </div>
-
-          <div className="ml-9 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
-              <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option A — Paste URLs / hashtags</p>
-              <p className="text-[12px] text-muted italic mb-2">Use this when you're starting a fresh scrape right now.</p>
-              <p className="text-[13px] text-body leading-relaxed">
-                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-[11px] bg-surface px-1 rounded">#skincare</code> or just <code className="font-mono text-[11px] bg-surface px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps needed.
-              </p>
+            <div className="flex-1">
+              <p className="text-[13px] font-semibold text-ink mb-1">Pull in your accounts</p>
+              <p className="text-[13px] text-body leading-relaxed mb-3">Two ways to bring in data — pick whichever fits your situation:</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
+                  <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option A — Paste URLs / hashtags</p>
+                  <p className="text-[12px] text-muted italic mb-2">Starting a fresh scrape right now.</p>
+                  <p className="text-[13px] text-body leading-relaxed">
+                    Go to <strong>"Scrape URLs / Hashtags"</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-[11px] bg-surface px-1 rounded">#skincare</code> or just <code className="font-mono text-[11px] bg-surface px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline.
+                  </p>
+                </div>
+                <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
+                  <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option B — Upload XLSX</p>
+                  <p className="text-[12px] text-muted italic mb-2">You already have a previous Apify export.</p>
+                  <p className="text-[13px] text-body leading-relaxed">
+                    Drop in an Apify Instagram Scraper .xlsx. The filename becomes the brand label in the export. Upload multiple files to combine brands, or re-score an old dataset with new niche filters.
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
-              <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option B — Upload XLSX</p>
-              <p className="text-[12px] text-muted italic mb-2">Use this when you already have a previous Apify export.</p>
-              <p className="text-[13px] text-body leading-relaxed">
-                If you ran an Apify Instagram Scraper job previously and saved the .xlsx, go to <strong>Step 1 → "Upload XLSX" tab</strong> and drop the file in. The filename becomes the brand label in the export. You can upload multiple files to combine brands. This path is also useful when you want to re-score an old dataset with different niche filters.
-              </p>
-            </div>
-          </div>
-        </div>
+          </li>
 
-        {/* Steps 2–6 */}
-        <ol className="space-y-4">
+          {/* Steps 2–6 */}
           {[
             {
               n: 2,
-              text: <>On the <strong>Configure</strong> screen, select your target niches and set a minimum engagement threshold. Optionally fill in a <strong>Campaign brief</strong> — a sentence or two describing the campaign goal, target audience, and tone. The brief is passed to AI Deep-Dive if you run it and makes the qualitative verdicts significantly more useful.</>,
+              title: 'Define your brief',
+              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Optionally write a <strong>Campaign brief</strong> — a sentence or two on your campaign goal, target audience, and tone. The brief is used later to generate campaign-specific AI verdicts.</>,
             },
             {
               n: 3,
-              text: <>Click <strong>Start scoring</strong>. Engagement and Relevancy scores are computed entirely in your browser from the uploaded data — no external calls happen at this step.</>,
+              title: 'Score & enrich',
+              text: <>Click <strong>Start scoring</strong> to rank every account by Engagement and Relevancy — computed instantly in your browser, no external calls. Then click <strong>Fetch Live Stats</strong> on the Results screen to pull real-time median likes and views from Apify, upgrading scores with fresher data. Live stats cost ~$0.01/account and are cached for 7 days.</>,
             },
             {
               n: 4,
-              text: <>On the <strong>Results</strong> screen, review the ranked table. Columns are customisable. Click <strong>Fetch Live Stats</strong> to pull real-time median likes and views from Apify — this upgrades the Engagement Score with more accurate data but incurs cost (see the cost note below).</>,
+              title: 'Review & shortlist',
+              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see captions, hashtag signals, and flags. Optionally run <strong>AI Deep-Dive</strong> (top-N, default 50) — Claude reviews captions, bio, and your brief and returns a qualitative verdict per account, cached for 7 days.</>,
             },
             {
               n: 5,
-              text: <><strong>Optional — AI Deep-Dive:</strong> Set the top-N limit (default 50) and click the AI Deep-Dive button. This sends captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Results are cached for 7 days per account + brief combination. Verdicts appear in the expanded row and the export. This is the only step that calls an AI model.</>,
+              title: 'Reach out',
+              text: <>Move approved accounts to the <strong>Ready to Send</strong> queue. From there, copy profile links, open Instagram directly, and track DM status for each account. Use the status column to coordinate outreach across your team without double-sending.</>,
             },
             {
               n: 6,
-              text: <>Filter, sort, and customise columns, then click <strong>Export to XLSX</strong>. The export includes per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), hyperlinked Instagram URLs, and AI verdicts if available.</>,
+              title: 'Export',
+              text: <>Click <strong>Export to XLSX</strong> to download a formatted spreadsheet with per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), hyperlinked Instagram URLs, and AI verdicts if available. Ready to share with your team or file for records.</>,
             },
-          ].map(({ n, text }) => (
+          ].map(({ n, title, text }) => (
             <li key={n} className="flex gap-4">
               <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">
                 {n}
               </span>
-              <p className="text-[13px] text-body leading-relaxed">{text}</p>
+              <div>
+                <p className="text-[13px] font-semibold text-ink mb-1">{title}</p>
+                <p className="text-[13px] text-body leading-relaxed">{text}</p>
+              </div>
             </li>
           ))}
+
         </ol>
       </Section>
 

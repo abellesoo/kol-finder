@@ -69,13 +69,19 @@ function colIndexToLetter(n) {
 // Soft color palette for brand column — cycles if more than 5 brands
 const BRAND_COLORS = ['FFFCE5CF', 'FFD5E8D4', 'FFDAE8FC', 'FFE1D5E7', 'FFFFD7D7']
 
-export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}, reviewState = {}) {
+export async function exportToCsv(results, influencers, selectedColumnIds = null, liveStats = {}, reviewState = {}, options = {}) {
   const map = {}
   for (const inf of influencers) map[inf.username] = inf
 
-  const cols = selectedColumnIds
+  const cols = (selectedColumnIds
     ? EXPORT_COLUMNS.filter((c) => selectedColumnIds.includes(c.id))
     : EXPORT_COLUMNS
+  ).map((c) => {
+    if (c.id === 'reachout_status' && options.reachoutDefault) {
+      return { ...c, getValue: () => options.reachoutDefault }
+    }
+    return c
+  })
 
   const brandColIndex    = cols.findIndex((c) => c.id === 'brand') + 1
   const urlColIndex      = cols.findIndex((c) => c.id === 'instagram_url') + 1

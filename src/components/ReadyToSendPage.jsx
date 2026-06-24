@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw } from 'lucide-react'
+import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { exportToCsv } from '../lib/exportCsv'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -101,12 +102,26 @@ export default function ReadyToSendPage() {
           </h1>
           <p className="text-[14px] text-muted">Copy each DM draft and open the Instagram profile to send.</p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
-        >
-          <RefreshCw size={13} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const results = items.map((item) => ({ username: item.username }))
+              const influencers = items.map((item) => ({ username: item.username, fullName: item.fullName }))
+              const reviewState = Object.fromEntries(items.map((item) => [item.username, item.reviewEntry]))
+              const selectedColumnIds = ['username', 'fullName', 'instagram_url', 'approve', 'reachout_status', 'dm_status', 'dm_draft']
+              exportToCsv(results, influencers, selectedColumnIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+          >
+            <Download size={14} /> Export XLSX
+          </button>
+          <button
+            onClick={load}
+            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
+          >
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

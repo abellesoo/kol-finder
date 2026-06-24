@@ -561,7 +561,6 @@ export default function ReviewPage({ reviewId, onBack }) {
       setAccounts(accs)
       setReviewState(accountState)
       reviewStateRef.current = accountState
-      setBmNotes(notes)
       bmNotesRef.current = notes
       setViewMode(accs.length > 20 ? 'table' : 'cards')
       setLoading(false)

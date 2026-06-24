@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
+import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -12,11 +13,61 @@ const DM_STATUS_STYLES = {
   no_response: 'bg-rose/10 text-rose/70',
 }
 
+function ColumnPicker({ selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const toggle = (id) => {
+    onChange(selected.includes(id) ? selected.filter((c) => c !== id) : [...selected, id])
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-4 py-2 border border-[#E1DBCD] rounded-[10px] text-[13px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
+      >
+        <Columns size={14} />
+        Columns
+        {selected.length < TABLE_COLUMNS.length && (
+          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+            {selected.length}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-card-edge rounded-[12px] shadow-lg z-10 p-3">
+          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Export columns</p>
+          <div className="space-y-1">
+            {TABLE_COLUMNS.map((col) => (
+              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <span className="font-mono text-[11px] text-body">{col.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
+            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
+            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ReadyToSendPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [items, setItems] = useState([])
   const [copiedUser, setCopiedUser] = useState(null)
+  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
 
   const load = useCallback(async () => {
     if (!supabase) { setLoading(false); return }
@@ -42,6 +93,7 @@ export default function ReadyToSendPage() {
               dmStatus: entry.dm_status || 'not_sent',
               campaignBrief: row.campaign_brief || '',
               reviewEntry: entry,
+              accountData: account,
             })
           }
         }
@@ -103,13 +155,17 @@ export default function ReadyToSendPage() {
           <p className="text-[14px] text-muted">Copy each DM draft and open the Instagram profile to send.</p>
         </div>
         <div className="flex items-center gap-2">
+          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
           <button
             onClick={() => {
-              const results = items.map((item) => ({ username: item.username }))
-              const influencers = items.map((item) => ({ username: item.username, fullName: item.fullName }))
+              const results = items.map((item) => item.accountData || { username: item.username })
+              const influencers = items.map((item) => item.accountData || { username: item.username, fullName: item.fullName })
               const reviewState = Object.fromEntries(items.map((item) => [item.username, item.reviewEntry]))
-              const selectedColumnIds = ['username', 'fullName', 'instagram_url', 'approve', 'reachout_status', 'dm_status', 'dm_draft']
-              exportToCsv(results, influencers, selectedColumnIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
+              const exportIds = [
+                ...ALWAYS_EXPORT_IDS,
+                ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
+              ]
+              exportToCsv(results, influencers, exportIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
             }}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
           >

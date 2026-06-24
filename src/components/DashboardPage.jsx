@@ -22,8 +22,11 @@ function KpiCard({ label, value, sub }) {
 export default function DashboardPage() {
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
+  const [sessions, setSessions] = useState([])
 
-  const sessions = loadHistory()
+  useEffect(() => {
+    loadHistory().then(setSessions)
+  }, [])
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -100,7 +103,7 @@ export default function DashboardPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-4 mb-10">
-        <KpiCard label="Sessions" value={totalSessions} sub="saved locally" />
+        <KpiCard label="Sessions" value={totalSessions} sub="across the team" />
         <KpiCard label="Scored" value={accountsScored} sub="across all sessions" />
         <KpiCard
           label="Approved"

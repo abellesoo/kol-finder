@@ -44,8 +44,8 @@ export default function TeamPage() {
   const handleRoleChange = async (id, newRole) => {
     if (!supabase) return
     setSaving(id)
-    await supabase.from('users').update({ role: newRole }).eq('id', id)
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: newRole } : u))
+    const { error } = await supabase.from('users').update({ role: newRole }).eq('id', id)
+    if (!error) setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: newRole } : u))
     setSaving(null)
   }
 

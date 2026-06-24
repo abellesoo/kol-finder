@@ -32,8 +32,8 @@ export default function DashboardPage() {
       .select('id, campaign_brief, accounts, review_state, created_at')
       .order('created_at', { ascending: false })
       .limit(10)
-      .then(({ data }) => {
-        setCampaigns(data || [])
+      .then(({ data, error }) => {
+        if (!error) setCampaigns(data || [])
         setLoading(false)
       })
   }, [])

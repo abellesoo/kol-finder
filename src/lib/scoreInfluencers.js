@@ -83,7 +83,7 @@ function buildFlags(inf, relevancyScore, botScore, config) {
   }
   if ((inf.paidCount || 0) > 0) flags.push('paid-collab-history')
   if (botScore.score <= 3) flags.push('bot-risk')
-  if ((inf.avgLikes || 0) / Math.max(inf.postCount || 1, 1) < 50) flags.push('low-engagement')
+  if ((inf.avgLikes || 0) < 50) flags.push('low-engagement')
 
   const allText = [...inf.hashtags, ...inf.sampleCaptions].join(' ').toLowerCase()
   if (textContainsAny(allText, ['廣東', 'cantonese', '廣東話', '粵語']).length) flags.push('cantonese-speaker')

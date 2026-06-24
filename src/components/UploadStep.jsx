@@ -70,6 +70,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         const items = await getDatasetItems(completed.defaultDatasetId)
         brandedResults.push({ items, brand: brand || 'scraped' })
       }
+      setScrapeStatus('idle')
       onScrapedItems(brandedResults)
     } catch (err) {
       setScrapeError(err.message)

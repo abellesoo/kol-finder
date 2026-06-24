@@ -47,9 +47,11 @@ export default function ReadyToSendPage() {
   useEffect(() => { load() }, [load])
 
   const handleCopy = useCallback(async (item) => {
+    let copied = true
     if (item.dm_draft) {
-      await navigator.clipboard.writeText(item.dm_draft).catch(() => {})
+      copied = await navigator.clipboard.writeText(item.dm_draft).then(() => true).catch(() => false)
     }
+    if (!copied) return
     setCopiedUser(item.username)
     setTimeout(() => setCopiedUser(null), 2000)
 

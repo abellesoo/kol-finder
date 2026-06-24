@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { ExternalLink, Copy, Check, Loader2, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
+const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
+const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
+const DM_STATUS_STYLES = {
+  not_sent:    'bg-ink/10 text-ink/50',
+  sent:        'bg-blue-100 text-blue-700',
+  replied:     'bg-green-100 text-green-700',
+  no_response: 'bg-rose/10 text-rose/70',
+}
+
 export default function ReadyToSendPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -23,13 +32,13 @@ export default function ReadyToSendPage() {
       for (const row of data || []) {
         for (const account of row.accounts || []) {
           const entry = row.review_state?.[account.username]
-          const dmStatus = entry?.dm_status || 'not_sent'
-          if (entry?.status === 'approved' && dmStatus === 'not_sent') {
+          if (entry?.status === 'approved') {
             ready.push({
               rowId: row.id,
               username: account.username,
               fullName: account.fullName || '',
               dm_draft: entry.dm_draft || '',
+              dmStatus: entry.dm_status || 'not_sent',
               campaignBrief: row.campaign_brief || '',
               reviewEntry: entry,
             })
@@ -46,33 +55,33 @@ export default function ReadyToSendPage() {
 
   useEffect(() => { load() }, [load])
 
-  const handleCopy = useCallback(async (item) => {
-    let copied = true
-    if (item.dm_draft) {
-      copied = await navigator.clipboard.writeText(item.dm_draft).then(() => true).catch(() => false)
-    }
-    if (!copied) return
-    setCopiedUser(item.username)
-    setTimeout(() => setCopiedUser(null), 2000)
-
-    // Mark dm_status = sent and remove from list
+  const persistStatus = useCallback(async (item, newStatus) => {
+    setItems((prev) => prev.map((i) =>
+      i.rowId === item.rowId && i.username === item.username
+        ? { ...i, dmStatus: newStatus, reviewEntry: { ...i.reviewEntry, dm_status: newStatus } }
+        : i
+    ))
     try {
-      const { data: row } = await supabase
-        .from('shared_results')
-        .select('review_state')
-        .eq('id', item.rowId)
-        .single()
-
+      const { data: row } = await supabase.from('shared_results').select('review_state').eq('id', item.rowId).single()
       const newState = {
         ...(row?.review_state || {}),
-        [item.username]: { ...item.reviewEntry, dm_status: 'sent' },
+        [item.username]: { ...item.reviewEntry, dm_status: newStatus },
       }
       await supabase.from('shared_results').update({ review_state: newState }).eq('id', item.rowId)
-      setItems((prev) => prev.filter((i) => !(i.rowId === item.rowId && i.username === item.username)))
     } catch (e) {
       console.error('Failed to update dm_status', e)
     }
   }, [])
+
+  const handleCopyAndOpen = useCallback(async (item) => {
+    if (item.dm_draft) {
+      await navigator.clipboard.writeText(item.dm_draft).catch(() => {})
+      setCopiedUser(item.username)
+      setTimeout(() => setCopiedUser(null), 2000)
+    }
+    window.open(`https://www.instagram.com/${item.username}/`, '_blank', 'noreferrer')
+    await persistStatus(item, 'sent')
+  }, [persistStatus])
 
   if (loading) {
     return (
@@ -106,7 +115,7 @@ export default function ReadyToSendPage() {
 
       {items.length === 0 && !error && (
         <div className="text-center py-24">
-          <p className="text-[13.5px] text-muted">No approved accounts waiting for DMs.</p>
+          <p className="text-[13.5px] text-muted">No approved accounts yet.</p>
           <p className="text-[11px] text-faint mt-1 font-mono">Accounts appear here once a brand manager approves them in the Review Queue.</p>
         </div>
       )}
@@ -132,33 +141,41 @@ export default function ReadyToSendPage() {
                   <p className="text-[11px] text-faint font-mono mt-1 truncate max-w-sm">{item.campaignBrief}</p>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => handleCopy(item)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-card-edge bg-white rounded-[9px] text-[12px] text-body hover:border-ink/30 hover:text-ink transition-all"
-                >
-                  {copiedUser === item.username ? <Check size={12} className="text-sage" /> : <Copy size={12} />}
-                  {copiedUser === item.username ? 'Copied!' : 'Copy DM'}
-                </button>
-                <a
-                  href={`https://www.instagram.com/${item.username}/`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all"
-                >
-                  <ExternalLink size={12} /> Open
-                </a>
-              </div>
             </div>
 
             {item.dm_draft ? (
-              <div className="bg-white border border-card-edge rounded-[10px] px-4 py-3">
+              <div className="bg-white border border-card-edge rounded-[10px] px-4 py-3 mb-3">
                 <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-2">DM Draft</p>
                 <p className="text-[13px] text-body whitespace-pre-wrap">{item.dm_draft}</p>
               </div>
             ) : (
-              <p className="text-[11px] text-faint font-mono">No DM draft — approve and generate one from the Review Queue.</p>
+              <p className="text-[11px] text-faint font-mono mb-3">No DM draft — generate one from the Review Queue.</p>
             )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1.5">
+                {DM_STATUS_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => persistStatus(item, s)}
+                    className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
+                      item.dmStatus === s
+                        ? DM_STATUS_STYLES[s] + ' border-current'
+                        : 'border-mist text-faint hover:border-ink/30'
+                    }`}
+                  >
+                    {DM_STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => handleCopyAndOpen(item)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all"
+              >
+                {copiedUser === item.username ? <Check size={12} /> : <Copy size={12} />}
+                {copiedUser === item.username ? 'Copied!' : 'Copy & open profile'}
+              </button>
+            </div>
           </div>
         ))}
       </div>

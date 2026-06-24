@@ -1,19 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, ArrowLeft, Pencil } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
-
-const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
-const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
-const DM_STATUS_STYLES = {
-  not_sent:    'bg-ink/10 text-ink/50',
-  sent:        'bg-blue-100 text-blue-700',
-  replied:     'bg-green-100 text-green-700',
-  no_response: 'bg-rose/10 text-rose/70',
-}
 
 async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignBrief }) {
   const res = await fetch(`${PROXY}/draft-dm`, {
@@ -104,7 +95,6 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
 
   const [drafting, setDrafting] = useState(false)
   const [draftError, setDraftError] = useState(null)
-  const [copied, setCopied] = useState(false)
   const [localDraft, setLocalDraft] = useState(dmDraft)
 
   useEffect(() => { setLocalDraft(dmDraft) }, [dmDraft])
@@ -132,20 +122,6 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
 
   const handleReject = () => {
     onUpdate(account.username, { status: 'rejected', dm_status: dmStatus, dm_draft: localDraft })
-  }
-
-  const handleCopyAndOpen = async () => {
-    if (localDraft) {
-      await navigator.clipboard.writeText(localDraft).catch(() => {})
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-    window.open(`https://www.instagram.com/${account.username}/`, '_blank', 'noreferrer')
-    onUpdate(account.username, { status: 'approved', dm_status: 'sent', dm_draft: localDraft })
-  }
-
-  const handleDmStatusChange = (newStatus) => {
-    onUpdate(account.username, { status, dm_status: newStatus, dm_draft: localDraft })
   }
 
   const isPending = status === 'pending'
@@ -280,23 +256,6 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                 rows={5}
                 className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-accent resize-none"
               />
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex gap-1.5">
-                  {DM_STATUS_OPTIONS.map((s) => (
-                    <button key={s} onClick={() => handleDmStatusChange(s)}
-                      className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
-                        dmStatus === s ? DM_STATUS_STYLES[s] + ' border-current' : 'border-mist text-faint hover:border-ink/30'
-                      }`}>
-                      {DM_STATUS_LABELS[s]}
-                    </button>
-                  ))}
-                </div>
-                <button onClick={handleCopyAndOpen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all">
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? 'Copied!' : 'Copy & open profile'}
-                </button>
-              </div>
             </>
           )}
         </div>

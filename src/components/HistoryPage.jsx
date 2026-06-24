@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { loadHistory, deleteSession } from '../lib/sessionHistory'
 
 function formatDate(iso) {
@@ -27,20 +27,19 @@ export default function HistoryPage({ onLoadSeederSession }) {
   }
 
   return (
-    <div className="min-h-screen px-6 py-10 max-w-3xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
       <div className="mb-10">
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">History</p>
-        <h1 className="text-2xl font-semibold text-ink">Past activity</h1>
+        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">History</p>
+        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink">Past activity</h1>
       </div>
 
       <section>
         <div className="flex items-center gap-2 mb-4">
-          <Clock size={13} className="text-ink/30" />
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase">Seeder sessions</p>
+          <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Seeder sessions</p>
         </div>
 
         {sessions.length === 0 ? (
-          <p className="text-sm text-ink/30 py-6 text-center border border-dashed border-mist rounded-xl">
+          <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
             No seeder sessions yet
           </p>
         ) : (
@@ -49,23 +48,26 @@ export default function HistoryPage({ onLoadSeederSession }) {
               <div
                 key={session.id}
                 onClick={() => onLoadSeederSession(session)}
-                className="flex items-center justify-between px-4 py-3 border border-mist rounded-xl hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
+                className="flex items-center justify-between px-[16px] py-[12px] border border-card-edge rounded-[12px] bg-white hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink group-hover:text-accent transition-colors">
-                    {session.accountCount} accounts
-                    {formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}
+                  <p className="text-[13.5px] font-medium text-ink group-hover:text-accent transition-colors">
+                    {session.config?.sessionTitle || `${session.accountCount} accounts`}
+                    {!session.config?.sessionTitle && formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}
                   </p>
-                  <p className="font-mono text-xs text-ink/40 mt-0.5">{formatDate(session.date)}</p>
+                  {session.config?.sessionTitle && (
+                    <p className="text-[11.5px] text-muted mt-[1px]">{session.accountCount} accounts{formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}</p>
+                  )}
+                  <p className="font-mono text-[11px] text-faint mt-0.5">{formatDate(session.date)}</p>
                   {session.fileNames?.length > 0 && (
-                    <p className="font-mono text-xs text-ink/25 truncate mt-0.5">
+                    <p className="font-mono text-[10px] text-faint/60 truncate mt-0.5">
                       {session.fileNames.join(', ')}
                     </p>
                   )}
                 </div>
                 <button
                   onClick={(e) => handleDeleteSession(e, session.id)}
-                  className="ml-3 flex-shrink-0 text-ink/20 hover:text-rose transition-colors"
+                  className="ml-3 flex-shrink-0 text-faint hover:text-rose transition-colors"
                   title="Delete session"
                 >
                   <Trash2 size={14} />

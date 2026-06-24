@@ -135,10 +135,10 @@ function ScoreBadge({ score }) {
 function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-16 h-1.5 bg-mist rounded-full overflow-hidden">
+      <div className="w-[62px] h-[6px] bg-[#EDE8DC] rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
-      <span className="font-mono text-xs text-ink/50">{value}</span>
+      <span className="font-mono text-[11px] text-faint">{value}</span>
     </div>
   )
 }
@@ -161,30 +161,30 @@ function ColumnPicker({ selected, onChange }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/60 hover:border-ink/30 hover:text-ink transition-all"
+        className="flex items-center gap-2 px-4 py-2 border border-[#E1DBCD] rounded-[10px] text-[13px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
       >
-        <Columns size={15} />
+        <Columns size={14} />
         Columns
         {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-mist rounded-xl shadow-lg z-10 p-3">
-          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Show / export columns</p>
+        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-card-edge rounded-[12px] shadow-lg z-10 p-3">
+          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Show / export columns</p>
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
-              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent" />
-                <span className="font-mono text-xs text-ink/70">{col.label}</span>
+              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <span className="font-mono text-[11px] text-body">{col.label}</span>
               </label>
             ))}
           </div>
           <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-xs text-ink/40 hover:text-ink transition-colors">Select all</button>
-            <button onClick={() => onChange([])} className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto">Clear</button>
+            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
+            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
           </div>
         </div>
       )}
@@ -297,8 +297,8 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
   }
 
   return (
-    <div className="border border-mist rounded-xl overflow-x-auto">
-      <div className="grid gap-3 px-4 py-3 bg-mist/50 border-b border-mist text-xs font-mono text-ink/40 uppercase tracking-wider"
+    <div className="border border-card-edge rounded-[14px] overflow-x-auto bg-white">
+      <div className="grid gap-3 px-[18px] py-[12px] bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
         {selectionMode && <span />}
         <span>Account</span>
@@ -316,12 +316,12 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       </div>
 
       {filtered.length === 0 && (
-        <div className="px-4 py-12 text-center text-sm text-ink/30">No accounts match your filters.</div>
+        <div className="px-4 py-12 text-center text-[13.5px] text-muted">No accounts match your filters.</div>
       )}
       {filtered.map((r) => (
         <div key={r.username}>
           <div
-            className="grid gap-3 px-4 py-3.5 border-b border-mist/50 hover:bg-accent-dim/10 cursor-pointer transition-colors items-center"
+            className="grid gap-3 px-[18px] py-[13px] border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
           >
@@ -356,20 +356,20 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           </div>
 
           {expandedRow === r.username && (
-            <div className="px-6 py-4 bg-paper border-b border-mist/50 grid grid-cols-2 gap-6 text-sm">
+            <div className="px-[18px] py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
               <div>
-                <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Scoring Verdict</p>
-                <p className="text-ink/60 text-xs leading-relaxed">{r.verdict || '—'}</p>
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-2">Scoring Verdict</p>
+                <p className="text-body text-[12px] leading-relaxed">{r.verdict || '—'}</p>
               </div>
               <div>
                 {r.nicheSignals?.length > 0 && (
                   <div className="mb-3">
-                    <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Niche Signals</p>
-                    <p className="text-xs text-ink/60">{r.nicheSignals.join(' · ')}</p>
+                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Niche Signals</p>
+                    <p className="text-[12px] text-body">{r.nicheSignals.join(' · ')}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Top Hashtags</p>
+                  <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">Top Hashtags</p>
                   <div className="flex flex-wrap gap-1">
                     {(r.hashtags || []).slice(0, 10).map((h) => (
                       <span key={h} className="tag">#{h}</span>
@@ -556,7 +556,7 @@ export default function ResultsStep({ results, influencers, config }) {
       const { error } = await supabase
         .from('shared_results')
         .insert({
-          campaign_brief: config?.campaignBrief || '',
+          campaign_brief: config?.sessionTitle || config?.campaignBrief || '',
           accounts: accountsToShare,
           review_state: {},
         })
@@ -575,17 +575,17 @@ export default function ResultsStep({ results, influencers, config }) {
   }
 
   return (
-    <div className="min-h-screen px-6 py-10 max-w-6xl mx-auto">
+    <div className="min-h-screen px-[40px] py-[36px] max-w-6xl mx-auto">
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Step 3 of 3 · Results</p>
-          <h1 className="text-2xl font-semibold text-ink mb-1">{filtered.length} accounts scored</h1>
-          <p className="text-sm text-ink/50">
-            <span className="text-sage font-medium">{highCount} strong matches</span>
+          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Step 3 of 3 · Results</p>
+          <h1 className="text-[25px] font-bold tracking-[-0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
+          <p className="text-[13.5px] text-muted">
+            <span className="text-sage font-semibold">{highCount} strong matches</span>
             {' · '}
-            <span className="text-accent font-medium">{midCount} possible</span>
+            <span className="text-accent font-semibold">{midCount} possible</span>
             {' · '}
             {enriched.length - highCount - midCount} low score
           </p>
@@ -597,32 +597,32 @@ export default function ResultsStep({ results, influencers, config }) {
           {!selectionMode ? (
             <button
               onClick={() => setSelectionMode(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all"
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all"
             >
-              <Send size={15} />
+              <Send size={14} />
               Send for Review
             </button>
           ) : shareStatus === 'done' ? (
-            <div className="flex items-center gap-2 px-4 py-2 bg-sage/10 border border-sage/30 rounded-lg">
-              <Check size={15} className="text-sage" />
-              <span className="text-sm text-sage font-medium">Sent to Review Queue</span>
+            <div className="flex items-center gap-2 px-4 py-2 bg-sage/10 border border-sage/30 rounded-[10px]">
+              <Check size={14} className="text-sage" />
+              <span className="text-[13px] text-sage font-semibold">Sent to Review Queue</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <button onClick={handleSelectAll} className="text-xs text-ink/40 hover:text-ink font-mono px-2 py-1 border border-mist rounded">
+              <button onClick={handleSelectAll} className="text-[11px] text-faint hover:text-ink font-mono px-2 py-1 border border-mist rounded-[8px]">
                 Select all
               </button>
-              <span className="text-xs font-mono text-ink/50">{selectedAccounts.size} selected</span>
+              <span className="text-[11px] font-mono text-muted">{selectedAccounts.size} selected</span>
               <button
                 onClick={handleShare}
                 disabled={selectedAccounts.size === 0 || shareStatus === 'loading'}
-                className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm hover:bg-accent/80 transition-all disabled:opacity-40"
+                className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-[10px] text-[13px] hover:bg-accent/80 transition-all disabled:opacity-40"
               >
-                {shareStatus === 'loading' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                {shareStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {shareStatus === 'loading' ? 'Sending…' : 'Send for Review'}
               </button>
               <button onClick={() => { setSelectionMode(false); setSelectedAccounts(new Set()) }}
-                className="text-xs text-ink/40 hover:text-ink px-2 py-1 border border-mist rounded">
+                className="text-[11px] text-faint hover:text-ink px-2 py-1 border border-mist rounded-[8px]">
                 Cancel
               </button>
             </div>
@@ -630,24 +630,24 @@ export default function ResultsStep({ results, influencers, config }) {
 
           {/* Live stats */}
           {liveStatus === 'loading' ? (
-            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/50">
-              <Loader2 size={15} className="animate-spin" />
+            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-muted">
+              <Loader2 size={14} className="animate-spin" />
               Fetching {liveProgress.done}/{liveProgress.total}
             </div>
           ) : liveStatus === 'error' ? (
             <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-lg text-sm hover:bg-rose/5 transition-all">
-              <RefreshCw size={15} /> Retry
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-[10px] text-[13px] hover:bg-rose/5 transition-all">
+              <RefreshCw size={14} /> Retry
             </button>
           ) : liveStatus === 'done' ? (
             <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-lg text-sm text-ink/40 hover:border-ink/30 hover:text-ink transition-all">
-              <RefreshCw size={15} /> Refresh
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
+              <RefreshCw size={14} /> Refresh
             </button>
           ) : (
             <button onClick={() => handleFetchLive(results.map((r) => r.username))}
-              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-lg text-sm hover:bg-accent-dim/20 transition-all">
-              <RefreshCw size={15} /> Fetch Live Stats
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
+              <RefreshCw size={14} /> Fetch Live Stats
             </button>
           )}
 
@@ -659,38 +659,38 @@ export default function ResultsStep({ results, influencers, config }) {
               ]
               exportToCsv(filtered, influencers, exportIds, liveStats, reviewState).catch(console.error)
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/80 transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
           >
-            <Download size={15} /> Export XLSX
+            <Download size={14} /> Export XLSX
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex items-center gap-1.5 text-xs text-ink/40 font-mono"><Filter size={12} />Filter:</div>
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <div className="flex items-center gap-1.5 text-[11px] text-faint font-mono"><Filter size={11} />Filter:</div>
         {['all', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map((f) => (
           <button key={f} onClick={() => setFilterFlag(f)}
-            className={`px-2.5 py-1 rounded-full text-xs border transition-all ${filterFlag === f ? 'bg-ink text-white border-ink' : 'border-mist text-ink/50 hover:border-ink/30'}`}>
+            className={`px-[10px] py-[5px] rounded-full text-[12px] border transition-all ${filterFlag === f ? 'bg-ink text-white border-ink' : 'border-[#E1DBCD] text-muted hover:border-ink/30 bg-white'}`}>
             {f === 'all' ? 'All' : f}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-ink/40 font-mono">Min score:</span>
+          <span className="text-[11px] text-faint font-mono">Min score:</span>
           <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
-            min="0" max="100" className="w-16 px-2 py-1 border border-mist rounded text-xs font-mono bg-white focus:outline-none focus:border-accent" />
+            min="0" max="100" className="w-16 px-2 py-1 border border-[#E1DBCD] rounded-[8px] text-[12px] font-mono bg-white focus:outline-none focus:border-accent" />
         </div>
       </div>
 
       {liveStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Live fetch failed: {liveError}</div>
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Live fetch failed: {liveError}</div>
       )}
       {shareStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-xl text-xs text-rose">Failed to send for review. Check your Supabase env vars.</div>
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Failed to send for review. Check your Supabase env vars.</div>
       )}
 
       {selectionMode && shareStatus !== 'done' && (
-        <div className="mb-4 px-4 py-3 bg-accent-dim/20 border border-accent/20 rounded-xl text-xs text-accent/80">
+        <div className="mb-4 px-4 py-3 bg-accent-dim/30 border border-accent/20 rounded-[12px] text-[12px] text-body">
           Tick the accounts you want the brand manager to review, then click <strong>Send for Review</strong>.
         </div>
       )}
@@ -713,7 +713,7 @@ export default function ResultsStep({ results, influencers, config }) {
         />
       </TableErrorBoundary>
 
-      <p className="mt-4 text-xs text-ink/25 font-mono text-center">
+      <p className="mt-4 text-[11px] text-faint font-mono text-center">
         Click any row to expand · Engagement &amp; Relevancy scores are deterministic keyword + arithmetic logic
       </p>
     </div>

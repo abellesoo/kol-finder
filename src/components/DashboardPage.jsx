@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Users, CheckCircle, Send, Layers, Clock, ArrowRight, AlertCircle } from 'lucide-react'
+import { ArrowRight, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { loadHistory } from '../lib/sessionHistory'
 
@@ -9,15 +9,12 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function KpiCard({ icon: Icon, label, value, sub }) {
+function KpiCard({ label, value, sub }) {
   return (
-    <div className="border border-mist rounded-xl px-5 py-4 bg-paper flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-ink/30">
-        <Icon size={13} strokeWidth={1.5} />
-        <span className="font-mono text-xs tracking-widest uppercase">{label}</span>
-      </div>
-      <p className="text-3xl font-semibold text-ink tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-ink/40">{sub}</p>}
+    <div className="border border-card-edge rounded-[14px] px-[18px] pt-[18px] pb-[16px] bg-white flex flex-col">
+      <p className="font-mono text-[9.5px] tracking-[.14em] uppercase text-faint mb-[14px]">{label}</p>
+      <p className="font-mono text-[30px] font-semibold tracking-[-0.02em] text-ink leading-none tabular-nums">{value}</p>
+      {sub && <p className="text-[12px] text-[#8E8775] mt-[8px]">{sub}</p>}
     </div>
   )
 }
@@ -70,26 +67,31 @@ export default function DashboardPage() {
   const hasAttention = pendingReview > 0 || dmReady > 0
 
   return (
-    <div className="px-8 py-10 max-w-5xl mx-auto w-full">
+    <div className="px-[48px] py-[40px] pb-[64px] max-w-[1080px] mx-auto w-full">
       {/* Header */}
-      <div className="mb-8">
-        <p className="font-mono text-xs tracking-widest text-ink/30 uppercase mb-1">Dashboard</p>
-        <h1 className="text-2xl font-semibold text-ink">Overview</h1>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Dashboard</p>
+          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink leading-tight">Overview</h1>
+          <p className="text-[14px] text-muted mt-1">Your KOL seeding workspace</p>
+        </div>
       </div>
 
       {/* Attention banner */}
       {supabase && !loading && hasAttention && (
-        <div className="mb-8 border border-accent/30 bg-accent-dim/30 rounded-xl px-5 py-4 flex items-start gap-3">
-          <AlertCircle size={15} className="text-accent mt-0.5 shrink-0" />
-          <div className="text-sm text-ink/70 flex flex-col gap-1">
+        <div className="mb-8 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px] px-5 py-4 flex items-start gap-3">
+          <div className="w-[34px] h-[34px] rounded-[9px] bg-[#E6D4A8] flex items-center justify-center flex-shrink-0">
+            <AlertCircle size={16} className="text-[#8A6A22]" />
+          </div>
+          <div className="text-[13.5px] text-body flex flex-col gap-1 pt-[1px]">
             {pendingReview > 0 && (
               <span>
-                <span className="font-medium text-ink">{pendingReview}</span> account{pendingReview !== 1 ? 's' : ''} pending brand manager review
+                <span className="font-semibold text-ink">{pendingReview}</span> account{pendingReview !== 1 ? 's' : ''} pending brand manager review
               </span>
             )}
             {dmReady > 0 && (
               <span>
-                <span className="font-medium text-ink">{dmReady}</span> approved DM draft{dmReady !== 1 ? 's' : ''} ready to send
+                <span className="font-semibold text-ink">{dmReady}</span> approved DM draft{dmReady !== 1 ? 's' : ''} ready to send
               </span>
             )}
           </div>
@@ -98,16 +100,14 @@ export default function DashboardPage() {
 
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-4 mb-10">
-        <KpiCard icon={Layers} label="Sessions" value={totalSessions} sub="saved locally" />
-        <KpiCard icon={Users} label="Scored" value={accountsScored} sub="across all sessions" />
+        <KpiCard label="Sessions" value={totalSessions} sub="saved locally" />
+        <KpiCard label="Scored" value={accountsScored} sub="across all sessions" />
         <KpiCard
-          icon={CheckCircle}
           label="Approved"
           value={loading ? '—' : approved}
           sub={supabase ? 'from recent campaigns' : 'requires Supabase'}
         />
         <KpiCard
-          icon={Send}
           label="DMs Sent"
           value={loading ? '—' : dmsSent}
           sub={supabase ? 'sent or replied' : 'requires Supabase'}
@@ -116,27 +116,26 @@ export default function DashboardPage() {
 
       {/* Recent campaigns */}
       <section>
-        <div className="flex items-center gap-2 mb-4">
-          <Clock size={13} className="text-ink/30" />
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase">Recent campaigns</p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Recent campaigns</p>
         </div>
 
         {!supabase ? (
-          <p className="text-sm text-ink/30 py-6 text-center border border-dashed border-mist rounded-xl">
+          <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
             Supabase not configured — campaign data unavailable locally
           </p>
         ) : loading ? (
-          <p className="text-sm text-ink/30 py-6 text-center">Loading...</p>
+          <p className="text-sm text-muted py-6 text-center">Loading...</p>
         ) : campaigns.length === 0 ? (
-          <p className="text-sm text-ink/30 py-6 text-center border border-dashed border-mist rounded-xl">
+          <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
             No campaigns shared yet — use the Seeder to score and share results
           </p>
         ) : (
-          <div className="border border-mist rounded-xl overflow-hidden">
+          <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
             {/* Table header */}
-            <div className="grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-4 py-2.5 border-b border-mist bg-mist/30">
+            <div className="grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[11px] border-b border-[#EDE8DC] bg-surface">
               {['Brief', 'Accounts', 'Approved', 'Pending', 'Date', ''].map((h) => (
-                <span key={h} className="font-mono text-xs text-ink/40 uppercase tracking-widest">{h}</span>
+                <span key={h} className="font-mono text-[9.5px] text-faint uppercase tracking-[.13em]">{h}</span>
               ))}
             </div>
 
@@ -152,18 +151,18 @@ export default function DashboardPage() {
               return (
                 <div
                   key={c.id}
-                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-4 py-3 items-center ${
-                    i !== campaigns.length - 1 ? 'border-b border-mist' : ''
+                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[14px] items-center hover:bg-surface transition-colors ${
+                    i !== campaigns.length - 1 ? 'border-b border-[#F0ECE2]' : ''
                   }`}
                 >
-                  <p className="text-sm text-ink truncate" title={brief}>{brief}</p>
-                  <span className="font-mono text-sm text-ink/60">{total}</span>
-                  <span className="font-mono text-sm text-sage">{approvedCount}</span>
-                  <span className="font-mono text-sm text-ink/40">{pendingCount}</span>
-                  <span className="font-mono text-xs text-ink/40">{formatDate(c.created_at)}</span>
+                  <p className="text-[13.5px] text-[#322E26] font-medium truncate" title={brief}>{brief}</p>
+                  <span className="font-mono text-[13px] text-muted">{total}</span>
+                  <span className="font-mono text-[13px] text-sage font-medium">{approvedCount}</span>
+                  <span className="font-mono text-[13px] text-faint">{pendingCount}</span>
+                  <span className="font-mono text-[11.5px] text-faint">{formatDate(c.created_at)}</span>
                   <a
                     href={url}
-                    className="flex items-center justify-center text-ink/30 hover:text-accent transition-colors"
+                    className="flex items-center justify-center text-[#C2BAA8] hover:text-accent transition-colors"
                     title="View results"
                   >
                     <ArrowRight size={14} />

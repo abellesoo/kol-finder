@@ -39,10 +39,10 @@ function ScoreBadge({ score }) {
 function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-16 h-1.5 bg-mist rounded-full overflow-hidden">
+      <div className="w-[62px] h-[6px] bg-[#EDE8DC] rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / max) * 100}%` }} />
       </div>
-      <span className="font-mono text-xs text-ink/50">{value}</span>
+      <span className="font-mono text-[11px] text-faint">{value}</span>
     </div>
   )
 }
@@ -64,30 +64,30 @@ function ColumnPicker({ selected, onChange }) {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 border border-mist rounded-lg text-xs text-ink/60 hover:border-ink/30 hover:text-ink transition-all"
+        className="flex items-center gap-2 px-3 py-1.5 border border-[#E1DBCD] rounded-[9px] text-[12px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
       >
         <Columns size={13} />
         Columns
         {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-xs bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
+          <span className="font-mono text-[10px] bg-accent text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}
           </span>
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-mist rounded-xl shadow-lg z-20 p-3">
-          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">Show / export columns</p>
+        <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-card-edge rounded-[12px] shadow-lg z-20 p-3">
+          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Show / export columns</p>
           <div className="space-y-1">
             {TABLE_COLUMNS.map((col) => (
-              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-mist/50 cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent" />
-                <span className="font-mono text-xs text-ink/70">{col.label}</span>
+              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
+                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-accent w-[15px] h-[15px] rounded" />
+                <span className="font-mono text-[11px] text-body">{col.label}</span>
               </label>
             ))}
           </div>
           <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(TABLE_COLUMNS.map(c => c.id))} className="text-xs text-ink/40 hover:text-ink transition-colors">Select all</button>
-            <button onClick={() => onChange([])} className="text-xs text-ink/40 hover:text-ink transition-colors ml-auto">Clear</button>
+            <button onClick={() => onChange(TABLE_COLUMNS.map(c => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
+            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
           </div>
         </div>
       )}
@@ -155,46 +155,46 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   const col = (id) => selectedColumns.includes(id)
 
   return (
-    <div className={`border rounded-2xl overflow-hidden transition-all ${
-      isApproved ? 'border-sage/40 bg-sage/5' :
-      isRejected ? 'border-rose/20 bg-rose/5 opacity-60' :
-      'border-mist bg-white'
+    <div className={`border rounded-[14px] overflow-hidden transition-all ${
+      isApproved ? 'border-[#BFD6C4] bg-[#F5F8F4]' :
+      isRejected ? 'border-[#E6CDD3] bg-[#FBF5F6] opacity-75' :
+      'border-card-edge bg-white'
     }`}>
       {/* Account header */}
       <div className="px-5 py-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
-              className="font-semibold text-sm text-ink hover:text-accent flex items-center gap-1">
+              className="font-semibold text-[13.5px] text-ink hover:text-accent flex items-center gap-1">
               @{account.username} <ExternalLink size={11} className="opacity-40" />
             </a>
             {account.sourceBrand && (
-              <span className="font-mono text-xs bg-mist px-2 py-0.5 rounded text-ink/50">{account.sourceBrand}</span>
+              <span className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{account.sourceBrand}</span>
             )}
           </div>
-          {account.fullName && <p className="text-xs text-ink/40">{account.fullName}</p>}
+          {account.fullName && <p className="text-[12px] text-faint">{account.fullName}</p>}
           <div className="flex flex-wrap gap-1 mt-1.5">
             {(account.flags || []).map((f) => (
-              <span key={f} className={`tag text-xs ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
+              <span key={f} className={`tag text-[10px] ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
             ))}
           </div>
         </div>
 
         <div className="flex flex-col items-end gap-2 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className={`text-lg font-bold font-mono ${account.overall >= 70 ? 'text-sage' : account.overall >= 45 ? 'text-accent' : 'text-ink/40'}`}>
+            <span className={`text-[18px] font-bold font-mono ${account.overall >= 70 ? 'text-sage' : account.overall >= 45 ? 'text-accent' : 'text-faint'}`}>
               {account.overall}
             </span>
-            <span className="text-xs text-ink/30 font-mono">/ 100</span>
+            <span className="text-[11px] text-faint font-mono">/ 100</span>
           </div>
           {isPending && (
             <div className="flex gap-2">
               <button onClick={handleReject}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose/40 text-rose text-xs hover:bg-rose/10 transition-all">
+                className="flex items-center gap-1 px-3 py-1.5 rounded-[9px] border border-rose/40 text-rose text-[12px] hover:bg-rose/10 transition-all">
                 <X size={12} /> Reject
               </button>
               <button onClick={handleApprove} disabled={drafting}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sage text-white text-xs hover:bg-sage/80 transition-all disabled:opacity-50">
+                className="flex items-center gap-1 px-3 py-1.5 rounded-[9px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all disabled:opacity-50">
                 {drafting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                 Approve
               </button>
@@ -202,21 +202,21 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
           )}
           {isApproved && !drafting && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
-              <button onClick={handleReject} className="text-xs text-ink/30 hover:text-rose transition-colors font-mono">(undo)</button>
+              <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
+              <button onClick={handleReject} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
             </div>
           )}
           {isRejected && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-rose/70 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
-              <button onClick={handleApprove} className="text-xs text-ink/30 hover:text-sage transition-colors font-mono">(undo)</button>
+              <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
+              <button onClick={handleApprove} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Stats row — driven by TABLE_COLUMNS selection */}
-      <div className="px-5 pb-3 flex flex-wrap gap-4 text-xs font-mono text-ink/50">
+      {/* Stats row */}
+      <div className="px-5 pb-3 flex flex-wrap gap-4 text-[11px] font-mono text-muted">
         {col('account_location') && account.accountLocation && <span>📍 {account.accountLocation}</span>}
         {col('follower_count') && account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
         {col('engagement') && account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
@@ -249,28 +249,28 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         )}
       </div>
 
-      {/* Caption — shown separately when selected */}
+      {/* Caption */}
       {col('sample_caption') && account.sampleCaption && (
         <div className="px-5 pb-3">
-          <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Scraped Caption</p>
-          <p className="text-xs text-ink/50 line-clamp-3">{account.sampleCaption}</p>
+          <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-1">Scraped Caption</p>
+          <p className="text-[12px] text-body line-clamp-3">{account.sampleCaption}</p>
         </div>
       )}
 
       {/* DM Draft — only when approved */}
       {isApproved && (
-        <div className="border-t border-mist/50 px-5 py-4">
+        <div className="border-t border-card-edge/60 px-5 py-4">
           {drafting && (
-            <div className="flex items-center gap-2 text-xs text-ink/40 mb-3">
+            <div className="flex items-center gap-2 text-[11px] text-faint mb-3">
               <Loader2 size={13} className="animate-spin" /> Generating DM draft…
             </div>
           )}
           {draftError && (
-            <p className="text-xs text-rose mb-3">Draft failed: {draftError}</p>
+            <p className="text-[11px] text-rose mb-3">Draft failed: {draftError}</p>
           )}
           {localDraft && !drafting && (
             <>
-              <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-2">DM Draft</p>
+              <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-2">DM Draft</p>
               <textarea
                 value={localDraft}
                 onChange={(e) => {
@@ -278,21 +278,21 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                   onUpdate(account.username, { status: 'approved', dm_status: dmStatus, dm_draft: e.target.value })
                 }}
                 rows={5}
-                className="w-full px-3 py-2.5 border border-mist rounded-lg text-sm text-ink bg-white focus:outline-none focus:border-accent resize-none"
+                className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-accent resize-none"
               />
               <div className="flex items-center justify-between mt-3">
                 <div className="flex gap-1.5">
                   {DM_STATUS_OPTIONS.map((s) => (
                     <button key={s} onClick={() => handleDmStatusChange(s)}
-                      className={`px-2 py-1 rounded-full text-xs border transition-all ${
-                        dmStatus === s ? DM_STATUS_STYLES[s] + ' border-current' : 'border-mist text-ink/40 hover:border-ink/30'
+                      className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
+                        dmStatus === s ? DM_STATUS_STYLES[s] + ' border-current' : 'border-mist text-faint hover:border-ink/30'
                       }`}>
                       {DM_STATUS_LABELS[s]}
                     </button>
                   ))}
                 </div>
                 <button onClick={handleCopyAndOpen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-lg text-xs hover:bg-ink/80 transition-all">
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all">
                   {copied ? <Check size={12} /> : <Copy size={12} />}
                   {copied ? 'Copied!' : 'Copy & open profile'}
                 </button>
@@ -386,24 +386,24 @@ export default function ReviewPage({ reviewId, onBack }) {
   const pendingCount = accounts.length - approvedCount - rejectedCount
 
   return (
-    <div className="min-h-screen bg-paper px-6 py-10 max-w-3xl mx-auto">
+    <div className="min-h-screen bg-paper px-[48px] py-[40px] max-w-3xl mx-auto">
       <div className="mb-8">
         {onBack && (
-          <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-ink/40 hover:text-ink mb-4 transition-colors">
+          <button onClick={onBack} className="flex items-center gap-1.5 font-mono text-[11.5px] text-faint hover:text-ink mb-4 transition-colors">
             <ArrowLeft size={13} /> Back to queue
           </button>
         )}
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">KOL Review</p>
+        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">KOL Review</p>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-ink mb-1">{accounts.length} accounts to review</h1>
-            <p className="text-sm text-ink/50">
-              <span className="text-sage font-medium">{approvedCount} approved</span>
+            <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">{accounts.length} accounts to review</h1>
+            <p className="text-[13.5px] text-muted">
+              <span className="text-sage font-semibold">{approvedCount} approved</span>
               {' · '}
-              <span className="text-rose/70 font-medium">{rejectedCount} rejected</span>
+              <span className="text-rose/80 font-semibold">{rejectedCount} rejected</span>
               {' · '}
               {pendingCount} pending
-              {saving && <span className="ml-3 text-ink/30 font-mono text-xs">Saving…</span>}
+              {saving && <span className="ml-3 text-faint font-mono text-[11px]">Saving…</span>}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -411,9 +411,9 @@ export default function ReviewPage({ reviewId, onBack }) {
           </div>
         </div>
         {campaignBrief && (
-          <div className="mt-4 px-4 py-3 bg-mist/50 rounded-xl">
-            <p className="text-xs font-mono text-ink/40 uppercase tracking-wider mb-1">Campaign brief</p>
-            <p className="text-sm text-ink/70">{campaignBrief}</p>
+          <div className="mt-4 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-1">Campaign brief</p>
+            <p className="text-[13px] text-body">{campaignBrief}</p>
           </div>
         )}
       </div>
@@ -431,7 +431,7 @@ export default function ReviewPage({ reviewId, onBack }) {
         ))}
       </div>
 
-      <p className="mt-8 text-xs text-ink/20 font-mono text-center">
+      <p className="mt-8 text-[11px] text-faint font-mono text-center">
         Approve to generate a DM draft · Changes save automatically
       </p>
     </div>

@@ -3,14 +3,28 @@ import { supabase } from '../lib/supabase'
 
 const ROLE_LABELS = { assistant_bm: 'Assistant BM', brand_manager: 'Brand Manager', admin: 'Admin' }
 const ROLE_STYLES = {
-  assistant_bm: 'bg-accent-dim text-ink',
-  brand_manager: 'bg-mist text-ink/60',
-  admin: 'bg-sage/20 text-sage',
+  assistant_bm: 'bg-accent-dim text-[#8A6A22]',
+  brand_manager: 'bg-mist text-body',
+  admin: 'bg-sage/15 text-sage',
 }
+
+const AVATAR_COLORS = [
+  'bg-[#D6CFC4] text-[#5C5340]',
+  'bg-[#C8D6CF] text-[#3A5C4A]',
+  'bg-[#D4C8D6] text-[#5C3A5C]',
+  'bg-[#D6D0C4] text-[#5C5040]',
+]
 
 function formatDate(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function initials(email) {
+  const name = email.split('@')[0]
+  const parts = name.split(/[._-]/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
 }
 
 export default function TeamPage() {
@@ -19,6 +33,7 @@ export default function TeamPage() {
   const [saving, setSaving] = useState(null)
 
   useEffect(() => {
+    if (!supabase) { setLoading(false); return }
     supabase
       .from('users')
       .select('id, email, role, created_at')
@@ -27,6 +42,7 @@ export default function TeamPage() {
   }, [])
 
   const handleRoleChange = async (id, newRole) => {
+    if (!supabase) return
     setSaving(id)
     await supabase.from('users').update({ role: newRole }).eq('id', id)
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role: newRole } : u))
@@ -34,41 +50,58 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="px-8 py-10 max-w-3xl mx-auto w-full">
+    <div className="px-[48px] py-[40px] max-w-3xl mx-auto w-full">
       <div className="mb-8">
-        <p className="font-mono text-xs tracking-widest text-ink/30 uppercase mb-1">Admin</p>
-        <h1 className="text-2xl font-semibold text-ink">Team</h1>
+        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Admin</p>
+        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink">Team</h1>
+        <p className="text-[14px] text-muted mt-1">Manage who can access the seeding tool and what they can do.</p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-ink/30">Loading...</p>
+        <p className="text-[13.5px] text-muted">Loading...</p>
+      ) : !supabase ? (
+        <p className="text-[13.5px] text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
+          Supabase not configured — team management unavailable locally
+        </p>
       ) : users.length === 0 ? (
-        <p className="text-sm text-ink/30 py-6 text-center border border-dashed border-mist rounded-xl">
+        <p className="text-[13.5px] text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
           No users yet
         </p>
       ) : (
-        <div className="border border-mist rounded-xl overflow-hidden">
-          {users.map((u, i) => (
-            <div
-              key={u.id}
-              className={`flex items-center justify-between px-4 py-3 ${i !== users.length - 1 ? 'border-b border-mist' : ''}`}
-            >
-              <div>
-                <p className="text-sm font-medium text-ink">{u.email}</p>
-                <p className="font-mono text-xs text-ink/30 mt-0.5">{formatDate(u.created_at)}</p>
-              </div>
-              <select
-                value={u.role}
-                disabled={saving === u.id}
-                onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                className={`text-xs font-mono px-2 py-1 rounded border-0 outline-none cursor-pointer ${ROLE_STYLES[u.role]} ${saving === u.id ? 'opacity-50' : ''}`}
+        <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
+          {users.map((u, i) => {
+            const avatarColor = AVATAR_COLORS[i % AVATAR_COLORS.length]
+            return (
+              <div
+                key={u.id}
+                className={`flex items-center gap-[14px] px-[18px] py-[14px] ${i !== users.length - 1 ? 'border-b border-[#F0ECE2]' : ''}`}
               >
-                {Object.entries(ROLE_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
-            </div>
-          ))}
+                {/* Avatar */}
+                <div className={`w-[40px] h-[40px] rounded-full flex items-center justify-center text-[13px] font-semibold flex-shrink-0 ${avatarColor}`}>
+                  {initials(u.email)}
+                </div>
+
+                {/* Email + date */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13.5px] font-medium text-ink truncate">{u.email}</p>
+                  <p className="font-mono text-[11px] text-faint mt-[2px]">joined {formatDate(u.created_at)}</p>
+                </div>
+
+                {/* Role dropdown */}
+                <select
+                  value={u.role}
+                  disabled={saving === u.id}
+                  onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                  className={`text-[12px] font-medium px-[10px] py-[5px] rounded-[9px] border border-card-edge outline-none cursor-pointer appearance-none pr-[24px] bg-no-repeat ${ROLE_STYLES[u.role]} ${saving === u.id ? 'opacity-50' : ''}`}
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23A89E8C' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundPosition: 'right 8px center' }}
+                >
+                  {Object.entries(ROLE_LABELS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

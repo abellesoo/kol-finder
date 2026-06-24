@@ -16,87 +16,136 @@ import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
-function navItemsForRole(role) {
-  const items = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
-    { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
-    { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
-    { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
-    { id: 'team', label: 'Team', icon: Users, adminOnly: true },
-  ]
-  return items.filter((item) => {
-    if (item.adminOnly) return role === 'admin'
-    if (item.restricted) return !item.restricted.includes(role)
-    return true
-  })
+const NAV_GROUPS = [
+  {
+    label: 'Workspace',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
+      { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
+    ],
+  },
+  {
+    label: 'Approvals',
+    items: [
+      { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
+      { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { id: 'team', label: 'Team', icon: Users, adminOnly: true },
+    ],
+  },
+]
+
+function navGroupsForRole(role) {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (item.adminOnly) return role === 'admin'
+      if (item.restricted) return !item.restricted.includes(role)
+      return true
+    }),
+  })).filter((group) => group.items.length > 0)
+}
+
+function NavButton({ id, label, Icon, isActive, onClick }) {
+  return (
+    <div className="relative">
+      {isActive && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[17px] bg-accent rounded-r-full" />
+      )}
+      <button
+        onClick={onClick}
+        className={`flex items-center gap-[10px] w-full pl-[16px] pr-[11px] py-[8px] rounded-[9px] text-[13.5px] text-left transition-all ${
+          isActive
+            ? 'bg-white text-ink font-semibold shadow-sm'
+            : 'text-[#7B7464] font-medium hover:bg-white/50 hover:text-ink'
+        }`}
+      >
+        <Icon size={15} strokeWidth={isActive ? 2 : 1.5} className="flex-shrink-0" />
+        <span className="flex-1 truncate">{label}</span>
+      </button>
+    </div>
+  )
 }
 
 function Sidebar({ mode, onNav, user, role, onSignOut }) {
-  const navItems = navItemsForRole(role)
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || ''
-  // review_detail is entered from review_queue — keep queue highlighted
+  const groups = navGroupsForRole(role)
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Local dev'
+  const initials = displayName.slice(0, 2).toUpperCase()
   const activeId = mode === 'review_detail' ? 'review_queue' : mode
 
   return (
     <aside
-      style={{ width: 220, minWidth: 220 }}
-      className="flex flex-col h-screen sticky top-0 border-r border-mist bg-paper shrink-0"
+      style={{ width: 236, minWidth: 236 }}
+      className="flex flex-col h-screen sticky top-0 border-r border-mist bg-sidebar shrink-0"
     >
-      <div className="px-5 py-4 border-b border-mist">
-        <span className="font-mono text-xs tracking-widest text-ink/30 uppercase">Seeding Tool</span>
+      {/* Logo */}
+      <div className="px-[18px] py-[14px] border-b border-mist">
+        <img
+          src="/kol-finder/markato-logo.png"
+          alt="Markato"
+          style={{ width: 88, mixBlendMode: 'multiply', opacity: 0.85 }}
+        />
+        <p className="font-mono text-[9px] tracking-[.16em] text-faint uppercase mt-[4px]">Seeding Studio</p>
       </div>
 
-      <nav className="flex-1 px-3 py-3 flex flex-col gap-0.5">
-        {navItems.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => onNav(id)}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left w-full ${
-              activeId === id
-                ? 'bg-accent/10 text-accent'
-                : 'text-ink/50 hover:text-ink hover:bg-mist/60'
-            }`}
-          >
-            <Icon size={16} strokeWidth={activeId === id ? 2 : 1.5} />
-            {label}
-          </button>
+      {/* Nav groups */}
+      <nav className="flex-1 py-[6px] flex flex-col overflow-y-auto">
+        {groups.map((group, gi) => (
+          <div key={group.label} className={gi > 0 ? 'mt-[2px]' : ''}>
+            <p className="font-mono text-[9px] tracking-[.16em] text-[#B0A693] uppercase px-[20px] pb-[4px] pt-[10px]">
+              {group.label}
+            </p>
+            <div className="flex flex-col gap-[2px] px-[10px]">
+              {group.items.map(({ id, label, icon: Icon }) => (
+                <NavButton
+                  key={id}
+                  id={id}
+                  label={label}
+                  Icon={Icon}
+                  isActive={activeId === id}
+                  onClick={() => onNav(id)}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-mist flex flex-col gap-0.5">
-        <button
+      {/* Footer nav */}
+      <div className="px-[10px] pb-[4px] flex flex-col gap-[2px]">
+        <NavButton
+          id="help"
+          label="Help"
+          Icon={HelpCircle}
+          isActive={activeId === 'help'}
           onClick={() => onNav('help')}
-          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all text-left w-full ${
-            activeId === 'help'
-              ? 'bg-accent/10 text-accent'
-              : 'text-ink/50 hover:text-ink hover:bg-mist/60'
-          }`}
-        >
-          <HelpCircle size={16} strokeWidth={activeId === 'help' ? 2 : 1.5} />
-          Help
-        </button>
-        <a
-          href="/kol-finder/flowchart.html"
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-3 px-3 py-2 text-sm text-ink/30 hover:text-ink/60 transition-colors font-mono"
-        >
-          how it works ↗
-        </a>
-
-        {/* User info + sign out */}
-        <div className="px-3 pt-3 mt-1 border-t border-mist/60">
-          <p className="text-xs font-medium text-ink/70 truncate">{displayName}</p>
-          <p className="text-xs text-ink/30 font-mono truncate">{user?.email}</p>
-          <button
-            onClick={onSignOut}
-            className="mt-2 flex items-center gap-1.5 text-xs text-ink/30 hover:text-rose transition-colors"
-          >
-            <LogOut size={11} />
-            Sign out
-          </button>
+        />
+        {/* User block — only shown when logged in */}
+        {user && (
+        <div className="mt-[4px] pt-[12px] pb-[10px] border-t border-mist">
+          <div className="flex items-center gap-[8px]">
+            <div className="w-[28px] h-[28px] bg-accent rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0 leading-none">
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] font-semibold text-[#3A352C] truncate leading-tight">{displayName}</p>
+              <p className="font-mono text-[10px] text-faint truncate">{user.email}</p>
+            </div>
+            <button
+              onClick={onSignOut}
+              className="text-faint hover:text-rose transition-colors flex-shrink-0 ml-[2px]"
+              title="Sign out"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         </div>
+        )}
       </div>
     </aside>
   )
@@ -226,14 +275,14 @@ function MainApp({ user, role, onSignOut }) {
             {step === 'scoring' && (
               <div className="flex-1 flex flex-col items-center justify-center px-6 py-20">
                 <div className="max-w-sm w-full text-center">
-                  <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-6">Scoring accounts</p>
+                  <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-6">Scoring accounts</p>
                   {progress.error ? (
                     <div className="text-rose text-sm mb-4">
                       <p className="font-medium mb-1">Error</p>
-                      <p className="text-ink/60 text-xs">{progress.error}</p>
+                      <p className="text-muted text-xs">{progress.error}</p>
                       <button
                         onClick={() => setStep('config')}
-                        className="mt-4 px-4 py-2 bg-ink text-white rounded-lg text-sm"
+                        className="mt-4 px-4 py-2 bg-ink text-white rounded-[10px] text-sm"
                       >
                         Back to config
                       </button>
@@ -246,10 +295,10 @@ function MainApp({ user, role, onSignOut }) {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <p className="font-mono text-sm text-ink/60">
+                      <p className="font-mono text-sm text-muted">
                         {progress.done} / {progress.total} accounts
                       </p>
-                      <p className="text-xs text-ink/30 mt-1">
+                      <p className="text-xs text-faint mt-1">
                         Analysing captions, hashtags, and engagement signals...
                       </p>
                     </>
@@ -339,8 +388,8 @@ function AuthGate() {
 
   if (authState.loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="font-mono text-xs text-ink/30 tracking-widest uppercase">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-paper">
+        <p className="font-mono text-[10px] text-faint tracking-[.18em] uppercase">Loading...</p>
       </div>
     )
   }

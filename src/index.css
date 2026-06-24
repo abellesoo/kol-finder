@@ -10,7 +10,7 @@
 
 @layer components {
   .score-badge {
-    @apply inline-flex items-center justify-center w-10 h-10 rounded-full font-mono text-sm font-medium;
+    @apply inline-flex items-center justify-center w-[38px] h-[38px] rounded-full font-mono text-[13px] font-semibold leading-none;
   }
   .score-high {
     @apply bg-sage text-white;
@@ -19,18 +19,18 @@
     @apply bg-accent text-white;
   }
   .score-low {
-    @apply bg-mist text-ink/50;
+    @apply bg-[#ECE7DB] text-[#9A917F];
   }
   .tag {
-    @apply inline-block px-2 py-0.5 rounded text-xs font-mono bg-mist text-ink/70;
+    @apply inline-block px-2 py-0.5 rounded-[5px] text-xs font-mono bg-[#EEEAE0] text-[#7E7768];
   }
   .tag-video {
-    @apply bg-accent-dim text-ink;
+    @apply bg-[#F1E7D2] text-[#8A6A22];
   }
   .tag-hk {
-    @apply bg-green-100 text-green-800;
+    @apply bg-sage/10 text-sage;
   }
   .tag-bot {
-    @apply bg-red-100 text-red-700;
+    @apply bg-[#F4E2E6] text-[#A8485E];
   }
 }

@@ -1,9 +1,11 @@
 
+import { useState } from 'react'
+
 function Section({ label, title, children }) {
   return (
     <section className="mb-10">
-      <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-1">{label}</p>
-      <h2 className="text-xl font-semibold text-ink mb-4">{title}</h2>
+      <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">{label}</p>
+      <h2 className="text-[20px] font-bold tracking-[-0.02em] text-ink mb-4">{title}</h2>
       {children}
     </section>
   )
@@ -13,14 +15,14 @@ function ScoreRow({ name, range, description, formula }) {
   return (
     <div className="flex gap-4 py-3 border-b border-mist/60 last:border-0">
       <div className="w-36 shrink-0">
-        <p className="font-mono text-sm font-medium text-ink">{name}</p>
-        <p className="font-mono text-xs text-ink/40">{range}</p>
+        <p className="font-mono text-[13px] font-semibold text-ink">{name}</p>
+        <p className="font-mono text-[11px] text-faint">{range}</p>
       </div>
       <div className="flex-1">
         {formula && (
-          <p className="font-mono text-xs text-accent bg-accent/8 px-2 py-1 rounded mb-2 leading-relaxed">{formula}</p>
+          <p className="font-mono text-[11px] text-body bg-surface border border-card-edge px-2 py-1.5 rounded-[8px] mb-2 leading-relaxed">{formula}</p>
         )}
-        <p className="text-sm text-ink/70 leading-relaxed">{description}</p>
+        <p className="text-[13px] text-body leading-relaxed">{description}</p>
       </div>
     </div>
   )
@@ -28,29 +30,68 @@ function ScoreRow({ name, range, description, formula }) {
 
 function DataRow({ source, fields }) {
   return (
-    <div className="flex gap-3 py-2 border-b border-mist/50 last:border-0 text-sm">
-      <span className="w-28 shrink-0 font-mono text-xs text-ink/50 pt-0.5">{source}</span>
-      <span className="text-ink/70 leading-relaxed">{fields}</span>
+    <div className="flex gap-3 py-2 border-b border-mist/50 last:border-0 text-[13px]">
+      <span className="w-28 shrink-0 font-mono text-[11px] text-faint pt-0.5">{source}</span>
+      <span className="text-body leading-relaxed">{fields}</span>
     </div>
   )
 }
 
 
+const TAB_SWITCHER = ({ tab, setTab }) => (
+  <div className="flex gap-1 bg-[#E9E4D9] rounded-[11px] p-[4px] w-fit">
+    {[['guide', 'Guide'], ['flow', 'How it works']].map(([id, label]) => (
+      <button
+        key={id}
+        onClick={() => setTab(id)}
+        className={`px-4 py-[6px] rounded-[8px] text-[13px] font-medium transition-all ${
+          tab === id ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'
+        }`}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+)
+
 export default function InstructionsPage() {
+  const [tab, setTab] = useState('guide')
+
+  if (tab === 'flow') {
+    return (
+      <div className="flex flex-col flex-1 h-full">
+        <div className="px-[48px] pt-[40px] pb-[16px]">
+          <TAB_SWITCHER tab={tab} setTab={setTab} />
+        </div>
+        <iframe
+          src="/kol-finder/flowchart.html"
+          className="flex-1 border-0 w-full"
+          title="How it works"
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen px-6 py-10 max-w-3xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
+
+      <div className="mb-8">
+        <TAB_SWITCHER tab={tab} setTab={setTab} />
+      </div>
+
+      {tab === 'guide' && <>
 
       {/* Tool Overview */}
       <div className="mb-10">
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">About this tool</p>
-        <h1 className="text-2xl font-semibold text-ink mb-4">KOL Finder — Seeding Tool</h1>
-        <p className="text-ink/70 leading-relaxed mb-3">
+        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">About this tool</p>
+        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-4">KOL Finder — Seeding Tool</h1>
+        <p className="text-body leading-relaxed mb-3">
           This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche and how actively engaged their audience is. It works by analysing posts from accounts that have tagged or engaged with a competitor's content on Instagram — giving you a ranked shortlist of KOLs already active in your space.
         </p>
-        <p className="text-ink/70 leading-relaxed mb-3">
+        <p className="text-body leading-relaxed mb-3">
           You can bring in accounts two ways: upload an <strong>.xlsx</strong> export from Apify, or paste competitor post URLs and hashtags directly — the tool triggers the scrape for you and skips the manual Apify step entirely. Either way, it deduplicates accounts, scores them across Engagement and Relevancy, and produces a ranked table ready to filter, review, and export to Excel.
         </p>
-        <p className="text-ink/70 leading-relaxed">
+        <p className="text-body leading-relaxed">
           Optionally, run <strong>AI Deep-Dive</strong> on the top results — this sends account captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Base scoring is deterministic arithmetic computed entirely in your browser; AI is only involved if you explicitly opt in.
         </p>
       </div>
@@ -63,22 +104,22 @@ export default function InstructionsPage() {
         {/* Step 1 — two intake paths */}
         <div className="mb-6">
           <div className="flex gap-3 items-start mb-3">
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-xs font-mono font-medium flex items-center justify-center mt-0.5">1</span>
-            <p className="text-sm font-medium text-ink pt-0.5">Bring in your account data — pick one of two paths:</p>
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">1</span>
+            <p className="text-[13px] font-semibold text-ink pt-0.5">Bring in your account data — pick one of two paths:</p>
           </div>
 
           <div className="ml-9 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="border border-mist rounded-xl px-4 py-3">
-              <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option A — Paste URLs / hashtags</p>
-              <p className="text-sm text-ink/50 italic mb-2">Use this when you're starting a fresh scrape right now.</p>
-              <p className="text-sm text-ink/70 leading-relaxed">
-                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-xs bg-mist/60 px-1 rounded">#skincare</code> or just <code className="font-mono text-xs bg-mist/60 px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps needed.
+            <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
+              <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option A — Paste URLs / hashtags</p>
+              <p className="text-[12px] text-muted italic mb-2">Use this when you're starting a fresh scrape right now.</p>
+              <p className="text-[13px] text-body leading-relaxed">
+                Go to <strong>Step 1 → "Scrape URLs / Hashtags" tab</strong>. Paste competitor post URLs, brand-tagged page URLs, or hashtags (one per line — <code className="font-mono text-[11px] bg-surface px-1 rounded">#skincare</code> or just <code className="font-mono text-[11px] bg-surface px-1 rounded">skincare</code>). Choose a result limit and click <strong>Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline — no manual Apify steps needed.
               </p>
             </div>
-            <div className="border border-mist rounded-xl px-4 py-3">
-              <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">Option B — Upload XLSX</p>
-              <p className="text-sm text-ink/50 italic mb-2">Use this when you already have a previous Apify export.</p>
-              <p className="text-sm text-ink/70 leading-relaxed">
+            <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
+              <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option B — Upload XLSX</p>
+              <p className="text-[12px] text-muted italic mb-2">Use this when you already have a previous Apify export.</p>
+              <p className="text-[13px] text-body leading-relaxed">
                 If you ran an Apify Instagram Scraper job previously and saved the .xlsx, go to <strong>Step 1 → "Upload XLSX" tab</strong> and drop the file in. The filename becomes the brand label in the export. You can upload multiple files to combine brands. This path is also useful when you want to re-score an old dataset with different niche filters.
               </p>
             </div>
@@ -110,25 +151,25 @@ export default function InstructionsPage() {
             },
           ].map(({ n, text }) => (
             <li key={n} className="flex gap-4">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-xs font-mono font-medium flex items-center justify-center mt-0.5">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">
                 {n}
               </span>
-              <p className="text-sm text-ink/70 leading-relaxed">{text}</p>
+              <p className="text-[13px] text-body leading-relaxed">{text}</p>
             </li>
           ))}
         </ol>
       </Section>
 
       {/* Refresh / Cost Warning */}
-      <div className="mb-10 px-5 py-4 border border-amber-200 bg-amber-50 rounded-xl">
-        <p className="font-mono text-xs tracking-widest text-amber-600/70 uppercase mb-2">Important — costs</p>
-        <p className="text-sm text-ink/70 leading-relaxed mb-2">
+      <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
+        <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-2">Important — costs</p>
+        <p className="text-[13px] text-body leading-relaxed mb-2">
           <strong>Fetch Live Stats</strong> triggers a live Apify scrape — approximately <strong>$0.01 per account</strong>. A typical run of 300–400 accounts costs around $3–4. Results are cached for 7 days, so re-uploading the same dataset within that window won't trigger a new scrape.
         </p>
-        <p className="text-sm text-ink/70 leading-relaxed mb-2">
+        <p className="text-[13px] text-body leading-relaxed mb-2">
           <strong>Direct scrape</strong> (Option A intake) also uses Apify — cost scales with result limit. 200 results costs roughly $0.50–1; 1,000 results costs around $2–3.
         </p>
-        <p className="text-sm text-ink/70 leading-relaxed">
+        <p className="text-[13px] text-body leading-relaxed">
           <strong>AI Deep-Dive</strong> calls Claude via Anthropic's API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief combination, so re-running with the same brief won't re-charge for accounts already processed.
         </p>
       </div>
@@ -137,9 +178,9 @@ export default function InstructionsPage() {
       <Section label="Scoring methodology" title="How accounts are scored">
 
         {/* Formula summary */}
-        <div className="bg-mist/30 border border-mist rounded-xl px-5 py-4 mb-6">
-          <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Formula</p>
-          <div className="space-y-1 font-mono text-sm text-ink/80">
+        <div className="bg-surface border border-card-edge rounded-[12px] px-5 py-4 mb-6">
+          <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
+          <div className="space-y-1 font-mono text-[13px] text-body">
             <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 3) <span className="text-ink/40 text-xs">· before live fetch</span></p>
@@ -148,8 +189,8 @@ export default function InstructionsPage() {
         </div>
 
         {/* Data sources */}
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Data sources</p>
-        <div className="border border-mist rounded-xl px-4 py-1 mb-6">
+        <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Data sources</p>
+        <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <DataRow
             source="Apify export"
             fields="avgLikes, avgComments, engagementRate, followerCount, videoRatio, hashtags, captions, locationNames — all available immediately on upload, no additional scraping needed."
@@ -161,8 +202,8 @@ export default function InstructionsPage() {
         </div>
 
         {/* Score breakdown */}
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Score breakdown</p>
-        <div className="border border-mist rounded-xl px-4 py-1 mb-6">
+        <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Score breakdown</p>
+        <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
@@ -190,8 +231,8 @@ export default function InstructionsPage() {
         </div>
 
         {/* Column guide */}
-        <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-3">Column guide</p>
-        <div className="border border-mist rounded-xl px-4 py-1 mb-6">
+        <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Column guide</p>
+        <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <ScoreRow
             name="Eng. Rate"
             range="% · from export"
@@ -230,10 +271,12 @@ export default function InstructionsPage() {
           />
         </div>
 
-        <p className="text-xs text-ink/40 font-mono">
+        <p className="text-[11px] text-faint font-mono">
           All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and Anthropic (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.
         </p>
       </Section>
+
+      </>}
 
     </div>
   )

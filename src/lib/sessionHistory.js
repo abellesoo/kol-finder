@@ -49,6 +49,21 @@ export async function loadSessionFull(id) {
   return loadLocalHistory().find((s) => s.id === id) || null
 }
 
+export async function updateSessionTitle(id, title) {
+  if (supabase) {
+    const { data } = await supabase.from('sessions').select('config').eq('id', id).single()
+    const config = { ...(data?.config || {}), sessionTitle: title || undefined }
+    await supabase.from('sessions').update({ config }).eq('id', id)
+  } else {
+    try {
+      const updated = loadLocalHistory().map((s) =>
+        s.id === id ? { ...s, config: { ...(s.config || {}), sessionTitle: title || undefined } } : s
+      )
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(updated))
+    } catch {}
+  }
+}
+
 export async function deleteSession(id) {
   if (supabase) {
     await supabase.from('sessions').delete().eq('id', id)

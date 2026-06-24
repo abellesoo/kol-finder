@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Trash2, Loader2 } from 'lucide-react'
-import { loadHistory, loadSessionFull, deleteSession } from '../lib/sessionHistory'
+import { useState, useEffect, useRef } from 'react'
+import { Trash2, Loader2, Pencil, Check, X } from 'lucide-react'
+import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle } from '../lib/sessionHistory'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -21,6 +21,9 @@ export default function HistoryPage({ onLoadSeederSession }) {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadingId, setLoadingId] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const inputRef = useRef(null)
 
   useEffect(() => {
     loadHistory().then((data) => {
@@ -29,6 +32,41 @@ export default function HistoryPage({ onLoadSeederSession }) {
     })
   }, [])
 
+  useEffect(() => {
+    if (editingId && inputRef.current) inputRef.current.focus()
+  }, [editingId])
+
+  const startEdit = (e, session) => {
+    e.stopPropagation()
+    setEditingId(session.id)
+    setEditingTitle(session.config?.sessionTitle || '')
+  }
+
+  const cancelEdit = (e) => {
+    e?.stopPropagation()
+    setEditingId(null)
+    setEditingTitle('')
+  }
+
+  const commitEdit = async (e) => {
+    e?.stopPropagation()
+    const id = editingId
+    const title = editingTitle.trim()
+    setEditingId(null)
+    setEditingTitle('')
+    await updateSessionTitle(id, title)
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, config: { ...(s.config || {}), sessionTitle: title || undefined } } : s
+      )
+    )
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') commitEdit(e)
+    if (e.key === 'Escape') cancelEdit(e)
+  }
+
   const handleDeleteSession = async (e, id) => {
     e.stopPropagation()
     await deleteSession(id)
@@ -36,13 +74,11 @@ export default function HistoryPage({ onLoadSeederSession }) {
   }
 
   const handleClickSession = async (session) => {
-    if (loadingId) return
-    // If results already loaded (localStorage path), use directly
+    if (loadingId || editingId) return
     if (session.results?.length > 0) {
       onLoadSeederSession(session)
       return
     }
-    // Otherwise fetch full row from Supabase
     setLoadingId(session.id)
     const full = await loadSessionFull(session.id)
     setLoadingId(null)
@@ -78,11 +114,23 @@ export default function HistoryPage({ onLoadSeederSession }) {
                 onClick={() => handleClickSession(session)}
                 className="flex items-center justify-between px-[16px] py-[12px] border border-card-edge rounded-[12px] bg-white hover:border-accent/40 hover:bg-accent-dim/10 cursor-pointer transition-all group"
               >
-                <div className="min-w-0">
-                  <p className="text-[13.5px] font-medium text-ink group-hover:text-accent transition-colors">
-                    {session.config?.sessionTitle || `${session.accountCount} accounts`}
-                    {!session.config?.sessionTitle && formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}
-                  </p>
+                <div className="min-w-0 flex-1">
+                  {editingId === session.id ? (
+                    <input
+                      ref={inputRef}
+                      value={editingTitle}
+                      onChange={(e) => setEditingTitle(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="Session name…"
+                      className="text-[13.5px] font-medium text-ink bg-transparent border-b border-accent outline-none w-full max-w-xs"
+                    />
+                  ) : (
+                    <p className="text-[13.5px] font-medium text-ink group-hover:text-accent transition-colors">
+                      {session.config?.sessionTitle || `${session.accountCount} accounts`}
+                      {!session.config?.sessionTitle && formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}
+                    </p>
+                  )}
                   {session.config?.sessionTitle && (
                     <p className="text-[11.5px] text-muted mt-[1px]">{session.accountCount} accounts{formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}</p>
                   )}
@@ -95,6 +143,32 @@ export default function HistoryPage({ onLoadSeederSession }) {
                 </div>
                 <div className="flex items-center gap-2 ml-3 flex-shrink-0">
                   {loadingId === session.id && <Loader2 size={13} className="animate-spin text-accent/50" />}
+                  {editingId === session.id ? (
+                    <>
+                      <button
+                        onClick={commitEdit}
+                        className="text-sage hover:text-sage/70 transition-colors"
+                        title="Save"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="text-faint hover:text-ink transition-colors"
+                        title="Cancel"
+                      >
+                        <X size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={(e) => startEdit(e, session)}
+                      className="text-faint hover:text-ink transition-colors opacity-0 group-hover:opacity-100"
+                      title="Rename"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => handleDeleteSession(e, session.id)}
                     className="text-faint hover:text-rose transition-colors"

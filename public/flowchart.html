@@ -72,29 +72,17 @@
 
     .chart-area {
       position: relative;
-      width: 820px;
+      width: 480px;
       height: 860px;
     }
 
     .chart-svg {
       position: absolute;
       inset: 0;
-      width: 820px;
+      width: 480px;
       height: 860px;
       pointer-events: none;
       z-index: 0;
-    }
-
-    /* ── MODE LABELS ── */
-    .mode-label {
-      position: absolute;
-      font-size: 9px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: #bbb;
-      font-family: 'SF Mono', monospace;
-      top: 14px;
-      z-index: 1;
     }
 
     /* ── NODES ── */
@@ -277,7 +265,6 @@
   <span class="logo">KOL Finder</span>
   <div class="divider-dot"></div>
   <span class="page-title">System Flow</span>
-  <a href="https://abellesoo.github.io/kol-finder/" target="_blank" style="margin-left:auto;font-size:11px;color:#bbb;font-family:'SF Mono',monospace;text-decoration:none;letter-spacing:0.04em;" onmouseover="this.style.color='#555'" onmouseout="this.style.color='#bbb'">↗ live site</a>
   <span class="hint">click a node →</span>
 </header>
 
@@ -377,41 +364,6 @@ const nodes = [
     type: 'opt', x: 322, y: 754, w: 132, h: 44,
   },
 
-  // ── PROFILE LOOKUP MODE ───────────────────────────────────────
-  {
-    id: 'username', label: '@username',
-    sub: 'or instagram.com/username',
-    type: 'input', x: 516, y: 44, w: 172, h: 54,
-  },
-  {
-    id: 'scraper', label: 'startReelScraper',
-    sub: 'Trigger Apify actor via Worker',
-    type: 'skill', x: 516, y: 148, w: 172, h: 54,
-  },
-  {
-    id: 'apify_api', label: 'Apify API', sub: '',
-    type: 'api', x: 710, y: 159, w: 84, h: 30,
-  },
-  {
-    id: 'poll', label: 'pollUntilDone',
-    sub: 'Backoff 3s→5s→8s→10s',
-    type: 'process', x: 516, y: 252, w: 172, h: 54,
-  },
-  {
-    id: 'dataset', label: 'getDatasetItems',
-    sub: 'Fetch all scraped reels',
-    type: 'skill', x: 516, y: 352, w: 172, h: 54,
-  },
-  {
-    id: 'compute', label: 'computeStats',
-    sub: 'Filter to last 3 months',
-    type: 'process', x: 516, y: 452, w: 172, h: 54,
-  },
-  {
-    id: 'dashboard', label: 'Profile Dashboard',
-    sub: 'Median likes · views · hidden count',
-    type: 'output', x: 516, y: 552, w: 172, h: 54,
-  },
 ]
 
 // edges: from node id → to node id
@@ -439,14 +391,6 @@ const edges = [
   // optional downstream steps
   { from: 'results', to: 'live_stats', style: 'opt' },
   { from: 'results', to: 'ai_dive',    style: 'opt' },
-
-  // lookup chain
-  { from: 'username', to: 'scraper' },
-  { from: 'scraper',  to: 'apify_api', style: 'api' },
-  { from: 'scraper',  to: 'poll' },
-  { from: 'poll',     to: 'dataset' },
-  { from: 'dataset',  to: 'compute' },
-  { from: 'compute',  to: 'dashboard' },
 ]
 
 // ─────────────────────────────────────────────────────────────────
@@ -536,43 +480,6 @@ const details = {
     output: 'aiVerdicts map: { [username]: string }',
     notes: 'Verdicts are cached in localStorage for 7 days per account + campaign brief combination. A different brief generates a fresh verdict even for the same account. This is the only step that calls an AI model.',
   },
-  username: {
-    title: '@username Input',
-    colorType: 'input',
-    what: 'The user types an Instagram handle (with or without @) or a full instagram.com URL. The extractUsername() helper strips URL prefixes and the @ symbol to produce a clean handle for the API call.',
-    output: 'Cleaned username string',
-  },
-  scraper: {
-    title: 'startReelScraper',
-    colorType: 'skill',
-    what: 'POSTs to the Cloudflare Worker proxy (/start-run/reel-scraper), which forwards the request to Apify server-side. The Apify key is stored as a Cloudflare Worker secret — it never reaches the browser bundle.',
-    output: '{ id: string, status: "READY" | "RUNNING" }',
-    notes: 'Browser → Cloudflare Worker (kol-finder-proxy) → Apify. The Worker enforces CORS so only abellesoo.github.io and localhost can call it.',
-  },
-  poll: {
-    title: 'pollUntilDone',
-    colorType: 'process',
-    what: 'Shared utility exported from apifyApi.js — used by both KolLookup and the direct scrape intake. Calls the Worker proxy (/run-status/:runId) in a backoff loop until the run reaches a terminal state. Delays follow 3s → 5s → 8s → 10s (capped). Throws if the run ends in any state other than SUCCEEDED (e.g. FAILED, ABORTED).',
-    output: 'Completed run object with defaultDatasetId',
-  },
-  dataset: {
-    title: 'getDatasetItems',
-    colorType: 'skill',
-    what: 'Fetches the full result set from the Apify dataset using the defaultDatasetId from the completed run. Returns an array of post objects with fields: timestamp, likesCount, videoViewCount, caption, and url.',
-    output: 'Post objects array from Apify dataset',
-  },
-  compute: {
-    title: 'computeStats',
-    colorType: 'process',
-    what: 'Filters posts to the last 3 months as the primary window, falling back to all scraped posts if none are recent enough. Computes median likes (hidden likes counted as 0), median video view count (video posts only), follower count, and a hidden-like count. Returns up to 20 most recent posts for the list view.',
-    output: '{ medianLikes, medianViews, followerCount, hiddenCount, totalScraped, posts[] }',
-  },
-  dashboard: {
-    title: 'Profile Dashboard',
-    colorType: 'output',
-    what: 'Renders three stat cards (median likes, median views, hidden-like count) and a scrollable table of up to 20 recent reels with per-post like and view counts plus dates. Each row links out to the reel on Instagram. Lookup history is saved to sessionStorage.',
-    output: 'Profile analytics UI (real-time, single account)',
-  },
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -587,19 +494,11 @@ function cy(n) { return n.y + n.h / 2 }
 function edgePoints(e) {
   const s = nodeMap[e.from]
   const t = nodeMap[e.to]
-  if (e.style === 'api') {
-    return { x1: s.x + s.w, y1: cy(s), x2: t.x, y2: cy(t) }
-  }
-  // opt edges from results: bottom of results → top of target
-  if (e.style === 'opt') {
-    return { x1: cx(s), y1: s.y + s.h, x2: cx(t), y2: t.y }
-  }
   return { x1: cx(s), y1: s.y + s.h, x2: cx(t), y2: t.y }
 }
 
 function buildPath(e) {
   const { x1, y1, x2, y2 } = edgePoints(e)
-  if (e.style === 'api') return `M ${x1} ${y1} L ${x2} ${y2}`
   if (Math.abs(x1 - x2) < 2) return `M ${x1} ${y1} L ${x2} ${y2}`
   const midY = (y1 + y2) / 2
   return `M ${x1} ${y1} C ${x1} ${midY} ${x2} ${midY} ${x2} ${y2}`
@@ -624,31 +523,16 @@ const headerBg = {
 function render() {
   const chart = document.getElementById('chart')
 
-  // Mode labels
-  ;[
-    { text: '— Finder Mode',         left: 16 },
-    { text: '— Profile Lookup Mode', left: 516 },
-  ].forEach(({ text, left }) => {
-    const el = document.createElement('div')
-    el.className = 'mode-label'
-    el.style.left = left + 'px'
-    el.textContent = text
-    chart.appendChild(el)
-  })
-
   // SVG layer
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
   svg.classList.add('chart-svg')
-  svg.setAttribute('viewBox', '0 0 820 860')
+  svg.setAttribute('viewBox', '0 0 480 860')
 
   svg.innerHTML = `
     <defs>
       <marker id="arr"      markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L7,3 z" fill="#999"/>
-      </marker>
-      <marker id="arr-api"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L7,3 z" fill="#4a7fd4"/>
       </marker>
       <marker id="arr-opt"  markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L7,3 z" fill="#8b5ccc"/>
@@ -659,26 +543,12 @@ function render() {
     </defs>
   `
 
-  // Vertical separator between modes
-  const sep = document.createElementNS(ns, 'line')
-  sep.setAttribute('x1', '472'); sep.setAttribute('y1', '28')
-  sep.setAttribute('x2', '472'); sep.setAttribute('y2', '660')
-  sep.setAttribute('stroke', '#D5CFC5')
-  sep.setAttribute('stroke-width', '1')
-  sep.setAttribute('stroke-dasharray', '5 5')
-  svg.appendChild(sep)
-
   // Edges
   edges.forEach(e => {
     const path = document.createElementNS(ns, 'path')
     path.setAttribute('d', buildPath(e))
     path.setAttribute('fill', 'none')
-    if (e.style === 'api') {
-      path.setAttribute('stroke', '#4a7fd4')
-      path.setAttribute('stroke-width', '1.5')
-      path.setAttribute('stroke-dasharray', '4 3')
-      path.setAttribute('marker-end', 'url(#arr-api)')
-    } else if (e.style === 'opt') {
+    if (e.style === 'opt') {
       path.setAttribute('stroke', '#8b5ccc')
       path.setAttribute('stroke-width', '1.5')
       path.setAttribute('stroke-dasharray', '5 3')

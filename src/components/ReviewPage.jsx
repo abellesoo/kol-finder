@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, ArrowLeft } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, Copy, Columns, Download, ArrowLeft, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
@@ -313,6 +313,9 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
+  const [editingBrief, setEditingBrief] = useState(false)
+  const [briefDraft, setBriefDraft] = useState('')
+  const briefInputRef = useRef(null)
 
   useEffect(() => {
     async function load() {
@@ -337,16 +340,33 @@ export default function ReviewPage({ reviewId, onBack }) {
   const persistUpdate = useCallback(async (newState) => {
     setSaving(true)
     try {
-      await supabase
-        .from('shared_results')
-        .update({ review_state: newState })
-        .eq('id', reviewId)
+      await supabase.from('shared_results').update({ review_state: newState }).eq('id', reviewId)
     } catch (e) {
       console.error('Failed to persist review state', e)
     } finally {
       setSaving(false)
     }
   }, [reviewId])
+
+  const startEditBrief = () => {
+    setBriefDraft(campaignBrief)
+    setEditingBrief(true)
+    setTimeout(() => briefInputRef.current?.focus(), 0)
+  }
+
+  const cancelEditBrief = () => setEditingBrief(false)
+
+  const commitBrief = useCallback(async () => {
+    const trimmed = briefDraft.trim()
+    setEditingBrief(false)
+    if (trimmed === campaignBrief) return
+    setCampaignBrief(trimmed)
+    try {
+      await supabase.from('shared_results').update({ campaign_brief: trimmed }).eq('id', reviewId)
+    } catch (e) {
+      console.error('Failed to save campaign brief', e)
+    }
+  }, [briefDraft, campaignBrief, reviewId])
 
   const handleUpdate = useCallback((username, entry) => {
     setReviewState((prev) => {
@@ -410,12 +430,42 @@ export default function ReviewPage({ reviewId, onBack }) {
             <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
           </div>
         </div>
-        {campaignBrief && (
-          <div className="mt-4 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
-            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-1">Campaign brief</p>
-            <p className="text-[13px] text-body">{campaignBrief}</p>
+        <div className="mt-4 px-4 py-3 bg-surface border border-card-edge rounded-[12px] group/brief">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">Campaign brief</p>
+            {!editingBrief && (
+              <button
+                onClick={startEditBrief}
+                className="text-faint hover:text-ink transition-colors opacity-0 group-hover/brief:opacity-100"
+                title="Edit brief"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
           </div>
-        )}
+          {editingBrief ? (
+            <div>
+              <textarea
+                ref={briefInputRef}
+                value={briefDraft}
+                onChange={(e) => setBriefDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') cancelEditBrief() }}
+                rows={3}
+                className="w-full text-[13px] text-ink bg-white border border-accent rounded-[8px] px-3 py-2 focus:outline-none resize-none"
+              />
+              <div className="flex gap-2 mt-2">
+                <button onClick={commitBrief} className="flex items-center gap-1 px-3 py-1 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 transition-all">
+                  <Check size={12} /> Save
+                </button>
+                <button onClick={cancelEditBrief} className="text-[12px] text-faint hover:text-ink transition-colors px-2">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px] text-body whitespace-pre-wrap">{campaignBrief || <span className="text-faint italic">No brief — click pencil to add one</span>}</p>
+          )}
+        </div>
       </div>
 
       <div className="space-y-4">

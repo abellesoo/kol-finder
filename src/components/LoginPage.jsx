@@ -76,7 +76,7 @@ export default function LoginPage({ error }) {
           <p className="font-mono text-[9px] tracking-[.18em] text-faint uppercase mb-4">Seeding Studio</p>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] text-ink mb-3 leading-tight">
             <TextEffect onComplete={handleTextComplete}>
-              Find, score and approve KOL seeding candidates -- all in one place.
+              Find, score and approve KOL seeding candidates — all in one place.
             </TextEffect>
           </h1>
           <ul className="mt-6 space-y-3">

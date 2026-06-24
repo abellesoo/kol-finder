@@ -164,7 +164,7 @@ export default function InstructionsPage() {
       <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
         <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-2">Important — costs</p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
-          <strong>Fetch Live Stats</strong> triggers a live Apify scrape — approximately <strong>$0.01 per account</strong>. A typical run of 300–400 accounts costs around $3–4. Results are cached for 7 days, so re-uploading the same dataset within that window won't trigger a new scrape.
+          <strong>Fetch Live Stats</strong> triggers a live Apify scrape — approximately <strong>$0.01 per account</strong>. A typical run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-uploading the same dataset within that window won't trigger a new scrape.
         </p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
           <strong>Direct scrape</strong> (Option A intake) also uses Apify — cost scales with result limit. 200 results costs roughly $0.50–1; 1,000 results costs around $2–3.

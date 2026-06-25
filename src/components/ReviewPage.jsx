@@ -214,8 +214,6 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
       <div className="px-5 pb-3 flex flex-wrap gap-4 text-[11px] font-mono text-muted">
         {col('account_location') && account.accountLocation && <span>📍 {account.accountLocation}</span>}
         {col('follower_count') && account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
-        {col('engagement') && account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
-        {col('engagement') && account.avgLikes != null && <span>~{account.avgLikes.toLocaleString()} avg likes</span>}
         {col('relevancy_score') && account.scores?.relevancy != null && <span>Relevancy {account.scores.relevancy}/10</span>}
         {col('engagement_score') && account.scores?.engagement != null && <span>Eng score {account.scores.engagement}/10</span>}
         {col('niche_signals') && account.nicheSignals?.length > 0 && (
@@ -438,8 +436,6 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
             <div className="flex flex-wrap gap-3 text-[11px] font-mono text-muted">
               {account.accountLocation && <span>📍 {account.accountLocation}</span>}
               {account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
-              {account.engagementRate != null && <span>{account.engagementRate}% ER</span>}
-              {account.avgLikes != null && <span>~{account.avgLikes.toLocaleString()} avg likes</span>}
             </div>
             {account.bio && (
               <div className="mt-3">

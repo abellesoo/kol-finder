@@ -31,7 +31,6 @@ export const EXPORT_COLUMNS = [
   { id: 'scraped_post_plays',    label: 'scraped_post_plays',    getValue: (r, inf) => inf.samplePostPlays ?? '' },
   { id: 'bio',               label: 'bio',                getValue: (r, inf)       => inf.bio || '' },
   { id: 'sample_caption',    label: 'scraped_caption',    getValue: (r, inf)       => inf.sampleCaption || '' },
-  { id: 'engagement_rate',   label: 'engagement_rate',    getValue: (r, inf)       => inf.engagementRate != null ? `${inf.engagementRate}%` : (inf.avgLikes ?? '') },
 ]
 
 export const DEFAULT_COLUMNS = EXPORT_COLUMNS.map((c) => c.id)

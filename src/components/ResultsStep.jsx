@@ -41,19 +41,6 @@ const COLUMN_INFO = {
       '· ~9–10 = large (10k+ likes)',
     ],
   },
-  engagement: {
-    title: 'Engagement Rate',
-    lines: [
-      'ER = (avg likes + avg comments) ÷ followers × 100',
-      'Measures what % of followers engage per post on average.',
-      'Hidden like counts are treated as 0 (conservative).',
-      'Industry benchmarks:',
-      '· >3% = excellent',
-      '· 1–3% = good',
-      '· <1% = low',
-      'Shows raw avg likes if follower count is unavailable.',
-    ],
-  },
   live_median_likes: {
     title: 'Median Likes (live)',
     lines: [
@@ -226,22 +213,6 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <ScoreBadge score={r.overall} />
         case 'relevancy_score':
           return <MiniBar value={r.scores?.relevancy ?? 0} color="bg-rose/70" />
-        case 'engagement':
-          return (
-            <div>
-              {r.engagementRate != null ? (
-                <>
-                  <p className="font-mono text-sm text-ink">{r.engagementRate}%</p>
-                  <p className="font-mono text-xs text-ink/30">{(r.avgLikes || 0).toLocaleString()} avg likes</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-mono text-sm text-ink">{(r.avgLikes || 0).toLocaleString()}</p>
-                  <p className="font-mono text-xs text-ink/30">{(r.avgComments || 0).toLocaleString()} cmts</p>
-                </>
-              )}
-            </div>
-          )
         case 'follower_count': {
           const val = s?.followerCount ?? r.followerCount
           return <p className="font-mono text-sm text-ink">{val != null ? val.toLocaleString() : '—'}</p>
@@ -499,7 +470,6 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         sortKey === 'overall'             ? r.overall
         : sortKey === 'relevancy'         ? (r.scores?.relevancy ?? 0)
         : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
-        : sortKey === 'engagement'        ? (r.engagementRate ?? r.totalEngagement ?? 0)
         : sortKey === 'live_median_likes' ? (r.medianLikes ?? -1)
         : sortKey === 'live_median_views'    ? (r.medianViews ?? -1)
         : sortKey === 'live_median_comments' ? (r.medianComments ?? -1)
@@ -577,7 +547,6 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           scores: r.scores,
           accountLocation: r.accountLocation || '',
           followerCount: r.followerCount ?? null,
-          engagementRate: r.engagementRate ?? null,
           avgLikes: r.avgLikes ?? 0,
           avgComments: r.avgComments ?? 0,
           hashtags: r.hashtags || [],

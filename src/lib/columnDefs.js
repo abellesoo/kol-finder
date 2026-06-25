@@ -6,7 +6,6 @@ export const TABLE_COLUMNS = [
   { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
   { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
   { id: 'account_location',      label: 'Location',        width: '1fr',                                                       exportIds: ['account_location'] },
-  { id: 'engagement',            label: 'Eng. Rate',       width: '1fr', sortKey: 'engagement',   infoKey: 'engagement',       exportIds: ['engagement_rate'] },
   { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
   { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', sortKey: 'live_median_likes', infoKey: 'live_median_likes',  exportIds: ['live_median_likes'] },
   { id: 'live_median_views',     label: 'Med. Views',      width: '1fr', sortKey: 'live_median_views',    infoKey: 'live_median_views',    exportIds: ['live_median_views'] },
@@ -21,7 +20,7 @@ export const TABLE_COLUMNS = [
 
 export const DEFAULT_SELECTED_COLUMNS = [
   'brand', 'overall', 'relevancy_score', 'engagement_score',
-  'engagement', 'live_median_likes', 'live_median_views', 'live_median_comments',
+  'live_median_likes', 'live_median_views', 'live_median_comments',
   'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
 ]
 

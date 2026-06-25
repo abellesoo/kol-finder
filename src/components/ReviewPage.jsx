@@ -666,7 +666,7 @@ export default function ReviewPage({ reviewId, onBack }) {
   const pendingCount = accounts.length - approvedCount - rejectedCount
 
   return (
-    <div className="min-h-screen bg-paper px-[48px] py-[40px] max-w-3xl mx-auto">
+    <div className="min-h-screen bg-paper px-[48px] py-[40px]">
       <div className="mb-8">
         {onBack && (
           <button onClick={onBack} className="flex items-center gap-1.5 font-mono text-[11.5px] text-faint hover:text-ink mb-4 transition-colors">

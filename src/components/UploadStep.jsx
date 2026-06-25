@@ -228,7 +228,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
                   </button>
                 ))}
               </div>
-              <span className="text-[12px] text-faint">~${(resultsLimit * 0.01).toFixed(0)} per brand</span>
+              <span className="text-[12px] text-faint">~${(resultsLimit * 0.005).toFixed(2)} per brand</span>
             </div>
 
             {scrapeInput.trim() && (() => {
@@ -237,7 +237,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
               return (
                 <div className="mb-4 px-3 py-2 bg-surface border border-card-edge rounded-[10px]">
                   <p className="text-[12px] text-faint mb-1">
-                    {groups.length} scrape job{groups.length > 1 ? 's' : ''} · ~${(groups.length * resultsLimit * 0.01).toFixed(0)} total
+                    {groups.length} scrape job{groups.length > 1 ? 's' : ''} · ~${(groups.length * resultsLimit * 0.005).toFixed(2)} total
                   </p>
                   {brands.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-1">

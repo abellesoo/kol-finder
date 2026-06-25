@@ -133,7 +133,7 @@ export default function ReadyToSendPage() {
       setTimeout(() => setCopiedUser(null), 2000)
     }
     window.open(`https://www.instagram.com/${item.username}/`, '_blank', 'noreferrer')
-    await persistStatus(item, 'sent')
+    if (item.dm_draft) await persistStatus(item, 'sent')
   }, [persistStatus])
 
   if (loading) {

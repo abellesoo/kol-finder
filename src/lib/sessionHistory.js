@@ -34,6 +34,7 @@ export async function updateSessionLiveStats(id, statsMap) {
     ...r,
     medianLikes: statsMap[r.username]?.medianLikes ?? r.medianLikes ?? null,
     medianViews: statsMap[r.username]?.medianViews ?? r.medianViews ?? null,
+    medianComments: statsMap[r.username]?.medianComments ?? r.medianComments ?? null,
   }))
   await supabase.from('sessions').update({ results }).eq('id', id)
 }

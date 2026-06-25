@@ -583,9 +583,10 @@ export default function ReviewPage({ reviewId, onBack }) {
     setSaving(true)
     try {
       // Always preserve notes when writing review_state
-      await supabase.from('shared_results')
+      const { error } = await supabase.from('shared_results')
         .update({ review_state: { ...newState, __notes__: bmNotesRef.current } })
         .eq('id', reviewId)
+      if (error) throw new Error(error.message)
     } catch (e) {
       console.error('Failed to persist review state', e)
     } finally {

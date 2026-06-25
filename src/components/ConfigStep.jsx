@@ -179,10 +179,10 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
         <section className="mb-10">
           <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
             Campaign brief
-            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">optional · used by AI Deep-Dive</span>
+            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">optional · used for DM generation</span>
           </label>
           <p className="text-[12px] text-faint mb-3">
-            Describe the brand aesthetic, campaign goals, and content style you're looking for. The AI Deep-Dive on the Results page uses this to give you qualitative fit assessments.
+            Describe the brand aesthetic, campaign goals, and content style you're looking for. Used to generate personalised DM drafts for approved accounts.
           </p>
           <textarea
             value={campaignBrief}

@@ -95,7 +95,7 @@ export default function InstructionsPage() {
           From the Results table, move approved accounts into the <strong>Review Queue</strong> for your team to assess, then into <strong>Ready to Send</strong> where you can track DM status per account and coordinate outreach without double-sending.
         </p>
         <p className="text-body leading-relaxed">
-          Optionally run <strong>AI Deep-Dive</strong> on the top results — DeepSeek reviews captions, hashtags, bio, and your campaign brief and returns a qualitative verdict per account. All scoring is deterministic arithmetic in your browser; AI and live data are strictly opt-in.
+          All scoring is deterministic arithmetic in your browser. Live stats (Apify) are the only opt-in paid feature — everything else runs locally with no external calls.
         </p>
       </div>
 
@@ -146,7 +146,7 @@ export default function InstructionsPage() {
             {
               n: 4,
               title: 'Review & shortlist',
-              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see captions, hashtag signals, and flags. Optionally run <strong>AI Deep-Dive</strong> (top-N, default 50) — DeepSeek reviews captions, bio, and your brief and returns a qualitative verdict per account, cached for 7 days.</>,
+              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see the scoring verdict, niche signals, top hashtags, and flags.</>,
             },
             {
               n: 5,
@@ -156,7 +156,7 @@ export default function InstructionsPage() {
             {
               n: 6,
               title: 'Export',
-              text: <>Click <strong>Export to XLSX</strong> to download a formatted spreadsheet with per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), hyperlinked Instagram URLs, and AI verdicts if available. Ready to share with your team or file for records.</>,
+              text: <>Click <strong>Export to XLSX</strong> to download a formatted spreadsheet with per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), and hyperlinked Instagram URLs. Ready to share with your team or file for records.</>,
             },
           ].map(({ n, title, text }) => (
             <li key={n} className="flex gap-4">
@@ -177,7 +177,7 @@ export default function InstructionsPage() {
       <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
         <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-3">Important — costs</p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
-          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM tracking all run at no cost. Only three actions call a paid API:
+          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM tracking all run at no cost. Only two actions call a paid API:
         </p>
         <div className="space-y-2 mt-3">
           <div className="flex gap-3">
@@ -187,10 +187,6 @@ export default function InstructionsPage() {
           <div className="flex gap-3">
             <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Fetch Live Stats</span>
             <p className="text-[13px] text-body leading-relaxed">Apify batch scrape — approximately <strong>$0.01 per account</strong>. A run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-running the same dataset won't re-charge for already-fetched accounts.</p>
-          </div>
-          <div className="flex gap-3">
-            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">AI Deep-Dive</span>
-            <p className="text-[13px] text-body leading-relaxed">DeepSeek API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief — a different brief generates a fresh verdict even for the same account.</p>
           </div>
         </div>
       </div>
@@ -214,7 +210,7 @@ export default function InstructionsPage() {
         <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <DataRow
             source="Apify export"
-            fields="avgLikes, avgComments, engagementRate, followerCount, videoRatio, hashtags, captions, locationNames — all available immediately on upload, no additional scraping needed."
+            fields="avgLikes, avgComments, followerCount, videoRatio, hashtags, captions, locationNames — all available immediately on upload, no additional scraping needed."
           />
           <DataRow
             source="Live scrape"
@@ -255,12 +251,6 @@ export default function InstructionsPage() {
         <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Column guide</p>
         <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <ScoreRow
-            name="Eng. Rate"
-            range="% · from export"
-            formula="(avgLikes + avgComments) ÷ followerCount × 100"
-            description="Standard engagement rate from the original Apify export, computed per account across all posts. Available without live stats. Useful for comparing accounts relative to their follower size — a 500-follower account with 10% ER is more engaged than a 100k-follower account with 0.5% ER."
-          />
-          <ScoreRow
             name="Med. Likes"
             range="Live · from scrape"
             description="Median like count across the 10 most recent posts fetched live. Median is used instead of average to avoid viral-post skew. Requires Fetch Live Stats."
@@ -291,14 +281,14 @@ export default function InstructionsPage() {
             description="Caption text of the most recent scraped post. Helpful for a quick read on content style and language without leaving the tool."
           />
           <ScoreRow
-            name="AI Deep-Dive"
-            range="optional · DeepSeek"
-            description="Qualitative verdict generated by DeepSeek after reviewing the account's captions, hashtags, bio, and your campaign brief. Only populated after you run AI Deep-Dive on the Results screen. Cached for 7 days per account + brief combination — a different campaign brief will generate a fresh verdict even for the same account."
+            name="Scoring Verdict"
+            range="local · from scoring"
+            description="Short text summary generated locally from the scoring results. Examples: 'strong niche fit', 'some niche relevancy, possible bot activity'. Visible when you expand a row in the Results table."
           />
         </div>
 
         <p className="text-[11px] text-faint font-mono">
-          All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and DeepSeek (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.
+          All scores are computed locally in your browser. Data is only sent externally for opt-in Apify features (Fetch Live Stats, direct scrape intake). The Apify API key never reaches the browser — it goes through the Cloudflare Worker proxy.
         </p>
       </Section>
 

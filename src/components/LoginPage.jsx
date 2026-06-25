@@ -72,7 +72,7 @@ export default function LoginPage({ error }) {
               key={item}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 3.2 + i * 0.25 }}
+              transition={{ duration: 0.4, delay: 2.9 + i * 0.25 }}
             >
               {item}
             </motion.li>

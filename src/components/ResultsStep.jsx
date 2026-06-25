@@ -34,7 +34,7 @@ const COLUMN_INFO = {
     title: 'Engagement Score (0–10)',
     lines: [
       'Before live fetch: log(1 + avgLikes + avgComments×1.5)',
-      'After live fetch:  log(1 + medianLikes + medianViews×0.8)',
+      'After live fetch:  log(1 + medianLikes + medianViews×0.8 + medianComments×1.5)',
       'Live data replaces the export estimate per account.',
       '· ~4 = micro (~50 likes)',
       '· ~6–7 = mid-tier (~500–1k likes)',
@@ -477,7 +477,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       const live = liveStats[r.username]
       const hasLive = live && (live.medianLikes != null || live.medianViews != null)
       const engScore = hasLive
-        ? computeLiveEngagementScore(live.medianLikes, live.medianViews)
+        ? computeLiveEngagementScore(live.medianLikes, live.medianViews, live.medianComments)
         : (r.scores?.engagement ?? 0)
       const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
       return {
@@ -708,13 +708,6 @@ export default function ResultsStep({ results, influencers, config, sessionId })
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        <div className="flex items-center gap-1.5 text-[11px] text-faint font-mono"><Filter size={11} />Filter:</div>
-        {['all', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map((f) => (
-          <button key={f} onClick={() => setFilterFlag(f)}
-            className={`px-[10px] py-[5px] rounded-full text-[12px] border transition-all ${filterFlag === f ? 'bg-ink text-white border-ink' : 'border-[#E1DBCD] text-muted hover:border-ink/30 bg-white'}`}>
-            {f === 'all' ? 'All' : f}
-          </button>
-        ))}
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[11px] text-faint font-mono">Min score:</span>
           <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}

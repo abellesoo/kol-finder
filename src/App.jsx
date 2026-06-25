@@ -259,7 +259,7 @@ function MainApp({ user, role, onSignOut }) {
       <main className="flex-1 overflow-auto flex flex-col">
         {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} />}
         {mode === 'help' && <InstructionsPage />}
-        {mode === 'team' && <TeamPage />}
+        {mode === 'team' && role === 'admin' && <TeamPage />}
         {mode === 'review_queue' && (
           <ReviewQueuePage onOpenReview={handleOpenReview} />
         )}

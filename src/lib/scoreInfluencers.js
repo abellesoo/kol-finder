@@ -22,11 +22,12 @@ function scoreEngagement(inf) {
 }
 
 // Upgraded Engagement Score using live Apify median data.
-// Views weighted at 0.8× (higher-intent weight; photo-only accounts will have views=0).
-export function computeLiveEngagementScore(medianLikes, medianViews) {
+// Views weighted at 0.8×; comments weighted at 1.5× (photo-only accounts will have views=0).
+export function computeLiveEngagementScore(medianLikes, medianViews, medianComments) {
   const likes = medianLikes ?? 0
   const views = medianViews ?? 0
-  const raw = Math.log(1 + likes + views * 0.8)
+  const comments = medianComments ?? 0
+  const raw = Math.log(1 + likes + views * 0.8 + comments * 1.5)
   return parseFloat(Math.min(10, raw).toFixed(2))
 }
 

@@ -34,7 +34,7 @@ function ColumnPicker({ selected, onChange }) {
         className="flex items-center gap-2 px-4 py-2 border border-[#E1DBCD] rounded-[10px] text-[13px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
       >
         <Columns size={14} />
-        Columns
+        Export columns
         {selected.length < TABLE_COLUMNS.length && (
           <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
             {selected.length}

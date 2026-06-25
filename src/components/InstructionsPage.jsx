@@ -95,7 +95,7 @@ export default function InstructionsPage() {
           From the Results table, move approved accounts into the <strong>Review Queue</strong> for your team to assess, then into <strong>Ready to Send</strong> where you can track DM status per account and coordinate outreach without double-sending.
         </p>
         <p className="text-body leading-relaxed">
-          Optionally run <strong>AI Deep-Dive</strong> on the top results — Claude reviews captions, hashtags, bio, and your campaign brief and returns a qualitative verdict per account. All scoring is deterministic arithmetic in your browser; AI and live data are strictly opt-in.
+          Optionally run <strong>AI Deep-Dive</strong> on the top results — DeepSeek reviews captions, hashtags, bio, and your campaign brief and returns a qualitative verdict per account. All scoring is deterministic arithmetic in your browser; AI and live data are strictly opt-in.
         </p>
       </div>
 
@@ -141,12 +141,12 @@ export default function InstructionsPage() {
             {
               n: 3,
               title: 'Score & enrich',
-              text: <>Click <strong>Start scoring</strong> to rank every account by Engagement and Relevancy — computed instantly in your browser, no external calls. Then click <strong>Fetch Live Stats</strong> on the Results screen to pull real-time median likes and views from Apify, upgrading scores with fresher data. Live stats cost ~$0.01/account and are cached for 7 days.</>,
+              text: <>Click <strong>Start scoring</strong> to rank every account by Engagement and Relevancy — computed instantly in your browser, no external calls. Then click <strong>Fetch Live Stats</strong> on the Results screen to pull real-time median likes, views, and comments from Apify, upgrading scores with fresher data. Live stats cost ~$0.01/account and are cached for 7 days.</>,
             },
             {
               n: 4,
               title: 'Review & shortlist',
-              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see captions, hashtag signals, and flags. Optionally run <strong>AI Deep-Dive</strong> (top-N, default 50) — Claude reviews captions, bio, and your brief and returns a qualitative verdict per account, cached for 7 days.</>,
+              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see captions, hashtag signals, and flags. Optionally run <strong>AI Deep-Dive</strong> (top-N, default 50) — DeepSeek reviews captions, bio, and your brief and returns a qualitative verdict per account, cached for 7 days.</>,
             },
             {
               n: 5,
@@ -190,7 +190,7 @@ export default function InstructionsPage() {
           </div>
           <div className="flex gap-3">
             <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">AI Deep-Dive</span>
-            <p className="text-[13px] text-body leading-relaxed">Anthropic API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief — a different brief generates a fresh verdict even for the same account.</p>
+            <p className="text-[13px] text-body leading-relaxed">DeepSeek API — approximately <strong>$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached for 7 days per account + campaign brief — a different brief generates a fresh verdict even for the same account.</p>
           </div>
         </div>
       </div>
@@ -203,7 +203,7 @@ export default function InstructionsPage() {
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body">
             <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
-            <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8) <span className="text-ink/40 text-xs">· after live fetch</span></p>
+            <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
             <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
           </div>
@@ -218,7 +218,7 @@ export default function InstructionsPage() {
           />
           <DataRow
             source="Live scrape"
-            fields="medianLikes, medianViews — fetched on demand via Fetch Live Stats. Replaces the export-based Engagement Score estimate. Posts from the last 3 months are used; falls back to all 10 scraped posts if no recent content exists."
+            fields="medianLikes, medianViews, medianComments — fetched on demand via Fetch Live Stats. Replaces the export-based Engagement Score estimate. Posts from the last 3 months are used; falls back to all 10 scraped posts if no recent content exists."
           />
         </div>
 
@@ -234,8 +234,8 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Engagement Score"
             range="0 – 10"
-            formula="Before live: log(1 + avgLikes + avgComments×1.5)   |   After live: log(1 + medianLikes + medianViews×0.8)"
-            description="Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn't automatically swamp a 1k-like account. Before live stats are fetched, comments are weighted 1.5× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes and views — median is more robust than average against outlier viral posts. Views are weighted 0.8× since they require slightly less intent than a like. Photo-only accounts contribute 0 for views, which is correct. The Overall Score updates in real time as live data arrives per account."
+            formula="Before live: log(1 + avgLikes + avgComments×1.5)   |   After live: log(1 + medianLikes + medianViews×0.8 + medianComments×1.5)"
+            description="Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn't automatically swamp a 1k-like account. Before live stats are fetched, comments are weighted 1.5× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes, views, and comments — median is more robust than average against outlier viral posts. Views are weighted 0.8× since they require slightly less intent than a like; comments are weighted 1.5× as a high-intent signal. Photo-only accounts contribute 0 for views, which is correct. The Overall Score updates in real time as live data arrives per account."
           />
           <ScoreRow
             name="Relevancy Score"
@@ -271,6 +271,11 @@ export default function InstructionsPage() {
             description="Median video view count across the 10 most recent Reels or clips fetched live. Photo-only accounts show a dash. Requires Fetch Live Stats."
           />
           <ScoreRow
+            name="Med. Comments"
+            range="Live · from scrape"
+            description="Median comment count across the 10 most recent posts or Reels fetched live. Weighted 1.5× in the post-live Engagement Score formula as a high-intent signal. Requires Fetch Live Stats."
+          />
+          <ScoreRow
             name="Scraped Post"
             range="link · from export"
             description="URL of the most recent post found in the original Apify export for this account. Opens the post directly on Instagram."
@@ -287,13 +292,13 @@ export default function InstructionsPage() {
           />
           <ScoreRow
             name="AI Deep-Dive"
-            range="optional · Claude"
-            description="Qualitative verdict generated by Claude after reviewing the account's captions, hashtags, bio, and your campaign brief. Only populated after you run AI Deep-Dive on the Results screen. Cached for 7 days per account + brief combination — a different campaign brief will generate a fresh verdict even for the same account."
+            range="optional · DeepSeek"
+            description="Qualitative verdict generated by DeepSeek after reviewing the account's captions, hashtags, bio, and your campaign brief. Only populated after you run AI Deep-Dive on the Results screen. Cached for 7 days per account + brief combination — a different campaign brief will generate a fresh verdict even for the same account."
           />
         </div>
 
         <p className="text-[11px] text-faint font-mono">
-          All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and Anthropic (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.
+          All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and DeepSeek (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.
         </p>
       </Section>
 

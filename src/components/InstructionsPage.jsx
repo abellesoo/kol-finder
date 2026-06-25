@@ -22,7 +22,7 @@ function ScoreRow({ name, range, description, formula }) {
         {formula && (
           <p className="font-mono text-[11px] text-body bg-surface border border-card-edge px-2 py-1.5 rounded-[8px] mb-2 leading-relaxed">{formula}</p>
         )}
-        <p className="text-[13px] text-body leading-relaxed">{description}</p>
+        <div className="text-[13px] text-body leading-relaxed">{description}</div>
       </div>
     </div>
   )
@@ -237,7 +237,35 @@ export default function InstructionsPage() {
             name="Relevancy Score"
             range="0 – 10"
             formula="3 + (hits in target niches) − (off-niche categories with hits)"
-            description="Starts at a baseline of 3. Adds 1 point per keyword match found in the account's hashtags, captions, and display name, using niche-specific keyword lists (e.g. 'skincare', '護膚', 'makeup', '化妝'). Deducts 1 point per off-niche content category that also has keyword hits — so an account mixing skincare content with unrelated food or fitness signals scores lower than a pure-niche account. Score is capped at 0–10."
+            description={<>
+              <p className="mb-3">Starts at a baseline of 3. The account's hashtags, captions, and display name are scanned against six niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category that has any match at all deducts −1 (flat per category, not per word). Score is capped 0–10.</p>
+              <div className="border border-card-edge rounded-[10px] overflow-hidden mb-3">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-surface border-b border-card-edge">
+                      <th className="text-left font-mono text-[10px] tracking-[.1em] text-faint uppercase px-3 py-2 w-24">Niche</th>
+                      <th className="text-left font-mono text-[10px] tracking-[.1em] text-faint uppercase px-3 py-2">Sample keywords</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['beauty',    'makeup, lipstick, foundation, eyeshadow, blush, 化妝, 唇膏, 眼影'],
+                      ['skincare',  'skincare, serum, moisturizer, spf, retinol, acne, 護膚, 精華, 防曬'],
+                      ['lifestyle', 'lifestyle, daily, vlog, life, 生活, 日常, 分享'],
+                      ['fashion',   'fashion, style, outfit, ootd, wear, 穿搭, 時尚, 造型'],
+                      ['health',    'health, wellness, yoga, gym, fitness, workout, 健康, 健身, 瑜伽'],
+                      ['food',      'food, eat, restaurant, recipe, foodie, 美食, 食物, 餐廳'],
+                    ].map(([niche, kws], i) => (
+                      <tr key={niche} className={i % 2 === 0 ? 'bg-white' : 'bg-surface/50'}>
+                        <td className="font-mono text-body px-3 py-1.5 border-b border-mist/40 last:border-0 align-top">{niche}</td>
+                        <td className="text-muted px-3 py-1.5 border-b border-mist/40 last:border-0">{kws}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[12px] text-faint"><strong className="text-body">Example:</strong> You select beauty + skincare. An account with "makeup, serum, moisturizer, foodie" in their content: beauty hits +1, skincare hits +2, food is off-niche −1 → score = 3 + 3 − 1 = <strong className="text-body">5</strong>. The "Niche signals" tags shown in the expanded row are the exact matched keywords.</p>
+            </>}
           />
           <ScoreRow
             name="Bot Risk Score"

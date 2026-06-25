@@ -62,9 +62,6 @@ export default function LoginPage({ error }) {
           <TextEffect per='char' preset='fade' delay={0.4} className="block">
             Find, score and launch creators who actually fit.
           </TextEffect>
-          <TextEffect per='char' preset='fade' delay={1.8} className="block">
-            All in one place.
-          </TextEffect>
         </div>
         <ul className="text-sm text-[#1a1a1a]/60 space-y-1">
           {['Score accounts automatically', 'Send for brand manager review', 'Draft and send DMs'].map((item, i) => (
@@ -78,6 +75,11 @@ export default function LoginPage({ error }) {
             </motion.li>
           ))}
         </ul>
+        <div className="text-3xl md:text-4xl font-bold text-[#1a1a1a] leading-tight mt-6">
+          <TextEffect per='char' preset='fade' delay={4.2} className="block">
+            All in one place.
+          </TextEffect>
+        </div>
 
         {error && (
           <div className="px-4 py-3 rounded-[10px] bg-rose-50 border border-rose-200 text-sm text-rose-600 text-center">

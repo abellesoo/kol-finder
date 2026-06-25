@@ -333,6 +333,9 @@ function MainApp({ user, role, onSignOut }) {
             )}
           </>
         )}
+        <footer className="mt-auto px-8 py-3 text-center">
+          <p className="font-mono text-[10px] tracking-[.12em]" style={{ color: '#C4BDB0' }}>Seeding Studio · Annabelle Soo 2026</p>
+        </footer>
       </main>
     </div>
   )

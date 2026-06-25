@@ -60,7 +60,7 @@ export default function LoginPage({ error }) {
         </motion.p>
         <div className="text-3xl md:text-4xl font-bold text-[#1a1a1a] leading-tight">
           <TextEffect per='char' preset='fade' delay={0.4} className="block">
-            Find, score and approve KOL seeding candidates.
+            Find, score and launch creators who actually fit.
           </TextEffect>
           <TextEffect per='char' preset='fade' delay={1.8} className="block">
             All in one place.

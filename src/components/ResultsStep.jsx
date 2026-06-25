@@ -151,7 +151,12 @@ function ColumnPicker({ selected, onChange }) {
   }, [])
 
   const toggle = (id) => {
-    onChange(selected.includes(id) ? selected.filter((c) => c !== id) : [...selected, id])
+    if (selected.includes(id)) {
+      onChange(selected.filter((c) => c !== id))
+    } else {
+      const order = TABLE_COLUMNS.map(c => c.id)
+      onChange([...selected, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
+    }
   }
 
   return (

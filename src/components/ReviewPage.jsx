@@ -67,7 +67,14 @@ function ColumnPicker({ selected, onChange }) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const toggle = (id) => onChange(selected.includes(id) ? selected.filter(c => c !== id) : [...selected, id])
+  const toggle = (id) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter(c => c !== id))
+    } else {
+      const order = TABLE_COLUMNS.map(c => c.id)
+      onChange([...selected, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
+    }
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -381,7 +388,14 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   const isRejected = status === 'rejected'
 
   const activeCols = (selectedColumns || []).filter(id => TABLE_ROW_COLS[id])
-  const gridTemplate = ['2fr', ...activeCols.map(id => TABLE_ROW_COLS[id].width), '140px'].join(' ')
+  const gridTemplate = [
+    'minmax(160px,2fr)',
+    ...activeCols.map(id => {
+      const w = TABLE_ROW_COLS[id].width
+      return w.includes('fr') ? `minmax(70px,${w})` : w
+    }),
+    '140px',
+  ].join(' ')
 
   return (
     <>
@@ -732,9 +746,23 @@ export default function ReviewPage({ reviewId, onBack }) {
 
       {viewMode === 'table' ? (() => {
         const activeCols = selectedColumns.filter(id => TABLE_ROW_COLS[id])
-        const gridTemplate = ['2fr', ...activeCols.map(id => TABLE_ROW_COLS[id].width), '140px'].join(' ')
+        const gridTemplate = [
+          'minmax(160px,2fr)',
+          ...activeCols.map(id => {
+            const w = TABLE_ROW_COLS[id].width
+            return w.includes('fr') ? `minmax(70px,${w})` : w
+          }),
+          '140px',
+        ].join(' ')
+        // Compute a min-width so the account column never collapses when many fixed-px columns are selected
+        const fixedPx = activeCols.reduce((sum, id) => {
+          const w = TABLE_ROW_COLS[id].width
+          return sum + (w.endsWith('px') ? parseInt(w) : 90)
+        }, 0)
+        const tableMinWidth = 200 + fixedPx + 140 + (activeCols.length + 1) * 12
         return (
-        <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
+        <div className="overflow-x-auto">
+        <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
           <div
             className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
             style={{ gridTemplateColumns: gridTemplate }}
@@ -755,6 +783,7 @@ export default function ReviewPage({ reviewId, onBack }) {
               selectedColumns={selectedColumns}
             />
           ))}
+        </div>
         </div>
         )
       })() : (

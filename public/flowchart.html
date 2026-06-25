@@ -357,12 +357,6 @@ const nodes = [
     type: 'opt', x: 118, y: 754, w: 186, h: 44,
   },
 
-  // Optional: AI Deep-Dive
-  {
-    id: 'ai_dive', label: 'AI Deep-Dive',
-    sub: 'Claude · top-N · campaign brief',
-    type: 'opt', x: 322, y: 754, w: 132, h: 44,
-  },
 
 ]
 
@@ -390,7 +384,6 @@ const edges = [
 
   // optional downstream steps
   { from: 'results', to: 'live_stats', style: 'opt' },
-  { from: 'results', to: 'ai_dive',    style: 'opt' },
 ]
 
 // ─────────────────────────────────────────────────────────────────
@@ -417,14 +410,14 @@ const details = {
   parse: {
     title: 'aggregatePostItems',
     colorType: 'skill',
-    what: 'Groups rows by ownerUsername and aggregates per-influencer stats: avgLikes, avgComments, engagementRate, videoRatio, followerCount, up to 40 deduplicated hashtags, 5 sample captions, and the most recent post URL with its like/comment/play counts. Handles both xlsx column format (hashtags/0, hashtags/1…) and Apify API array format (item.hashtags). Also reads accountLocation from city/ownerCity/country fields if present.',
+    what: 'Groups rows by ownerUsername and aggregates per-influencer stats: avgLikes, avgComments, videoRatio, followerCount, up to 40 deduplicated hashtags, 5 sample captions, and the most recent post URL with its like/comment/play counts. Handles both xlsx column format (hashtags/0, hashtags/1…) and Apify API array format (item.hashtags). Also reads accountLocation from city/ownerCity/country fields if present.',
     output: 'Array of influencer objects sorted by totalEngagement desc',
     notes: 'Called as parseApifyXlsx for XLSX files and directly for scraped items. Brand name is passed in for colour coding.',
   },
   config: {
     title: 'Config Step',
     colorType: 'config',
-    what: 'Before scoring, the user sets: target niches (beauty, skincare, lifestyle, fashion, health, food), a minimum average-likes threshold, whether to require video content, and an optional Campaign Brief. The campaign brief is a free-text field — a sentence or two describing the campaign goal, audience, and tone. It is stored on the config object and passed to AI Deep-Dive to make qualitative verdicts campaign-specific.',
+    what: 'Before scoring, the user sets: target niches (beauty, skincare, lifestyle, fashion, health, food), a minimum average-likes threshold, whether to require video content, and an optional Campaign Brief. The campaign brief is a free-text field — a sentence or two describing the campaign goal, audience, and tone. It is stored on the config object.',
     output: 'Config object: { niches, minEngagement, requireVideo, campaignBrief }',
   },
   batch: {
@@ -436,13 +429,13 @@ const details = {
   n_engage: {
     title: 'scoreEngagement',
     colorType: 'sub',
-    what: 'Log-scales median likes and views to produce a 0–10 score. Before live stats are fetched: log(1 + avgLikes + avgComments × 3). After Fetch Live Stats: log(1 + medianLikes + medianViews × 0.5). The natural log compresses large follower differences so a 10k-like account doesn\'t automatically swamp a 1k-like account. Views are weighted 0.5× since they require less intent than a like.',
+    what: 'Log-scales engagement signals to produce a 0–10 score. Before live stats are fetched: log(1 + avgLikes + avgComments × 1.5). After Fetch Live Stats: log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5). The natural log compresses large follower differences so a 10k-like account doesn\'t automatically swamp a 1k-like account. Comments are weighted 1.5× as a high-intent signal; views 0.8× since they require less intent than a like.',
     output: '{ score: 0–10 }',
   },
   n_relevancy: {
     title: 'scoreRelevancy',
     colorType: 'sub',
-    what: 'Keyword-matches the influencer\'s hashtags, captions, and display name against niche-specific keyword lists (English + Traditional Chinese). Starts at a neutral baseline of 5 — any account in the dataset has already shown some affinity with competitor content. Adds 1 point per keyword match, deducts 1 point per off-niche category with hits (penalises unfocused accounts). Returns matched signal words for display in the table.',
+    what: 'Keyword-matches the influencer\'s hashtags, captions, and display name against niche-specific keyword lists (English + Traditional Chinese). Starts at a baseline of 3. Adds 1 point per keyword match in target niches, deducts 1 point per off-niche category with hits (penalises unfocused accounts). Score capped at 0–10. Returns matched signal words for display in the table.',
     output: '{ score: 0–10, signals: string[] }',
   },
   n_bot: {
@@ -462,7 +455,7 @@ const details = {
   results: {
     title: 'Results Table',
     colorType: 'output',
-    what: 'Displays all scored influencers in a sortable, filterable table with customisable columns. Med. Likes and Med. Views show xlsx-based fallback values with an "(export)" label before live stats are fetched, upgrading in real time as live data arrives per account. Expanded rows show the full verdict, AI Deep-Dive verdict (if run), scraped caption, and post stats.',
+    what: 'Displays all scored influencers in a sortable, filterable table with customisable columns. Med. Likes and Med. Views show xlsx-based fallback values before live stats are fetched, upgrading in real time as live data arrives per account. Expanded rows show the scoring verdict, niche signals, top hashtags, scraped caption, and post stats.',
     output: 'Interactive table + XLSX export via exportCsv.js (ExcelJS, with per-brand colour fills and workflow dropdowns)',
   },
   live_stats: {
@@ -470,15 +463,7 @@ const details = {
     colorType: 'opt',
     badge: 'optional · costs ~$0.01/account',
     what: 'Triggers a parallelised Apify Instagram Scraper batch (chunks of 50) through the Cloudflare Worker proxy. Scrapes up to 10 recent posts per account, computing median likes and median views. Results are cached in localStorage for 7 days — re-running within that window skips already-cached accounts. Upgrades the Engagement Score and Overall Score in real time as each chunk completes.',
-    output: 'liveStats map: { [username]: { medianLikes, medianViews, hiddenCount, followerCount } }',
-  },
-  ai_dive: {
-    title: 'AI Deep-Dive',
-    colorType: 'opt',
-    badge: 'optional · costs ~$0.01–0.05/run',
-    what: 'Sends the top-N accounts\' captions, hashtags, bio, and the campaign brief to Claude (claude-sonnet-4-6) via the Cloudflare Worker proxy. The Worker calls the Anthropic API server-side — the API key never reaches the browser. Returns a qualitative verdict per account, stored as aiVerdict (distinct from the deterministic verdict). Processed in batches of 10 to stay within rate limits.',
-    output: 'aiVerdicts map: { [username]: string }',
-    notes: 'Verdicts are cached in localStorage for 7 days per account + campaign brief combination. A different brief generates a fresh verdict even for the same account. This is the only step that calls an AI model.',
+    output: 'liveStats map: { [username]: { medianLikes, medianViews, medianComments, hiddenCount, followerCount } }',
   },
 }
 

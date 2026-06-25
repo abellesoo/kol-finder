@@ -39,21 +39,31 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
 }
 
 const TABLE_ROW_COLS = {
-  brand:                 { label: 'Brand',      width: '80px', render: (a) => <span className="font-mono text-xs text-body">{a.sourceBrand || '—'}</span> },
-  overall:               { label: 'Score',      width: '80px', center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
-  relevancy_score:       { label: 'Relevancy',  width: '90px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
-  engagement_score:      { label: 'Eng. Score', width: '90px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
-  account_location:      { label: 'Location',   width: '90px', render: (a) => <span className="font-mono text-xs text-body">{a.accountLocation || '—'}</span> },
-  follower_count:        { label: 'Followers',  width: '90px', render: (a) => <span className="font-mono text-xs text-ink">{a.followerCount != null ? a.followerCount.toLocaleString() : '—'}</span> },
-  niche_signals:         { label: 'Niches',     width: '1fr',  render: (a) => <div className="flex flex-wrap gap-1">{(a.nicheSignals || []).slice(0, 2).map(t => <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>)}</div> },
-  live_median_likes:     { label: 'Med. Likes', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianLikes != null ? a.medianLikes.toLocaleString() : '—'}</span> },
-  live_median_views:     { label: 'Med. Views', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianViews != null ? a.medianViews.toLocaleString() : '—'}</span> },
-  live_median_comments:  { label: 'Med. Cmts',  width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianComments != null ? a.medianComments.toLocaleString() : '—'}</span> },
-  scraped_post_likes:    { label: 'Post Likes', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostLikes != null ? a.samplePostLikes.toLocaleString() : '—'}</span> },
-  scraped_post_comments: { label: 'Post Cmts',  width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostComments != null ? a.samplePostComments.toLocaleString() : '—'}</span> },
-  scraped_post_plays:    { label: 'Post Plays', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostPlays != null ? a.samplePostPlays.toLocaleString() : '—'}</span> },
-  sample_post_url:       { label: 'Post',       width: '60px', render: (a) => a.samplePostUrl ? <a href={a.samplePostUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-body hover:underline flex items-center gap-1">View <ExternalLink size={10} /></a> : <span className="font-mono text-xs text-ink/30">—</span> },
-  sample_caption:        { label: 'Caption',    width: '2fr',  render: (a) => <span className="font-mono text-xs text-body line-clamp-2">{a.sampleCaption || '—'}</span> },
+  brand:                 { label: 'Brand',      min: '80px',  render: (a) => <span className="font-mono text-xs text-body">{a.sourceBrand || '—'}</span> },
+  overall:               { label: 'Score',      min: '72px',  center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
+  relevancy_score:       { label: 'Relevancy',  min: '100px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
+  engagement_score:      { label: 'Eng. Score', min: '100px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
+  account_location:      { label: 'Location',   min: '80px',  render: (a) => <span className="font-mono text-xs text-body">{a.accountLocation || '—'}</span> },
+  follower_count:        { label: 'Followers',  min: '80px',  render: (a) => <span className="font-mono text-xs text-ink">{a.followerCount != null ? a.followerCount.toLocaleString() : '—'}</span> },
+  niche_signals:         { label: 'Niches',     min: '100px', flex: 2, render: (a) => <div className="flex flex-wrap gap-1">{(a.nicheSignals || []).slice(0, 2).map(t => <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>)}</div> },
+  live_median_likes:     { label: 'Med. Likes', min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.medianLikes != null ? a.medianLikes.toLocaleString() : '—'}</span> },
+  live_median_views:     { label: 'Med. Views', min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.medianViews != null ? a.medianViews.toLocaleString() : '—'}</span> },
+  live_median_comments:  { label: 'Med. Cmts',  min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.medianComments != null ? a.medianComments.toLocaleString() : '—'}</span> },
+  scraped_post_likes:    { label: 'Post Likes', min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostLikes != null ? a.samplePostLikes.toLocaleString() : '—'}</span> },
+  scraped_post_comments: { label: 'Post Cmts',  min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostComments != null ? a.samplePostComments.toLocaleString() : '—'}</span> },
+  scraped_post_plays:    { label: 'Post Plays', min: '72px',  render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostPlays != null ? a.samplePostPlays.toLocaleString() : '—'}</span> },
+  sample_post_url:       { label: 'Post',       min: '56px',  render: (a) => a.samplePostUrl ? <a href={a.samplePostUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-body hover:underline flex items-center gap-1">View <ExternalLink size={10} /></a> : <span className="font-mono text-xs text-ink/30">—</span> },
+  sample_caption:        { label: 'Caption',    min: '120px', flex: 3, render: (a) => <span className="font-mono text-xs text-body line-clamp-2">{a.sampleCaption || '—'}</span> },
+}
+
+// Build a CSS grid template that fills available width: each column grows from
+// its minimum, with flex columns taking proportionally more of the surplus.
+function buildGridTemplate(activeCols) {
+  const colDefs = activeCols.map(id => {
+    const { min, flex = 1 } = TABLE_ROW_COLS[id]
+    return `minmax(${min}, ${flex}fr)`
+  })
+  return ['minmax(160px,3fr)', ...colDefs, 'minmax(130px,auto)'].join(' ')
 }
 
 // ColumnPicker — same pattern and TABLE_COLUMNS as ResultsStep
@@ -388,14 +398,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   const isRejected = status === 'rejected'
 
   const activeCols = (selectedColumns || []).filter(id => TABLE_ROW_COLS[id])
-  const gridTemplate = [
-    'minmax(160px,2fr)',
-    ...activeCols.map(id => {
-      const w = TABLE_ROW_COLS[id].width
-      return w.includes('fr') ? `minmax(70px,${w})` : w
-    }),
-    '140px',
-  ].join(' ')
+  const gridTemplate = buildGridTemplate(activeCols)
 
   return (
     <>
@@ -746,20 +749,8 @@ export default function ReviewPage({ reviewId, onBack }) {
 
       {viewMode === 'table' ? (() => {
         const activeCols = selectedColumns.filter(id => TABLE_ROW_COLS[id])
-        const gridTemplate = [
-          'minmax(160px,2fr)',
-          ...activeCols.map(id => {
-            const w = TABLE_ROW_COLS[id].width
-            return w.includes('fr') ? `minmax(70px,${w})` : w
-          }),
-          '140px',
-        ].join(' ')
-        // Compute a min-width so the account column never collapses when many fixed-px columns are selected
-        const fixedPx = activeCols.reduce((sum, id) => {
-          const w = TABLE_ROW_COLS[id].width
-          return sum + (w.endsWith('px') ? parseInt(w) : 90)
-        }, 0)
-        const tableMinWidth = 200 + fixedPx + 140 + (activeCols.length + 1) * 12
+        const gridTemplate = buildGridTemplate(activeCols)
+        const tableMinWidth = 160 + activeCols.reduce((s, id) => s + parseInt(TABLE_ROW_COLS[id].min), 0) + 130 + (activeCols.length + 1) * 12
         return (
         <div className="overflow-x-auto">
         <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>

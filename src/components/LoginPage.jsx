@@ -62,7 +62,7 @@ export default function LoginPage({ error }) {
           <TextEffect per='char' preset='fade' delay={0.4} className="block">
             Find, score and launch creators who actually fit.
           </TextEffect>
-          <TextEffect per='char' preset='fade' delay={1.8} className="block mt-4">
+          <TextEffect per='char' preset='fade' delay={2.8} className="block mt-4">
             All in one place.
           </TextEffect>
         </div>
@@ -72,7 +72,7 @@ export default function LoginPage({ error }) {
               key={item}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 2.9 + i * 0.25 }}
+              transition={{ duration: 0.4, delay: 3.9 + i * 0.25 }}
             >
               {item}
             </motion.li>

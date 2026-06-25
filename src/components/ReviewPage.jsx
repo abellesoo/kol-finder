@@ -38,6 +38,24 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
+const TABLE_ROW_COLS = {
+  brand:                 { label: 'Brand',      width: '80px', render: (a) => <span className="font-mono text-xs text-body">{a.sourceBrand || '—'}</span> },
+  overall:               { label: 'Score',      width: '80px', center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
+  relevancy_score:       { label: 'Relevancy',  width: '90px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
+  engagement_score:      { label: 'Eng. Score', width: '90px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
+  account_location:      { label: 'Location',   width: '90px', render: (a) => <span className="font-mono text-xs text-body">{a.accountLocation || '—'}</span> },
+  follower_count:        { label: 'Followers',  width: '90px', render: (a) => <span className="font-mono text-xs text-ink">{a.followerCount != null ? a.followerCount.toLocaleString() : '—'}</span> },
+  niche_signals:         { label: 'Niches',     width: '1fr',  render: (a) => <div className="flex flex-wrap gap-1">{(a.nicheSignals || []).slice(0, 2).map(t => <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>)}</div> },
+  live_median_likes:     { label: 'Med. Likes', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianLikes != null ? a.medianLikes.toLocaleString() : '—'}</span> },
+  live_median_views:     { label: 'Med. Views', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianViews != null ? a.medianViews.toLocaleString() : '—'}</span> },
+  live_median_comments:  { label: 'Med. Cmts',  width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.medianComments != null ? a.medianComments.toLocaleString() : '—'}</span> },
+  scraped_post_likes:    { label: 'Post Likes', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostLikes != null ? a.samplePostLikes.toLocaleString() : '—'}</span> },
+  scraped_post_comments: { label: 'Post Cmts',  width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostComments != null ? a.samplePostComments.toLocaleString() : '—'}</span> },
+  scraped_post_plays:    { label: 'Post Plays', width: '80px', render: (a) => <span className="font-mono text-xs text-ink">{a.samplePostPlays != null ? a.samplePostPlays.toLocaleString() : '—'}</span> },
+  sample_post_url:       { label: 'Post',       width: '60px', render: (a) => a.samplePostUrl ? <a href={a.samplePostUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-body hover:underline flex items-center gap-1">View <ExternalLink size={10} /></a> : <span className="font-mono text-xs text-ink/30">—</span> },
+  sample_caption:        { label: 'Caption',    width: '2fr',  render: (a) => <span className="font-mono text-xs text-body line-clamp-2">{a.sampleCaption || '—'}</span> },
+}
+
 // ColumnPicker — same pattern and TABLE_COLUMNS as ResultsStep
 function ColumnPicker({ selected, onChange }) {
   const [open, setOpen] = useState(false)
@@ -296,7 +314,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   )
 }
 
-function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
+function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, selectedColumns }) {
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
   const dmDraft = reviewEntry?.dm_draft || ''
@@ -358,10 +376,12 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
     onUpdate(account.username, entry({ status: 'pending' }))
   }
 
-  const nicheTags = (account.nicheSignals || []).slice(0, 2)
   const isPending = status === 'pending'
   const isApproved = status === 'approved'
   const isRejected = status === 'rejected'
+
+  const activeCols = (selectedColumns || []).filter(id => TABLE_ROW_COLS[id])
+  const gridTemplate = ['2fr', ...activeCols.map(id => TABLE_ROW_COLS[id].width), '140px'].join(' ')
 
   return (
     <>
@@ -369,7 +389,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
         className={`grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
           isApproved ? 'bg-[#F5F8F4]/50' : isRejected ? 'opacity-60' : ''
         }`}
-        style={{ gridTemplateColumns: '2fr 80px 90px 1fr 140px' }}
+        style={{ gridTemplateColumns: gridTemplate }}
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="min-w-0">
@@ -384,17 +404,11 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate }) {
           </a>
           {account.fullName && <p className="text-xs text-faint truncate">{account.fullName}</p>}
         </div>
-        <div className="flex justify-center">
-          <ScoreBadge score={account.overall} />
-        </div>
-        <p className="font-mono text-sm text-ink text-center">
-          {account.avgLikes != null ? account.avgLikes.toLocaleString() : '—'}
-        </p>
-        <div className="flex flex-wrap gap-1">
-          {nicheTags.map((t) => (
-            <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>
-          ))}
-        </div>
+        {activeCols.map(id => (
+          <div key={id} className={TABLE_ROW_COLS[id].center ? 'flex justify-center' : ''}>
+            {TABLE_ROW_COLS[id].render(account)}
+          </div>
+        ))}
         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
           {isPending && (
             <>
@@ -715,16 +729,19 @@ export default function ReviewPage({ reviewId, onBack }) {
 
       </div>
 
-      {viewMode === 'table' ? (
+      {viewMode === 'table' ? (() => {
+        const activeCols = selectedColumns.filter(id => TABLE_ROW_COLS[id])
+        const gridTemplate = ['2fr', ...activeCols.map(id => TABLE_ROW_COLS[id].width), '140px'].join(' ')
+        return (
         <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
           <div
             className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
-            style={{ gridTemplateColumns: '2fr 80px 90px 1fr 140px' }}
+            style={{ gridTemplateColumns: gridTemplate }}
           >
             <span>Account</span>
-            <span className="text-center">Score</span>
-            <span className="text-center">Avg Likes</span>
-            <span>Niches</span>
+            {activeCols.map(id => (
+              <span key={id} className={TABLE_ROW_COLS[id].center ? 'text-center' : ''}>{TABLE_ROW_COLS[id].label}</span>
+            ))}
             <span />
           </div>
           {accounts.map((account) => (
@@ -734,10 +751,12 @@ export default function ReviewPage({ reviewId, onBack }) {
               reviewEntry={reviewState[account.username]}
               campaignBrief={campaignBrief}
               onUpdate={handleUpdate}
+              selectedColumns={selectedColumns}
             />
           ))}
         </div>
-      ) : (
+        )
+      })() : (
         <div className="space-y-4">
           {accounts.map((account) => (
             <AccountCard

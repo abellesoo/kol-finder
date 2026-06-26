@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
@@ -67,10 +67,16 @@ function ColumnPicker({ selected, onChange }) {
   )
 }
 
+function formatDate(isoStr) {
+  if (!isoStr) return '—'
+  return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function ReadyToSendPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [items, setItems] = useState([])
+  const [sessionMeta, setSessionMeta] = useState({})
   const [copiedUser, setCopiedUser] = useState(null)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
 
@@ -81,12 +87,14 @@ export default function ReadyToSendPage() {
     try {
       const { data, error: err } = await supabase
         .from('shared_results')
-        .select('id, campaign_brief, accounts, review_state')
+        .select('id, campaign_brief, accounts, review_state, created_at')
         .order('created_at', { ascending: false })
       if (err) throw new Error(err.message)
 
+      const metaMap = {}
       const ready = []
       for (const row of data || []) {
+        metaMap[row.id] = { campaignBrief: row.campaign_brief || '', createdAt: row.created_at }
         for (const account of row.accounts || []) {
           const entry = row.review_state?.[account.username]
           if (entry?.status === 'approved') {
@@ -104,12 +112,26 @@ export default function ReadyToSendPage() {
         }
       }
       setItems(ready)
+      setSessionMeta(metaMap)
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const groups = useMemo(() => {
+    const map = new Map()
+    for (const item of items) {
+      if (!map.has(item.rowId)) map.set(item.rowId, [])
+      map.get(item.rowId).push(item)
+    }
+    return Array.from(map.entries()).map(([rowId, rowItems]) => ({
+      rowId,
+      ...(sessionMeta[rowId] || {}),
+      items: rowItems,
+    }))
+  }, [items, sessionMeta])
 
   useEffect(() => { load() }, [load])
 
@@ -172,7 +194,7 @@ export default function ReadyToSendPage() {
               ]
               exportToCsv(results, influencers, exportIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2 border border-transparent bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap"
           >
             <Download size={14} /> Export XLSX
           </button>
@@ -197,61 +219,74 @@ export default function ReadyToSendPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {items.map((item) => (
-          <div
-            key={`${item.rowId}-${item.username}`}
-            className="border border-[#BFD6C4] bg-[#F5F8F4] rounded-[14px] px-5 py-4"
-          >
-            <div className="flex items-start justify-between gap-4 mb-3">
+      <div className="space-y-8">
+        {groups.map((group) => (
+          <div key={group.rowId}>
+            <div className="flex items-center gap-3 mb-3 pb-3 border-b border-mist">
               <div className="min-w-0">
-                <a
-                  href={`https://instagram.com/${item.username}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1"
-                >
-                  @{item.username} <ExternalLink size={11} className="opacity-40" />
-                </a>
-                {item.fullName && <p className="text-[12px] text-faint">{item.fullName}</p>}
-                {item.campaignBrief && (
-                  <p className="text-[11px] text-faint font-mono mt-1 truncate max-w-sm">{item.campaignBrief}</p>
-                )}
+                <p className="font-medium text-[13.5px] text-ink truncate">
+                  {(group.campaignBrief || '').length > 90 ? group.campaignBrief.slice(0, 90) + '…' : group.campaignBrief || '(no brief)'}
+                </p>
+                <p className="text-[11px] text-faint font-mono mt-0.5">
+                  {formatDate(group.createdAt)} · {group.items.length} {group.items.length === 1 ? 'account' : 'accounts'} approved
+                </p>
               </div>
             </div>
+            <div className="space-y-3">
+              {group.items.map((item) => (
+                <div
+                  key={`${item.rowId}-${item.username}`}
+                  className="border border-[#BFD6C4] bg-[#F5F8F4] rounded-[14px] px-5 py-4"
+                >
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div className="min-w-0">
+                      <a
+                        href={`https://instagram.com/${item.username}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1"
+                      >
+                        @{item.username} <ExternalLink size={11} className="opacity-40" />
+                      </a>
+                      {item.fullName && <p className="text-[12px] text-faint">{item.fullName}</p>}
+                    </div>
+                  </div>
 
-            {item.dm_draft ? (
-              <div className="bg-white border border-card-edge rounded-[10px] px-4 py-3 mb-3">
-                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-2">DM Draft</p>
-                <p className="text-[13px] text-body whitespace-pre-wrap">{item.dm_draft}</p>
-              </div>
-            ) : (
-              <p className="text-[11px] text-faint font-mono mb-3">No DM draft — generate one from the Review Queue.</p>
-            )}
+                  {item.dm_draft ? (
+                    <div className="bg-white border border-card-edge rounded-[10px] px-4 py-3 mb-3">
+                      <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-2">DM Draft</p>
+                      <p className="text-[13px] text-body whitespace-pre-wrap">{item.dm_draft}</p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-faint font-mono mb-3">No DM draft — generate one from the Review Queue.</p>
+                  )}
 
-            <div className="flex items-center justify-between">
-              <div className="flex gap-1.5">
-                {DM_STATUS_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => persistStatus(item, s)}
-                    className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
-                      item.dmStatus === s
-                        ? DM_STATUS_STYLES[s] + ' border-current'
-                        : 'border-mist text-faint hover:border-ink/30'
-                    }`}
-                  >
-                    {DM_STATUS_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => handleCopyAndOpen(item)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all"
-              >
-                {copiedUser === item.username ? <Check size={12} /> : <Copy size={12} />}
-                {copiedUser === item.username ? 'Copied!' : 'Copy & open profile'}
-              </button>
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1.5">
+                      {DM_STATUS_OPTIONS.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => persistStatus(item, s)}
+                          className={`px-2 py-1 rounded-full text-[11px] border transition-all ${
+                            item.dmStatus === s
+                              ? DM_STATUS_STYLES[s] + ' border-current'
+                              : 'border-mist text-faint hover:border-ink/30'
+                          }`}
+                        >
+                          {DM_STATUS_LABELS[s]}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => handleCopyAndOpen(item)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all"
+                    >
+                      {copiedUser === item.username ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedUser === item.username ? 'Copied!' : 'Copy & open profile'}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}

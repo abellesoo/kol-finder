@@ -402,6 +402,9 @@ function StepProgress({ current }) {
 }
 
 export default function ResultsStep({ results, influencers, config, sessionId }) {
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
+
   const [sortKey, setSortKey] = useState('overall')
   const [sortDir, setSortDir] = useState('desc')
   const [filterFlag, setFilterFlag] = useState('all')
@@ -518,7 +521,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       writeCache(updated)
       setLiveStats((prev) => ({ ...prev, ...statsMap }))
       setLiveStatus('done')
-      updateSessionLiveStats(sessionId, statsMap).catch(console.error)
+      updateSessionLiveStats(sessionIdRef.current, statsMap).catch(console.error)
     } catch (err) {
       setLiveError(err.message)
       setLiveStatus('error')
@@ -572,7 +575,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       const { error } = await supabase
         .from('shared_results')
         .insert({
-          campaign_brief: config?.sessionTitle || config?.campaignBrief || '',
+          campaign_brief: config?.campaignBrief || '',
           accounts: accountsToShare,
           review_state: {},
         })

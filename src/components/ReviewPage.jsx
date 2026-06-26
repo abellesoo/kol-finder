@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2 } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
@@ -409,7 +409,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
         style={{ gridTemplateColumns: gridTemplate }}
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex flex-col justify-center">
           <a
             href={`https://instagram.com/${account.username}`}
             target="_blank"
@@ -422,7 +422,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
           {account.fullName && <p className="text-xs text-faint truncate">{account.fullName}</p>}
         </div>
         {activeCols.map(id => (
-          <div key={id} className={TABLE_ROW_COLS[id].center ? 'flex justify-center' : ''}>
+          <div key={id} className={`flex items-center${TABLE_ROW_COLS[id].center ? ' justify-center' : ''}`}>
             {TABLE_ROW_COLS[id].render(account)}
           </div>
         ))}
@@ -557,6 +557,7 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [campaignBrief, setCampaignBrief] = useState('')
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
+  const [sortDir, setSortDir] = useState(null) // null = original, 'desc' = high→low, 'asc' = low→high
   const [saving, setSaving] = useState(false)
   const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
   const [editingBrief, setEditingBrief] = useState(false)
@@ -668,6 +669,11 @@ export default function ReviewPage({ reviewId, onBack }) {
   const rejectedCount = Object.values(reviewState).filter((e) => e.status === 'rejected').length
   const pendingCount = accounts.length - approvedCount - rejectedCount
 
+  const sortedAccounts = sortDir == null ? accounts : [...accounts].sort((a, b) =>
+    sortDir === 'desc' ? b.overall - a.overall : a.overall - b.overall
+  )
+  const cycleSort = () => setSortDir(d => d === null ? 'desc' : d === 'desc' ? 'asc' : null)
+
   return (
     <div className="min-h-screen bg-paper px-[48px] py-[40px]">
       <div className="mb-8">
@@ -755,16 +761,27 @@ export default function ReviewPage({ reviewId, onBack }) {
         <div className="overflow-x-auto">
         <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
           <div
-            className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
+            className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em] items-center"
             style={{ gridTemplateColumns: gridTemplate }}
           >
             <span>Account</span>
             {activeCols.map(id => (
-              <span key={id} className={TABLE_ROW_COLS[id].center ? 'text-center' : ''}>{TABLE_ROW_COLS[id].label}</span>
+              id === 'overall' ? (
+                <button
+                  key={id}
+                  onClick={cycleSort}
+                  className="flex items-center justify-center gap-1 hover:text-ink transition-colors"
+                >
+                  {TABLE_ROW_COLS[id].label}
+                  {sortDir === 'desc' ? <ChevronDown size={11} /> : sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronUp size={11} className="opacity-20" />}
+                </button>
+              ) : (
+                <span key={id} className={TABLE_ROW_COLS[id].center ? 'text-center' : ''}>{TABLE_ROW_COLS[id].label}</span>
+              )
             ))}
             <span />
           </div>
-          {accounts.map((account) => (
+          {sortedAccounts.map((account) => (
             <AccountTableRow
               key={account.username}
               account={account}
@@ -779,7 +796,7 @@ export default function ReviewPage({ reviewId, onBack }) {
         )
       })() : (
         <div className="space-y-4">
-          {accounts.map((account) => (
+          {sortedAccounts.map((account) => (
             <AccountCard
               key={account.username}
               account={account}

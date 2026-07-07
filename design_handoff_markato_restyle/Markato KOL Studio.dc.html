@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Schibsted Grotesk',system-ui,sans-serif;background:#F4F1EB;color:#221E18;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  button{font-family:inherit;border:none;background:none;cursor:pointer}
+  input,textarea,select{font-family:inherit}
+  textarea{resize:none}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-thumb{background:#D8D2C5;border-radius:8px;border:3px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#C7C0B0;border:3px solid transparent;background-clip:padding-box}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeup{from{transform:translateY(7px)}to{transform:none}}
+  .mono{font-family:'JetBrains Mono',monospace}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#F4F1EB">
+
+  <aside style="width:236px;min-width:236px;height:100vh;position:sticky;top:0;display:flex;flex-direction:column;background:#EEEAE1;border-right:1px solid #E1DCD0">
+    <div style="padding:22px 20px 18px;display:flex;align-items:center;gap:10px">
+      <div style="width:30px;height:30px;border-radius:8px;background:#221E18;display:flex;align-items:center;justify-content:center;flex:none">
+        <div style="width:11px;height:11px;border-radius:50%;background:#C8A96E"></div>
+      </div>
+      <div style="line-height:1.05">
+        <div style="font-size:16px;font-weight:700;letter-spacing:-.02em;color:#221E18">Markato</div>
+        <div class="mono" style="font-size:9px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-top:2px">Seeding Tool</div>
+      </div>
+    </div>
+
+    <nav style="flex:1;padding:6px 12px;display:flex;flex-direction:column;gap:2px">
+      <div class="mono" style="font-size:9px;letter-spacing:.16em;color:#B0A693;text-transform:uppercase;padding:12px 10px 6px">Workspace</div>
+      <button onClick="{{ nav.dashboard.onClick }}" style="{{ nav.dashboard.style }}">
+        <span style="{{ nav.dashboard.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="1.5" width="5" height="5" rx="1.2"/><rect x="9.5" y="1.5" width="5" height="5" rx="1.2"/><rect x="1.5" y="9.5" width="5" height="5" rx="1.2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.2"/></svg>
+        <span style="flex:1">Dashboard</span>
+      </button>
+      <button onClick="{{ nav.seeder.onClick }}" style="{{ nav.seeder.style }}">
+        <span style="{{ nav.seeder.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+        <span style="flex:1">Seeder</span>
+      </button>
+      <button onClick="{{ nav.history.onClick }}" style="{{ nav.history.style }}">
+        <span style="{{ nav.history.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.4V8l2.6 1.6"/></svg>
+        <span style="flex:1">History</span>
+      </button>
+
+      <div class="mono" style="font-size:9px;letter-spacing:.16em;color:#B0A693;text-transform:uppercase;padding:16px 10px 6px">Approvals</div>
+      <button onClick="{{ nav.review_queue.onClick }}" style="{{ nav.review_queue.style }}">
+        <span style="{{ nav.review_queue.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="11" height="12" rx="1.6"/><path d="M5.5 2.5V4h5V2.5"/><path d="M5.2 8h5.6M5.2 11h3.6"/></svg>
+        <span style="flex:1">Review Queue</span>
+        <sc-if value="{{ nav.review_queue.showCount }}" hint-placeholder-val="{{ false }}"><span style="{{ nav.review_queue.countStyle }}">{{ nav.review_queue.count }}</span></sc-if>
+      </button>
+      <button onClick="{{ nav.ready_to_send.onClick }}" style="{{ nav.ready_to_send.style }}">
+        <span style="{{ nav.ready_to_send.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2L7 9"/><path d="M14 2l-4.5 12-2.5-5-5-2.5L14 2z"/></svg>
+        <span style="flex:1">Ready to Send</span>
+        <sc-if value="{{ nav.ready_to_send.showCount }}" hint-placeholder-val="{{ false }}"><span style="{{ nav.ready_to_send.countStyle }}">{{ nav.ready_to_send.count }}</span></sc-if>
+      </button>
+
+      <div class="mono" style="font-size:9px;letter-spacing:.16em;color:#B0A693;text-transform:uppercase;padding:16px 10px 6px">Admin</div>
+      <button onClick="{{ nav.team.onClick }}" style="{{ nav.team.style }}">
+        <span style="{{ nav.team.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="5.5" cy="6" r="2.4"/><circle cx="11" cy="6.6" r="1.9"/><path d="M1.8 13c0-2 1.6-3.2 3.7-3.2S9.2 11 9.2 13M9.6 12.4c.1-1.6 1.3-2.5 2.8-2.5 1.4 0 2.4.9 2.4 2.5"/></svg>
+        <span style="flex:1">Team</span>
+      </button>
+    </nav>
+
+    <div style="padding:10px 12px 12px;border-top:1px solid #E1DCD0;display:flex;flex-direction:column;gap:2px">
+      <button onClick="{{ nav.help.onClick }}" style="{{ nav.help.style }}">
+        <span style="{{ nav.help.bar }}"></span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M6.3 6.1c.2-1 1-1.6 1.9-1.6 1 0 1.8.6 1.8 1.6 0 1.3-1.6 1.3-1.8 2.6"/><circle cx="8.1" cy="11.2" r=".5" fill="currentColor" stroke="none"/></svg>
+        <span style="flex:1">Help</span>
+      </button>
+      <a href="public/flowchart.html" target="_blank" rel="noreferrer" class="mono" style="display:flex;align-items:center;gap:10px;padding:7px 11px 7px 21px;font-size:11px;color:#A89E8C;text-decoration:none;border-radius:8px">how it works ↗</a>
+
+      <div style="margin-top:8px;padding:12px 11px 4px;border-top:1px solid #E1DCD0;display:flex;align-items:center;gap:10px">
+        <div style="width:28px;height:28px;border-radius:50%;background:#C8A96E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex:none">AC</div>
+        <div style="min-width:0;flex:1;line-height:1.2">
+          <div style="font-size:12.5px;font-weight:600;color:#3A352C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Amy Chan</div>
+          <div class="mono" style="font-size:10px;color:#A89E8C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">amy@markato.com</div>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#B0A693" stroke-width="1.5" style="flex:none;cursor:pointer"><path d="M6 2H3.5A1.5 1.5 0 002 3.5v9A1.5 1.5 0 003.5 14H6"/><path d="M10.5 11L14 8l-3.5-3M14 8H6"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex:1;min-width:0;height:100vh;overflow:auto">
+
+    <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:40px 48px 64px;max-width:1080px;margin:0 auto">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:28px">
+        <div>
+          <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Dashboard</div>
+          <h1 style="font-size:27px;font-weight:700;letter-spacing:-.02em;margin:0;color:#221E18">Good morning, Amy</h1>
+          <p style="margin:6px 0 0;font-size:14px;color:#7E7768">Here's where your seeding pipeline stands today.</p>
+        </div>
+        <button onClick="{{ goNewRun }}" style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:#221E18;color:#fff;border-radius:10px;font-size:13.5px;font-weight:600;box-shadow:0 1px 2px rgba(34,30,24,.2)">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3v10M3 8h10"/></svg>
+          New scoring run
+        </button>
+      </div>
+
+      <sc-if value="{{ hasAttention }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;align-items:center;gap:14px;padding:15px 18px;background:#F6ECD6;border:1px solid #E7D3A8;border-radius:13px;margin-bottom:26px">
+        <div style="width:34px;height:34px;border-radius:9px;background:#E6D4A8;display:flex;align-items:center;justify-content:center;flex:none">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#8A6A22" stroke-width="1.7"><path d="M8 2.5L14.5 13.5H1.5L8 2.5z"/><path d="M8 6.6v3M8 11.6v.2"/></svg>
+        </div>
+        <div style="flex:1;font-size:13.5px;color:#5C5340;line-height:1.45">{{ attentionText }}</div>
+        <button onClick="{{ goReviewQueue }}" style="padding:8px 14px;background:#fff;border:1px solid #E0C98F;color:#8A6A22;border-radius:9px;font-size:12.5px;font-weight:600;white-space:nowrap">Review now →</button>
+      </div>
+      </sc-if>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:36px">
+        <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+          <div style="background:#fff;border:1px solid #E7E2D6;border-radius:14px;padding:18px 18px 16px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:14px">{{ k.label }}</div>
+            <div class="mono" style="font-size:30px;font-weight:600;letter-spacing:-.02em;color:#221E18;line-height:1">{{ k.value }}</div>
+            <div style="font-size:12px;color:#8E8775;margin-top:8px">{{ k.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#B0A693" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.4V8l2.6 1.6"/></svg>
+        <span class="mono" style="font-size:10px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase">Recent campaigns</span>
+      </div>
+      <div style="background:#fff;border:1px solid #E7E2D6;border-radius:14px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1fr 90px 90px 90px 120px 40px;gap:14px;padding:11px 20px;background:#FAF8F3;border-bottom:1px solid #EDE8DC">
+          <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase">Brief</span>
+          <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;text-align:center">Accounts</span>
+          <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;text-align:center">Approved</span>
+          <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;text-align:center">Pending</span>
+          <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase">Date</span>
+          <span></span>
+        </div>
+        <sc-for list="{{ campaigns }}" as="c" hint-placeholder-count="3">
+          <div onClick="{{ c.onOpen }}" style="display:grid;grid-template-columns:1fr 90px 90px 90px 120px 40px;gap:14px;padding:14px 20px;border-bottom:1px solid #F0ECE2;align-items:center;cursor:pointer" style-hover="background:#FAF8F3">
+            <span style="font-size:13.5px;color:#322E26;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500">{{ c.brief }}</span>
+            <span class="mono" style="font-size:13px;color:#7E7768;text-align:center">{{ c.accounts }}</span>
+            <span class="mono" style="font-size:13px;color:#4A7C59;text-align:center;font-weight:500">{{ c.approved }}</span>
+            <span class="mono" style="font-size:13px;color:#A89E8C;text-align:center">{{ c.pending }}</span>
+            <span class="mono" style="font-size:11.5px;color:#A89E8C">{{ c.date }}</span>
+            <span style="display:flex;justify-content:flex-end;color:#C2BAA8"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8h9M8.5 4l4 4-4 4"/></svg></span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isSeeder }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Seeder">
+
+      <sc-if value="{{ stepUpload }}" hint-placeholder-val="{{ false }}">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px 24px">
+        <div style="width:100%;max-width:540px">
+          <div style="text-align:center;margin-bottom:28px">
+            <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Step 1 of 3</div>
+            <h1 style="font-size:28px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px;color:#221E18">Get your dataset</h1>
+            <p style="margin:0;font-size:14px;color:#7E7768;line-height:1.5">Have an Apify export? Upload it. Starting fresh? Paste competitor URLs or hashtags to scrape.</p>
+          </div>
+          <div style="display:flex;gap:5px;background:#E9E4D9;border-radius:11px;padding:5px;margin-bottom:24px">
+            <button onClick="{{ onUploadTab }}" style="{{ uploadTabStyleA }}">Upload XLSX</button>
+            <button onClick="{{ onScrapeTab }}" style="{{ uploadTabStyleB }}">Scrape URLs / Hashtags</button>
+          </div>
+
+          <sc-if value="{{ isUploadTab }}" hint-placeholder-val="{{ true }}">
+          <p style="text-align:center;font-size:12px;color:#9A917F;margin:0 0 16px">Use this if you already ran a scrape in Apify Console and downloaded the .xlsx export.</p>
+          <div onClick="{{ onAddFiles }}" style="border:2px dashed #DDD6C7;border-radius:18px;padding:40px;text-align:center;cursor:pointer;background:#FBF9F4;transition:border-color .15s" style-hover="border-color:#C8A96E;background:#FAF5EA">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#B6AC97" stroke-width="1.5" style="margin:0 auto 12px"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+            <p style="margin:0 0 4px;font-size:13.5px;color:#7E7768">Click to add .xlsx files</p>
+            <p class="mono" style="margin:0;font-size:11px;color:#B0A693">multiple files supported</p>
+          </div>
+          <sc-if value="{{ hasFiles }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ files }}" as="f" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#fff;border:1px solid #E7E2D6;border-radius:10px">
+                <div style="display:flex;align-items:center;gap:9px;min-width:0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8A96E" stroke-width="1.6" style="flex:none"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9h8M8 13h6"/></svg>
+                  <span class="mono" style="font-size:12px;color:#5C5340;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.name }}</span>
+                </div>
+                <button onClick="{{ f.onRemove }}" style="color:#B6AC97;display:flex;flex:none" style-hover="color:#A8485E"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              </div>
+            </sc-for>
+          </div>
+          <button onClick="{{ onParse }}" style="margin-top:18px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;background:#221E18;color:#fff;border-radius:12px;font-size:14px;font-weight:600">Parse files <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3l5 5-5 5"/></svg></button>
+          </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ isScrapeTab }}" hint-placeholder-val="{{ false }}">
+          <p style="text-align:center;font-size:12px;color:#9A917F;margin:0 0 16px">Kick off a fresh scrape now — one entry per line: post URLs, tagged pages, or hashtags.</p>
+          <textarea value="{{ scrapeInput }}" onChange="{{ onScrapeInput }}" rows="6" placeholder="https://www.instagram.com/p/ABC123/&#10;https://www.instagram.com/brandname/tagged/&#10;#skincare&#10;#suncare" class="mono" style="width:100%;padding:12px 14px;border:1px solid #E1DBCD;border-radius:12px;font-size:12.5px;color:#3A352C;background:#fff;line-height:1.6;outline:none" style-focus="border-color:#C8A96E"></textarea>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap">
+            <span class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase">Max results</span>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ limitOpts }}" as="l" hint-placeholder-count="4">
+                <button onClick="{{ l.onClick }}" class="mono" style="{{ l.style }}">{{ l.n }}</button>
+              </sc-for>
+            </div>
+            <span style="font-size:12px;color:#A89E8C">{{ scrapeCostHint }}</span>
+          </div>
+          <button onClick="{{ onStartScrape }}" style="{{ scrapeBtnStyle }}">
+            <sc-if value="{{ scraping }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite"><path d="M8 2a6 6 0 106 6" stroke-linecap="round"/></svg> Scraping Instagram…</sc-if>
+            <sc-if value="{{ notScraping }}" hint-placeholder-val="{{ true }}"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6.5 9.5l3-3M7 4.5l1-1a3 3 0 014 4l-1 1M9 11.5l-1 1a3 3 0 01-4-4l1-1"/></svg> Start scrape</sc-if>
+          </button>
+          </sc-if>
+
+          <p class="mono" style="text-align:center;font-size:10.5px;color:#B0A693;margin-top:22px">Scraper: Instagram Scraper by Apify · post-level export</p>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ stepConfig }}" hint-placeholder-val="{{ false }}">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px 24px">
+        <div style="width:100%;max-width:560px">
+          <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Step 2 of 3</div>
+          <h1 style="font-size:28px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px;color:#221E18">Configure your search</h1>
+          <p style="margin:0 0 32px;font-size:14px;color:#7E7768">Found <span class="mono" style="font-weight:600;color:#221E18">{{ influencerCount }}</span> unique accounts to score.</p>
+
+          <div style="margin-bottom:28px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Target niches</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ nicheOpts }}" as="n" hint-placeholder-count="6"><button onClick="{{ n.onClick }}" style="{{ n.chipStyle }}">{{ n.label }}</button></sc-for>
+            </div>
+          </div>
+          <div style="margin-bottom:28px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Target location</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ locOpts }}" as="l" hint-placeholder-count="4"><button onClick="{{ l.onClick }}" style="{{ l.chipStyle }}">{{ l.label }}</button></sc-for>
+            </div>
+          </div>
+          <div style="margin-bottom:28px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Content format</div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button onClick="{{ onToggleVideo }}" style="{{ videoTrackStyle }}"><span style="{{ videoKnobStyle }}"></span></button>
+              <span style="font-size:13.5px;color:#5C5340">Prioritise accounts that post Reels / video content</span>
+            </div>
+          </div>
+          <div style="margin-bottom:28px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Minimum avg likes per post</div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="number" value="{{ minEngagement }}" onChange="{{ onMinEng }}" min="0" class="mono" style="width:120px;padding:9px 12px;border:1px solid #E1DBCD;border-radius:10px;font-size:13px;background:#fff;outline:none" style-focus="border-color:#C8A96E">
+              <span style="font-size:12.5px;color:#A89E8C">{{ minEngHint }}</span>
+            </div>
+          </div>
+          <div style="margin-bottom:34px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:6px">Campaign brief <span style="text-transform:none;letter-spacing:0;color:#C2BAA8">· optional, used by AI deep-dive</span></div>
+            <p style="font-size:12px;color:#9A917F;margin:0 0 12px;line-height:1.5">Describe the brand aesthetic and content style. The deep-dive on the results page uses this for qualitative fit notes.</p>
+            <textarea value="{{ campaignBrief }}" onChange="{{ onBrief }}" rows="3" placeholder="e.g. Minimalist skincare brand for 25–35s, clean aesthetic, looking for creators who film at-home routines." style="width:100%;padding:11px 14px;border:1px solid #E1DBCD;border-radius:12px;font-size:13.5px;color:#3A352C;background:#fff;line-height:1.5;outline:none" style-focus="border-color:#C8A96E"></textarea>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button onClick="{{ onRestart }}" style="padding:14px 18px;border:1px solid #E1DBCD;color:#7E7768;border-radius:12px;font-size:14px;font-weight:600">Back</button>
+            <button onClick="{{ onStartScoring }}" style="{{ startScoringStyle }}">Start scoring {{ influencerCount }} accounts <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3l5 5-5 5"/></svg></button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ stepScoring }}" hint-placeholder-val="{{ false }}">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px 24px">
+        <div style="width:100%;max-width:380px;text-align:center">
+          <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:24px">Scoring accounts</div>
+          <div style="width:100%;height:6px;background:#E6E0D3;border-radius:4px;overflow:hidden;margin-bottom:14px"><div style="height:100%;background:#C8A96E;border-radius:4px;transition:width .2s;width:{{ scoreBarW }}"></div></div>
+          <p class="mono" style="font-size:14px;color:#7E7768;margin:0">{{ scorePctLabel }}</p>
+          <p style="font-size:12.5px;color:#A89E8C;margin:8px 0 0">Analysing captions, hashtags, and engagement signals…</p>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ stepResults }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:40px 40px 64px;max-width:1180px;margin:0 auto">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:24px">
+          <div>
+            <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Step 3 of 3 · Results</div>
+            <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px;color:#221E18">{{ resultCount }} accounts scored</h1>
+            <p style="margin:0;font-size:13.5px;color:#7E7768"><span style="color:#4A7C59;font-weight:600">{{ strongCount }} strong</span> · <span style="color:#9A7636;font-weight:600">{{ possibleCount }} possible</span> · {{ lowCount }} low score</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <div style="position:relative">
+              <button onClick="{{ onToggleColPicker }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E1DBCD;border-radius:10px;font-size:13px;color:#5C5340;background:#fff"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M7 2.5v11M11 2.5v11"/></svg> Columns</button>
+              <sc-if value="{{ showColPicker }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;right:0;top:calc(100% + 8px);width:210px;background:#fff;border:1px solid #E7E2D6;border-radius:12px;box-shadow:0 8px 28px rgba(34,30,24,.13);z-index:30;padding:12px">
+                <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Show columns</div>
+                <sc-for list="{{ colItems }}" as="c" hint-placeholder-count="6">
+                  <label onClick="{{ c.onClick }}" style="display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:7px;cursor:pointer" style-hover="background:#F6F3EC">
+                    <span style="{{ c.boxStyle }}"><sc-if value="{{ c.on }}" hint-placeholder-val="{{ true }}"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg></sc-if></span>
+                    <span class="mono" style="font-size:11.5px;color:#5C5340">{{ c.label }}</span>
+                  </label>
+                </sc-for>
+              </div>
+              </sc-if>
+            </div>
+
+            <sc-if value="{{ liveIdle }}" hint-placeholder-val="{{ true }}"><button onClick="{{ onFetchLive }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E0C98F;color:#8A6A22;border-radius:10px;font-size:13px;background:#FBF6EA"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 7a5.5 5.5 0 10-1 4.5M13.5 3v3.5H10"/></svg> Fetch live stats</button></sc-if>
+            <sc-if value="{{ liveLoading }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E1DBCD;border-radius:10px;font-size:13px;color:#7E7768"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin .8s linear infinite"><path d="M8 2a6 6 0 106 6" stroke-linecap="round"/></svg> Fetching…</div></sc-if>
+            <sc-if value="{{ liveDone }}" hint-placeholder-val="{{ false }}"><button onClick="{{ onFetchLive }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E1DBCD;color:#7E7768;border-radius:10px;font-size:13px;background:#fff"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 7a5.5 5.5 0 10-1 4.5M13.5 3v3.5H10"/></svg> Refresh</button></sc-if>
+
+            <sc-if value="{{ selectionIdle }}" hint-placeholder-val="{{ true }}"><button onClick="{{ onEnterSelection }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E0C98F;color:#8A6A22;border-radius:10px;font-size:13px;background:#FBF6EA"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 2L7 9"/><path d="M13 2l-4 11-2.3-4.6L2 6 13 2z"/></svg> Send for review</button></sc-if>
+            <sc-if value="{{ shareDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:7px;padding:9px 13px;background:#E7EFE8;border:1px solid #BFD6C4;border-radius:10px;font-size:13px;color:#3E6B4B;font-weight:600"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg> Sent to queue</div></sc-if>
+            <sc-if value="{{ selectionActive }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <button onClick="{{ onSelectAll }}" class="mono" style="font-size:11.5px;color:#7E7768;padding:7px 10px;border:1px solid #E1DBCD;border-radius:8px">Select all</button>
+              <span class="mono" style="font-size:12px;color:#7E7768">{{ selectedCount }} selected</span>
+              <button onClick="{{ onSendForReview }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;background:#C8A96E;color:#fff;border-radius:10px;font-size:13px;font-weight:600"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 2L7 9"/><path d="M13 2l-4 11-2.3-4.6L2 6 13 2z"/></svg> Send</button>
+              <button onClick="{{ onCancelSelection }}" class="mono" style="font-size:11.5px;color:#A89E8C;padding:7px 10px;border:1px solid #E1DBCD;border-radius:8px">Cancel</button>
+            </div>
+            </sc-if>
+
+            <button onClick="{{ onRestart }}" style="display:flex;align-items:center;gap:7px;padding:9px 13px;background:#221E18;color:#fff;border-radius:10px;font-size:13px;font-weight:600"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v7M5 7l3 3 3-3M3 13h10"/></svg> Export XLSX</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+          <span class="mono" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#A89E8C"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 3h12l-4.6 5.4V13l-2.8 1.4V8.4L2 3z"/></svg> Filter</span>
+          <sc-for list="{{ filterOpts }}" as="f" hint-placeholder-count="5"><button onClick="{{ f.onClick }}" style="{{ f.chipStyle }}">{{ f.label }}</button></sc-for>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:9px">
+            <span class="mono" style="font-size:11px;color:#A89E8C">Min score</span>
+            <input type="number" value="{{ minScore }}" onChange="{{ onMinScore }}" min="0" max="100" class="mono" style="width:62px;padding:6px 9px;border:1px solid #E1DBCD;border-radius:8px;font-size:12px;background:#fff;outline:none" style-focus="border-color:#C8A96E">
+          </div>
+        </div>
+
+        <div style="border:1px solid #E7E2D6;border-radius:14px;overflow:hidden;background:#fff">
+          <div style="overflow-x:auto">
+            <div style="min-width:980px">
+              <div style="display:flex;align-items:center;gap:14px;padding:12px 18px;background:#FAF8F3;border-bottom:1px solid #EDE8DC">
+                <sc-if value="{{ selectionActive }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 22px"></span></sc-if>
+                <span class="mono" style="flex:2 1 0;min-width:180px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase">Account</span>
+                <button onClick="{{ sort.overall.onClick }}" class="mono" style="flex:0 0 76px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center;display:flex;align-items:center;justify-content:center;gap:3px">Overall {{ sort.overall.ind }}</button>
+                <sc-if value="{{ cols.relevancy }}" hint-placeholder-val="{{ true }}"><button onClick="{{ sort.relevancy.onClick }}" class="mono" style="flex:0 0 116px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:left;display:flex;align-items:center;gap:3px">Relevancy {{ sort.relevancy.ind }}</button></sc-if>
+                <sc-if value="{{ cols.eng_score }}" hint-placeholder-val="{{ true }}"><button onClick="{{ sort.eng_score.onClick }}" class="mono" style="flex:0 0 116px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:left;display:flex;align-items:center;gap:3px">Eng. Score {{ sort.eng_score.ind }}</button></sc-if>
+                <sc-if value="{{ cols.engagement }}" hint-placeholder-val="{{ true }}"><button onClick="{{ sort.engagement.onClick }}" class="mono" style="flex:0 0 96px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center;display:flex;align-items:center;justify-content:center;gap:3px">Eng. Rate {{ sort.engagement.ind }}</button></sc-if>
+                <sc-if value="{{ cols.followers }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:0 0 92px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center">Followers</span></sc-if>
+                <sc-if value="{{ cols.med_likes }}" hint-placeholder-val="{{ true }}"><button onClick="{{ sort.med_likes.onClick }}" class="mono" style="flex:0 0 92px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center;display:flex;align-items:center;justify-content:center;gap:3px">Med. Likes {{ sort.med_likes.ind }}</button></sc-if>
+                <sc-if value="{{ cols.med_views }}" hint-placeholder-val="{{ false }}"><span class="mono" style="flex:0 0 92px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center">Med. Views</span></sc-if>
+                <sc-if value="{{ cols.sample_post }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:0 0 90px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center">Post</span></sc-if>
+                <sc-if value="{{ cols.niche }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:1.4 1 0;min-width:140px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase">Niche signals</span></sc-if>
+                <sc-if value="{{ cols.dm_status }}" hint-placeholder-val="{{ false }}"><span class="mono" style="flex:0 0 92px;font-size:9.5px;letter-spacing:.12em;color:#A89E8C;text-transform:uppercase;text-align:center">DM</span></sc-if>
+              </div>
+
+              <sc-for list="{{ resultRows }}" as="r" hint-placeholder-count="6">
+                <div>
+                  <div onClick="{{ r.onToggle }}" style="display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid #F0ECE2;cursor:pointer" style-hover="background:#FBF9F4">
+                    <sc-if value="{{ selectionActive }}" hint-placeholder-val="{{ false }}"><span onClick="{{ r.onSelect }}" style="flex:0 0 22px;display:flex"><span style="{{ r.checkStyle }}"><sc-if value="{{ r.selected }}" hint-placeholder-val="{{ false }}"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg></sc-if></span></span></sc-if>
+                    <div style="flex:2 1 0;min-width:180px">
+                      <a href="{{ r.igUrl }}" target="_blank" rel="noreferrer" style="font-size:13.5px;font-weight:600;color:#221E18;text-decoration:none;display:inline-flex;align-items:center;gap:4px">@{{ r.username }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#C2BAA8" stroke-width="1.6"><path d="M6 3H3.5v9.5H13V10M9 3h4v4M13 3L7.5 8.5"/></svg></a>
+                      <div style="font-size:12px;color:#A89E8C;margin-top:1px">{{ r.fullName }}</div>
+                      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">
+                        <sc-for list="{{ r.flags }}" as="fl" hint-placeholder-count="2"><span class="mono" style="font-size:9.5px;padding:2px 6px;border-radius:5px;{{ fl.style }}">{{ fl.label }}</span></sc-for>
+                      </div>
+                    </div>
+                    <span style="flex:0 0 76px;display:flex;justify-content:center"><span class="mono" style="width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;background:{{ r.scoreBg }};color:{{ r.scoreColor }}">{{ r.scoreVal }}</span></span>
+                    <sc-if value="{{ cols.relevancy }}" hint-placeholder-val="{{ true }}"><div style="flex:0 0 116px;display:flex;align-items:center;gap:8px"><span style="width:62px;height:6px;background:#EDE8DC;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;background:#C28A8F;border-radius:4px;width:{{ r.relevancyW }}"></span></span><span class="mono" style="font-size:12px;color:#7E7768">{{ r.relevancyVal }}</span></div></sc-if>
+                    <sc-if value="{{ cols.eng_score }}" hint-placeholder-val="{{ true }}"><div style="flex:0 0 116px;display:flex;align-items:center;gap:8px"><span style="width:62px;height:6px;background:#EDE8DC;border-radius:4px;overflow:hidden"><span style="display:block;height:100%;background:#C8A96E;border-radius:4px;width:{{ r.engW }}"></span></span><span class="mono" style="font-size:12px;color:#7E7768">{{ r.engVal }}</span></div></sc-if>
+                    <sc-if value="{{ cols.engagement }}" hint-placeholder-val="{{ true }}"><div style="flex:0 0 96px;text-align:center"><div class="mono" style="font-size:13px;color:#322E26">{{ r.erMain }}</div><div class="mono" style="font-size:10px;color:#B0A693">{{ r.erSub }}</div></div></sc-if>
+                    <sc-if value="{{ cols.followers }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:0 0 92px;text-align:center;font-size:13px;color:#322E26">{{ r.followersFmt }}</span></sc-if>
+                    <sc-if value="{{ cols.med_likes }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:0 0 92px;text-align:center;font-size:13px;color:#322E26">{{ r.medLikesFmt }}</span></sc-if>
+                    <sc-if value="{{ cols.med_views }}" hint-placeholder-val="{{ false }}"><span class="mono" style="flex:0 0 92px;text-align:center;font-size:13px;color:#322E26">{{ r.medViewsFmt }}</span></sc-if>
+                    <sc-if value="{{ cols.sample_post }}" hint-placeholder-val="{{ true }}"><span style="flex:0 0 90px;text-align:center"><a href="{{ r.samplePostUrl }}" target="_blank" rel="noreferrer" onClick="{{ stopProp }}" class="mono" style="font-size:11.5px;color:#9A7636;text-decoration:none">View ↗</a></span></sc-if>
+                    <sc-if value="{{ cols.niche }}" hint-placeholder-val="{{ true }}"><span class="mono" style="flex:1.4 1 0;min-width:140px;font-size:11.5px;color:#8E8775">{{ r.niche }}</span></sc-if>
+                    <sc-if value="{{ cols.dm_status }}" hint-placeholder-val="{{ false }}"><span style="flex:0 0 92px;text-align:center"><span class="mono" style="font-size:10px;padding:3px 8px;border-radius:20px;background:#EEEAE0;color:#9A917F">Not sent</span></span></sc-if>
+                  </div>
+                  <sc-if value="{{ r.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:18px 24px;background:#FBF9F4;border-bottom:1px solid #F0ECE2">
+                    <div>
+                      <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;margin-bottom:7px">Scoring verdict</div>
+                      <p style="font-size:12.5px;color:#6C6555;line-height:1.55;margin:0">{{ r.verdict }}</p>
+                    </div>
+                    <div>
+                      <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;margin-bottom:7px">Top hashtags</div>
+                      <div style="display:flex;flex-wrap:wrap;gap:5px"><sc-for list="{{ r.hashtags }}" as="h" hint-placeholder-count="5"><span class="mono" style="font-size:10.5px;padding:3px 7px;border-radius:5px;background:#EEEAE0;color:#7E7768">#{{ h }}</span></sc-for></div>
+                    </div>
+                  </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <p class="mono" style="text-align:center;font-size:10.5px;color:#B0A693;margin-top:16px">Click any row to expand · scores are deterministic keyword + engagement logic</p>
+      </div>
+      </sc-if>
+
+    </div>
+    </sc-if>
+    <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="History" style="padding:40px 40px 64px;max-width:720px;margin:0 auto">
+      <div style="margin-bottom:30px">
+        <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">History</div>
+        <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0;color:#221E18">Past activity</h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#B0A693" stroke-width="1.6"><circle cx="8" cy="8" r="6.2"/><path d="M8 4.4V8l2.6 1.6"/></svg>
+        <span class="mono" style="font-size:10px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase">Seeder sessions</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ historySessions }}" as="h" hint-placeholder-count="3">
+          <div onClick="{{ h.onLoad }}" style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 18px;border:1px solid #E7E2D6;background:#fff;border-radius:14px;cursor:pointer" style-hover="border-color:#D8CFB9;background:#FBF9F4">
+            <div style="min-width:0">
+              <p style="font-size:13.5px;font-weight:600;color:#221E18;margin:0">{{ h.title }}</p>
+              <p class="mono" style="font-size:11px;color:#A89E8C;margin:3px 0 0">{{ h.date }}</p>
+              <sc-if value="{{ h.hasFiles }}" hint-placeholder-val="{{ true }}"><p class="mono" style="font-size:11px;color:#C2BAA8;margin:3px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ h.files }}</p></sc-if>
+            </div>
+            <button onClick="{{ h.onDelete }}" style="color:#C2BAA8;flex:none;display:flex" style-hover="color:#B06070"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"/></svg></button>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ noHistory }}" hint-placeholder-val="{{ false }}"><p style="font-size:13.5px;color:#A89E8C;text-align:center;padding:40px;border:1px dashed #E1DBCD;border-radius:14px">No seeder sessions yet.</p></sc-if>
+    </div>
+    </sc-if>
+    <sc-if value="{{ isReviewQueue }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Review Queue" style="padding:40px 40px 64px;max-width:840px;margin:0 auto">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:28px">
+        <div>
+          <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Review Queue</div>
+          <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px;color:#221E18">{{ reviewQueueCountLabel }}</h1>
+          <p style="margin:0;font-size:13.5px;color:#7E7768">All accounts sent for brand-manager review, newest first.</p>
+        </div>
+        <button style="display:flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid #E1DBCD;border-radius:10px;font-size:13px;color:#7E7768;background:#fff"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 7a5.5 5.5 0 10-1 4.5M13.5 3v3.5H10"/></svg> Refresh</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ reviewQueue }}" as="q" hint-placeholder-count="3">
+          <div style="border:1px solid #E7E2D6;background:#fff;border-radius:16px;padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px" style-hover="border-color:#D8CFB9">
+            <div style="min-width:0">
+              <p style="font-size:14px;font-weight:600;color:#221E18;margin:0 0 4px;line-height:1.4">{{ q.brief }}</p>
+              <p class="mono" style="font-size:11.5px;color:#A89E8C;margin:0">{{ q.date }} · {{ q.total }} accounts</p>
+              <div style="display:flex;gap:14px;margin-top:9px">
+                <sc-if value="{{ q.showPending }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#A89E8C">{{ q.pending }} pending</span></sc-if>
+                <sc-if value="{{ q.showApproved }}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size:11.5px;color:#4A7C59;font-weight:500">{{ q.approved }} approved</span></sc-if>
+                <sc-if value="{{ q.showRejected }}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size:11.5px;color:#B06070">{{ q.rejected }} rejected</span></sc-if>
+              </div>
+            </div>
+            <button onClick="{{ q.onOpen }}" style="display:flex;align-items:center;gap:7px;padding:10px 16px;background:#221E18;color:#fff;border-radius:10px;font-size:13px;font-weight:600;flex:none">Open <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 8h9M8.5 4l4 4-4 4"/></svg></button>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+    <sc-if value="{{ isReviewDetail }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Review Detail" style="padding:36px 40px 64px;max-width:760px;margin:0 auto">
+      <button onClick="{{ onBackToQueue }}" class="mono" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#A89E8C;margin-bottom:16px" style-hover="color:#221E18"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4L5 8l4 4M5 8h8"/></svg> Back to queue</button>
+      <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">KOL Review</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div>
+          <h1 style="font-size:24px;font-weight:700;letter-spacing:-.02em;margin:0 0 5px;color:#221E18">{{ reviewTitle }}</h1>
+          <p style="margin:0;font-size:13.5px;color:#7E7768"><span style="color:#4A7C59;font-weight:600">{{ rApproved }} approved</span> · <span style="color:#B06070;font-weight:600">{{ rRejected }} rejected</span> · {{ rPending }} pending</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;gap:4px;background:#E9E4D9;border-radius:9px;padding:4px">
+            <button onClick="{{ onVariantDetailed }}" style="{{ variantStyleA }}">Detailed</button>
+            <button onClick="{{ onVariantCompact }}" style="{{ variantStyleB }}">Compact</button>
+          </div>
+          <div style="position:relative">
+            <button onClick="{{ onToggleReviewColPicker }}" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid #E1DBCD;border-radius:9px;font-size:12.5px;color:#5C5340;background:#fff"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M7 2.5v11M11 2.5v11"/></svg> Fields</button>
+            <sc-if value="{{ showReviewColPicker }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;right:0;top:calc(100% + 8px);width:200px;background:#fff;border:1px solid #E7E2D6;border-radius:12px;box-shadow:0 8px 28px rgba(34,30,24,.13);z-index:30;padding:12px">
+              <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Show fields</div>
+              <sc-for list="{{ reviewColItems }}" as="c" hint-placeholder-count="6">
+                <label onClick="{{ c.onClick }}" style="display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:7px;cursor:pointer" style-hover="background:#F6F3EC">
+                  <span style="{{ c.boxStyle }}"><sc-if value="{{ c.on }}" hint-placeholder-val="{{ true }}"><svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.2"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg></sc-if></span>
+                  <span class="mono" style="font-size:11.5px;color:#5C5340">{{ c.label }}</span>
+                </label>
+              </sc-for>
+            </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+      <sc-if value="{{ hasReviewBrief }}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top:16px;padding:14px 16px;background:#EFEBE1;border-radius:13px">
+        <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#A89E8C;text-transform:uppercase;margin-bottom:5px">Campaign brief</div>
+        <p style="margin:0;font-size:13px;color:#5C5340;line-height:1.5">{{ reviewBrief }}</p>
+      </div>
+      </sc-if>
+
+      <div style="display:flex;flex-direction:column;gap:14px;margin-top:22px">
+        <sc-for list="{{ reviewAccounts }}" as="a" hint-placeholder-count="3">
+        <div style="border-radius:18px;overflow:hidden;{{ a.cardStyle }}">
+
+          <sc-if value="{{ isDetailed }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <a href="{{ a.igUrl }}" target="_blank" rel="noreferrer" style="font-size:15px;font-weight:600;color:#221E18;text-decoration:none;display:inline-flex;align-items:center;gap:4px">@{{ a.username }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#C2BAA8" stroke-width="1.6"><path d="M6 3H3.5v9.5H13V10M9 3h4v4M13 3L7.5 8.5"/></svg></a>
+                <sc-if value="{{ a.hasBrand }}" hint-placeholder-val="{{ false }}"><span class="mono" style="font-size:10px;padding:2px 7px;border-radius:5px;background:#EEEAE0;color:#9A917F">{{ a.brand }}</span></sc-if>
+              </div>
+              <div style="font-size:12.5px;color:#A89E8C;margin-top:2px">{{ a.fullName }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px">
+                <sc-for list="{{ a.flags }}" as="fl" hint-placeholder-count="2"><span class="mono" style="font-size:10px;padding:2px 7px;border-radius:5px;{{ fl.style }}">{{ fl.label }}</span></sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:11px;flex:none">
+              <div style="display:flex;align-items:baseline;gap:4px"><span class="mono" style="font-size:22px;font-weight:600;color:{{ a.scoreInk }}">{{ a.scoreVal }}</span><span class="mono" style="font-size:11px;color:#B0A693">/ 100</span></div>
+              <sc-if value="{{ a.isPending }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:8px">
+                <button onClick="{{ a.onReject }}" style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid #E0BFC7;color:#B06070;border-radius:9px;font-size:12.5px;font-weight:600" style-hover="background:#FBF1F3"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg> Reject</button>
+                <button onClick="{{ a.onApprove }}" style="display:flex;align-items:center;gap:5px;padding:8px 13px;background:#4A7C59;color:#fff;border-radius:9px;font-size:12.5px;font-weight:600" style-hover="background:#41704F"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg> Approve</button>
+              </div>
+              </sc-if>
+              <sc-if value="{{ a.isApproved }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="display:flex;align-items:center;gap:4px;font-size:12px;color:#4A7C59;font-weight:500"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg> Approved</span><button onClick="{{ a.onUndo }}" class="mono" style="font-size:11px;color:#B0A693" style-hover="color:#221E18">undo</button></div>
+              </sc-if>
+              <sc-if value="{{ a.isRejected }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:8px"><span class="mono" style="display:flex;align-items:center;gap:4px;font-size:12px;color:#B06070;font-weight:500"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg> Rejected</span><button onClick="{{ a.onUndo }}" class="mono" style="font-size:11px;color:#B0A693" style-hover="color:#221E18">undo</button></div>
+              </sc-if>
+            </div>
+          </div>
+          <div style="padding:0 20px 14px;display:flex;flex-wrap:wrap;gap:14px">
+            <sc-if value="{{ reviewCols.location }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">📍 {{ a.location }}</span></sc-if>
+            <sc-if value="{{ reviewCols.followers }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">{{ a.followersFmt }}</span></sc-if>
+            <sc-if value="{{ reviewCols.engagement }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">{{ a.erLabel }} · {{ a.avgLikesLabel }}</span></sc-if>
+            <sc-if value="{{ reviewCols.relevancy }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">{{ a.relevancyLabel }}</span></sc-if>
+            <sc-if value="{{ reviewCols.eng_score }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">{{ a.engScoreLabel }}</span></sc-if>
+            <sc-if value="{{ reviewCols.niche }}" hint-placeholder-val="{{ true }}"><span class="mono" style="font-size:11.5px;color:#8E8775">{{ a.niche }}</span></sc-if>
+            <sc-if value="{{ reviewCols.sample_post }}" hint-placeholder-val="{{ true }}"><a href="{{ a.samplePostUrl }}" target="_blank" rel="noreferrer" class="mono" style="font-size:11.5px;color:#9A7636;text-decoration:none">Sample post ↗</a></sc-if>
+          </div>
+          <sc-if value="{{ reviewCols.caption }}" hint-placeholder-val="{{ true }}"><sc-if value="{{ a.hasCaption }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:0 20px 14px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#B0A693;text-transform:uppercase;margin-bottom:4px">Scraped caption</div>
+            <p style="font-size:12.5px;color:#8E8775;margin:0;line-height:1.5">{{ a.sampleCaption }}</p>
+          </div>
+          </sc-if></sc-if>
+          </sc-if>
+
+          <sc-if value="{{ isCompact }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 18px;display:flex;align-items:center;gap:14px">
+            <span class="mono" style="width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:none;background:#F1ECE1;color:{{ a.scoreInk }}">{{ a.scoreVal }}</span>
+            <div style="min-width:0;flex:1">
+              <a href="{{ a.igUrl }}" target="_blank" rel="noreferrer" style="font-size:14px;font-weight:600;color:#221E18;text-decoration:none">@{{ a.username }}</a>
+              <div class="mono" style="font-size:11px;color:#A89E8C;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.quickStats }}</div>
+            </div>
+            <sc-if value="{{ a.isPending }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;gap:7px;flex:none">
+              <button onClick="{{ a.onReject }}" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #E0BFC7;color:#B06070;border-radius:8px" style-hover="background:#FBF1F3"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              <button onClick="{{ a.onApprove }}" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:#4A7C59;color:#fff;border-radius:8px" style-hover="background:#41704F"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg></button>
+            </div>
+            </sc-if>
+            <sc-if value="{{ a.isApproved }}" hint-placeholder-val="{{ false }}"><span class="mono" style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:#4A7C59;font-weight:600;flex:none"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg> Approved <button onClick="{{ a.onUndo }}" style="color:#B0A693;font-weight:400">undo</button></span></sc-if>
+            <sc-if value="{{ a.isRejected }}" hint-placeholder-val="{{ false }}"><span class="mono" style="display:flex;align-items:center;gap:4px;font-size:11.5px;color:#B06070;font-weight:600;flex:none"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg> Rejected <button onClick="{{ a.onUndo }}" style="color:#B0A693;font-weight:400">undo</button></span></sc-if>
+          </div>
+          </sc-if>
+
+          <div style="padding:0 20px 16px;border-top:1px solid rgba(0,0,0,.05);margin-top:2px;padding-top:14px">
+            <sc-if value="{{ a.noteOrOpen }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#B0A693;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h10v7l-3 3H3z"/><path d="M13 10h-3v3"/></svg> Internal note</div>
+              <textarea value="{{ a.note }}" onChange="{{ a.onNote }}" rows="2" placeholder="Add a note for the team — why this creator fits, follow-ups, concerns…" style="width:100%;padding:10px 12px;border:1px solid #E1DBCD;border-radius:10px;font-size:13px;color:#3A352C;background:#fff;line-height:1.5;outline:none" style-focus="border-color:#C8A96E"></textarea>
+            </div>
+            </sc-if>
+            <sc-if value="{{ a.noteClosed }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ a.onToggleNote }}" class="mono" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9A7636" style-hover="color:#7A571E"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg> Add note</button>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{ a.isApproved }}" hint-placeholder-val="{{ false }}"><sc-if value="{{ a.hasDraft }}" hint-placeholder-val="{{ false }}">
+          <div style="border-top:1px solid rgba(0,0,0,.05);padding:16px 20px">
+            <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#B0A693;text-transform:uppercase;margin-bottom:8px">DM draft</div>
+            <textarea value="{{ a.dmDraft }}" onChange="{{ a.onDmDraftEdit }}" rows="4" style="width:100%;padding:11px 13px;border:1px solid #E1DBCD;border-radius:11px;font-size:13px;color:#3A352C;background:#fff;line-height:1.55;outline:none" style-focus="border-color:#C8A96E"></textarea>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:11px;flex-wrap:wrap">
+              <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ a.dmStatusPills }}" as="p" hint-placeholder-count="4"><button onClick="{{ p.onClick }}" class="mono" style="{{ p.style }}">{{ p.label }}</button></sc-for></div>
+              <button onClick="{{ a.onCopy }}" style="display:flex;align-items:center;gap:6px;padding:8px 13px;background:#221E18;color:#fff;border-radius:9px;font-size:12.5px;font-weight:600">
+                <sc-if value="{{ a.copied }}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg> Copied!</sc-if>
+                <sc-if value="{{ a.notCopied }}" hint-placeholder-val="{{ true }}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Copy &amp; open profile</sc-if>
+              </button>
+            </div>
+          </div>
+          </sc-if></sc-if>
+
+        </div>
+        </sc-for>
+      </div>
+      <p class="mono" style="text-align:center;font-size:10.5px;color:#B0A693;margin-top:18px">Approve to generate a DM draft · changes save automatically</p>
+    </div>
+    </sc-if>
+    <sc-if value="{{ isReadyToSend }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Ready to Send" style="padding:40px 40px 64px;max-width:720px;margin:0 auto">
+      <div style="margin-bottom:28px">
+        <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Ready to Send</div>
+        <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px;color:#221E18">{{ readyCountLabel }}</h1>
+        <p style="margin:0;font-size:13.5px;color:#7E7768">Copy each DM draft and open the Instagram profile to send. Copying marks it as sent.</p>
+      </div>
+      <sc-if value="{{ hasReady }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ readyItems }}" as="it" hint-placeholder-count="2">
+          <div style="border:1px solid #BFD6C4;background:#F5F8F4;border-radius:16px;padding:18px 20px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px">
+              <div style="min-width:0">
+                <a href="{{ it.igUrl }}" target="_blank" rel="noreferrer" style="font-size:14.5px;font-weight:600;color:#221E18;text-decoration:none;display:inline-flex;align-items:center;gap:4px">@{{ it.username }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#C2BAA8" stroke-width="1.6"><path d="M6 3H3.5v9.5H13V10M9 3h4v4M13 3L7.5 8.5"/></svg></a>
+                <div style="font-size:12px;color:#A89E8C;margin-top:1px">{{ it.fullName }}</div>
+                <div class="mono" style="font-size:11px;color:#B0A693;margin-top:4px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.brief }}</div>
+              </div>
+              <div style="display:flex;gap:8px;flex:none">
+                <button onClick="{{ it.onCopy }}" style="display:flex;align-items:center;gap:6px;padding:8px 13px;border:1px solid #BFD6C4;color:#3E6B4B;border-radius:9px;font-size:12.5px;font-weight:600;background:#fff"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Copy DM</button>
+                <a href="{{ it.igUrl }}" target="_blank" rel="noreferrer" style="display:flex;align-items:center;gap:6px;padding:8px 13px;background:#221E18;color:#fff;border-radius:9px;font-size:12.5px;font-weight:600;text-decoration:none"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3H3.5v9.5H13V10M9 3h4v4M13 3L7.5 8.5"/></svg> Open</a>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #E2EAE3;border-radius:11px;padding:12px 14px">
+              <div class="mono" style="font-size:9.5px;letter-spacing:.13em;color:#B0A693;text-transform:uppercase;margin-bottom:6px">DM draft</div>
+              <p style="font-size:13px;color:#5C5340;margin:0;line-height:1.55;white-space:pre-wrap">{{ it.dmDraft }}</p>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+      <sc-if value="{{ noReady }}" hint-placeholder-val="{{ false }}">
+      <div style="text-align:center;padding:80px 20px">
+        <p style="font-size:14px;color:#A89E8C;margin:0">No approved accounts waiting for DMs.</p>
+        <p class="mono" style="font-size:11.5px;color:#C2BAA8;margin:6px 0 0">Accounts appear here once a brand manager approves them in the Review Queue.</p>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+    <sc-if value="{{ isTeam }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Team" style="padding:40px 40px 64px;max-width:680px;margin:0 auto">
+      <div style="margin-bottom:28px">
+        <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Admin</div>
+        <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px;color:#221E18">Team</h1>
+        <p style="margin:0;font-size:13.5px;color:#7E7768">Manage who can access the seeding tool and what they can do.</p>
+      </div>
+      <div style="border:1px solid #E7E2D6;border-radius:14px;overflow:hidden;background:#fff">
+        <sc-for list="{{ teamMembers }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 18px;border-bottom:1px solid #F0ECE2">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0">
+              <div style="width:32px;height:32px;border-radius:50%;background:#EEEAE0;color:#8A8170;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600;flex:none">{{ m.initials }}</div>
+              <div style="min-width:0">
+                <p style="font-size:13.5px;font-weight:600;color:#221E18;margin:0">{{ m.email }}</p>
+                <p class="mono" style="font-size:11px;color:#A89E8C;margin:2px 0 0">joined {{ m.date }}</p>
+              </div>
+            </div>
+            <select value="{{ m.role }}" onChange="{{ m.onChange }}" style="{{ m.selectStyle }}">
+              <option value="assistant_bm">Assistant BM</option>
+              <option value="brand_manager">Brand Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+    <sc-if value="{{ isHelp }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Help" style="padding:40px 40px 72px;max-width:720px;margin:0 auto">
+      <div style="margin-bottom:28px">
+        <div class="mono" style="font-size:10px;letter-spacing:.18em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Help &amp; reference</div>
+        <h1 style="font-size:25px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px;color:#221E18">How seeding works</h1>
+        <p style="margin:0;font-size:13.5px;color:#7E7768">The four-stage flow from raw scrape to a sent DM — plus the full scoring methodology and column reference.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ helpSteps }}" as="h" hint-placeholder-count="4">
+          <div style="display:flex;gap:16px;padding:18px 20px;border:1px solid #E7E2D6;background:#fff;border-radius:14px">
+            <div class="mono" style="width:30px;height:30px;border-radius:9px;background:#221E18;color:#C8A96E;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex:none">{{ h.n }}</div>
+            <div>
+              <p style="font-size:14px;font-weight:600;color:#221E18;margin:0 0 4px">{{ h.title }}</p>
+              <p style="font-size:13px;color:#7E7768;margin:0;line-height:1.55">{{ h.body }}</p>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <a href="public/flowchart.html" target="_blank" rel="noreferrer" class="mono" style="display:inline-flex;align-items:center;gap:6px;margin-top:18px;font-size:12px;color:#9A7636;text-decoration:none">Open the full flowchart ↗</a>
+
+      <div style="height:1px;background:#E4DFD3;margin:38px 0"></div>
+
+      <!-- About this tool -->
+      <section style="margin-bottom:38px">
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">About this tool</div>
+        <h2 style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:#221E18;margin:0 0 14px">KOL Finder — Seeding Tool</h2>
+        <p style="font-size:13.5px;color:#5C5340;line-height:1.65;margin:0 0 12px">This tool helps you identify strong Instagram seeding candidates by automatically scoring and ranking accounts based on how well they match your target niche and how actively engaged their audience is. It works by analysing posts from accounts that have tagged or engaged with a competitor's content — giving you a ranked shortlist of KOLs already active in your space.</p>
+        <p style="font-size:13.5px;color:#5C5340;line-height:1.65;margin:0 0 12px">You can bring in accounts two ways: upload an <strong style="color:#221E18;font-weight:600">.xlsx</strong> export from Apify, or paste competitor post URLs and hashtags directly — the tool triggers the scrape for you and skips the manual Apify step entirely. Either way, it deduplicates accounts, scores them across Engagement and Relevancy, and produces a ranked table ready to filter, review, and export to Excel.</p>
+        <p style="font-size:13.5px;color:#5C5340;line-height:1.65;margin:0">Optionally, run <strong style="color:#221E18;font-weight:600">AI Deep-Dive</strong> on the top results — this sends account captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Base scoring is deterministic arithmetic computed entirely in your browser; AI is only involved if you explicitly opt in.</p>
+      </section>
+
+      <div style="height:1px;background:#E4DFD3;margin:38px 0"></div>
+
+      <!-- Step-by-step -->
+      <section style="margin-bottom:38px">
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">How to use</div>
+        <h2 style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:#221E18;margin:0 0 18px">Seeding Tool — step by step</h2>
+
+        <div style="display:flex;gap:14px;margin-bottom:16px">
+          <div class="mono" style="width:24px;height:24px;border-radius:50%;background:#221E18;color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">1</div>
+          <div style="flex:1">
+            <p style="font-size:13.5px;font-weight:600;color:#221E18;margin:0 0 12px">Bring in your account data — pick one of two paths:</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div style="border:1px solid #E7E2D6;background:#fff;border-radius:13px;padding:15px 16px">
+                <div class="mono" style="font-size:9px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:7px">Option A — paste URLs / hashtags</div>
+                <p style="font-size:12px;color:#9A917F;font-style:italic;margin:0 0 8px">Use this when you're starting a fresh scrape right now.</p>
+                <p style="font-size:12.5px;color:#5C5340;line-height:1.6;margin:0">Go to <strong style="color:#221E18;font-weight:600">Seeder → "Scrape URLs / Hashtags"</strong>. Paste competitor post URLs, brand-tagged pages, or hashtags (one per line — <code class="mono" style="font-size:11px;background:#ECE7DB;padding:1px 5px;border-radius:4px">#skincare</code> or just <code class="mono" style="font-size:11px;background:#ECE7DB;padding:1px 5px;border-radius:4px">skincare</code>). Choose a result limit and click <strong style="color:#221E18;font-weight:600">Start scrape</strong>. The tool calls Apify, polls until done, and feeds results straight into the pipeline.</p>
+              </div>
+              <div style="border:1px solid #E7E2D6;background:#fff;border-radius:13px;padding:15px 16px">
+                <div class="mono" style="font-size:9px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:7px">Option B — upload XLSX</div>
+                <p style="font-size:12px;color:#9A917F;font-style:italic;margin:0 0 8px">Use this when you already have a previous Apify export.</p>
+                <p style="font-size:12.5px;color:#5C5340;line-height:1.6;margin:0">If you ran an Apify Instagram Scraper job previously and saved the .xlsx, go to <strong style="color:#221E18;font-weight:600">Seeder → "Upload XLSX"</strong> and drop the file in. The filename becomes the brand label in the export. Upload multiple files to combine brands. Also useful to re-score an old dataset with different niche filters.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <sc-for list="{{ intakeSteps }}" as="s" hint-placeholder-count="5">
+            <div style="display:flex;gap:14px">
+              <div class="mono" style="width:24px;height:24px;border-radius:50%;background:#221E18;color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">{{ s.n }}</div>
+              <p style="flex:1;font-size:13.5px;color:#5C5340;line-height:1.6;margin:2px 0 0" dangerouslySetInnerHTML="{{ s.html }}"></p>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- Cost warning -->
+      <div style="margin-bottom:38px;padding:18px 20px;border:1px solid #E7D3A8;background:#F6ECD6;border-radius:14px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#8A6A22" stroke-width="1.7"><path d="M8 2.5L14.5 13.5H1.5L8 2.5z"/><path d="M8 6.6v3M8 11.6v.2"/></svg>
+          <span class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#8A6A22;text-transform:uppercase">Important — costs</span>
+        </div>
+        <p style="font-size:13px;color:#5C5340;line-height:1.6;margin:0 0 10px"><strong style="color:#221E18;font-weight:600">Fetch Live Stats</strong> triggers a live Apify scrape — roughly <strong style="color:#221E18;font-weight:600">$0.01 per account</strong>. A typical run of 300–400 accounts costs ~$3–4. Results are cached 7 days, so re-uploading the same dataset within that window won't re-scrape.</p>
+        <p style="font-size:13px;color:#5C5340;line-height:1.6;margin:0 0 10px"><strong style="color:#221E18;font-weight:600">Direct scrape</strong> (Option A intake) also uses Apify — cost scales with result limit. 200 results ≈ $0.50–1; 1,000 results ≈ $2–3.</p>
+        <p style="font-size:13px;color:#5C5340;line-height:1.6;margin:0"><strong style="color:#221E18;font-weight:600">AI Deep-Dive</strong> calls Claude — approximately <strong style="color:#221E18;font-weight:600">$0.01–0.05 per run</strong> depending on account count and caption length. Verdicts are cached 7 days per account + brief, so re-running the same brief won't re-charge processed accounts.</p>
+      </div>
+
+      <div style="height:1px;background:#E4DFD3;margin:38px 0"></div>
+
+      <!-- Scoring methodology -->
+      <section style="margin-bottom:8px">
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:8px">Scoring methodology</div>
+        <h2 style="font-size:19px;font-weight:700;letter-spacing:-.01em;color:#221E18;margin:0 0 18px">How accounts are scored</h2>
+
+        <div style="background:#F3EEE2;border:1px solid #E7E2D6;border-radius:13px;padding:18px 20px;margin-bottom:26px">
+          <div class="mono" style="font-size:9px;letter-spacing:.14em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Formula</div>
+          <div class="mono" style="font-size:12.5px;color:#3F3A30;line-height:2">
+            <div><span style="color:#A89E8C;margin-right:8px">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</div>
+            <div><span style="color:#A89E8C;margin-right:8px">Engagement</span>= log(1 + medianLikes + medianViews × 0.5) <span style="color:#B0A693;font-size:11px">· after live fetch</span></div>
+            <div><span style="color:#A89E8C;margin-right:8px">Engagement</span>= log(1 + avgLikes + avgComments × 3) <span style="color:#B0A693;font-size:11px">· before live fetch</span></div>
+            <div><span style="color:#A89E8C;margin-right:8px">Relevancy</span>= 5 + keyword hits − off-niche category hits <span style="color:#B0A693;font-size:11px">· capped 0–10</span></div>
+          </div>
+        </div>
+
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Data sources</div>
+        <div style="border:1px solid #E7E2D6;background:#fff;border-radius:13px;padding:4px 18px;margin-bottom:26px">
+          <sc-for list="{{ dataSources }}" as="d" hint-placeholder-count="2">
+            <div style="display:flex;gap:14px;padding:13px 0;border-bottom:1px solid #EFEAE0">
+              <span class="mono" style="width:96px;flex:none;font-size:11px;color:#A89E8C;padding-top:2px">{{ d.source }}</span>
+              <span style="flex:1;font-size:12.5px;color:#5C5340;line-height:1.6">{{ d.fields }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Score breakdown</div>
+        <div style="border:1px solid #E7E2D6;background:#fff;border-radius:13px;padding:4px 18px;margin-bottom:26px">
+          <sc-for list="{{ scoreRows }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;gap:16px;padding:16px 0;border-bottom:1px solid #EFEAE0">
+              <div style="width:140px;flex:none">
+                <p class="mono" style="font-size:13px;font-weight:600;color:#221E18;margin:0 0 2px">{{ r.name }}</p>
+                <p class="mono" style="font-size:11px;color:#A89E8C;margin:0">{{ r.range }}</p>
+              </div>
+              <div style="flex:1;min-width:0">
+                <sc-if value="{{ r.formula }}" hint-placeholder-val="{{ true }}"><div class="mono" style="display:inline-block;font-size:11px;color:#9A7636;background:#F3E9D6;padding:4px 9px;border-radius:6px;margin-bottom:8px;line-height:1.5">{{ r.formula }}</div></sc-if>
+                <p style="font-size:12.5px;color:#5C5340;line-height:1.6;margin:0">{{ r.body }}</p>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="mono" style="font-size:9.5px;letter-spacing:.16em;color:#A89E8C;text-transform:uppercase;margin-bottom:12px">Column guide</div>
+        <div style="border:1px solid #E7E2D6;background:#fff;border-radius:13px;padding:4px 18px;margin-bottom:22px">
+          <sc-for list="{{ columnRows }}" as="c" hint-placeholder-count="7">
+            <div style="display:flex;gap:16px;padding:15px 0;border-bottom:1px solid #EFEAE0">
+              <div style="width:140px;flex:none">
+                <p class="mono" style="font-size:13px;font-weight:600;color:#221E18;margin:0 0 2px">{{ c.name }}</p>
+                <p class="mono" style="font-size:11px;color:#A89E8C;margin:0">{{ c.range }}</p>
+              </div>
+              <div style="flex:1;min-width:0">
+                <sc-if value="{{ c.formula }}" hint-placeholder-val="{{ false }}"><div class="mono" style="display:inline-block;font-size:11px;color:#9A7636;background:#F3E9D6;padding:4px 9px;border-radius:6px;margin-bottom:8px;line-height:1.5">{{ c.formula }}</div></sc-if>
+                <p style="font-size:12.5px;color:#5C5340;line-height:1.6;margin:0">{{ c.body }}</p>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <p class="mono" style="font-size:11px;color:#A89E8C;line-height:1.7;margin:0">All scores are computed locally in your browser. Data is only sent externally for opt-in features: Apify (Fetch Live Stats, direct scrape intake) and Anthropic (AI Deep-Dive). Neither API key ever reaches the browser — both go through the Cloudflare Worker proxy.</p>
+      </section>
+    </div>
+    </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    screen: 'dashboard',
+    // seeder
+    step: 'upload', uploadTab: 'upload', files: [], scrapeInput: '', resultsLimit: 200,
+    niches: ['beauty', 'skincare'], location: 'Hong Kong', requireVideo: true, minEngagement: 0, campaignBrief: '',
+    scorePct: 0, scoring: false, hasResults: false, scraping: false, influencerCount: 0, results: [],
+    // results table
+    sortKey: 'overall', sortDir: 'desc', filterFlag: 'all', minScore: 0, expandedRow: null,
+    cols: { brand:true, relevancy:true, eng_score:true, engagement:true, followers:true, med_likes:true, med_views:false, sample_post:true, niche:true, dm_status:false },
+    showColPicker: false, selectionMode: false, selected: {}, shareDone: false, liveStatus: 'idle',
+    // review
+    openReviewId: null, reviewVariant: 'detailed', reviewCols: { location:true, followers:true, engagement:true, relevancy:true, eng_score:true, niche:true, sample_post:true, caption:true },
+    showReviewColPicker: false, noteOpen: {}, copied: null,
+    // data
+    submissions: [
+      { id:'s1', brief:'Spring Glow — clean skincare launch, 25–35 HK creators who film at-home routines', date:'12 Jun 2026', accts:['seoulskin.hk','veraglow','dermadiary.hk','kiko.beauty','mattecake','citygirlgloss'] },
+      { id:'s2', brief:'Summer SPF Push — reels-first, sun-care education angle', date:'9 Jun 2026', accts:['honestlyhana','tinabeautydiary','glowwithgrace','derma.diary'] },
+      { id:'s3', brief:'Lunar New Year gifting — premium sets, lifestyle crossover', date:'28 May 2026', accts:['veraglow','citygirlgloss','tinabeautydiary'] },
+    ],
+    reviewStates: {
+      s1: {
+        'dermadiary.hk': { status:'approved', dm_status:'not_sent', dm_draft:"Hi Dr. Ng — we're Markato, the HK distributor behind several K-beauty skincare lines. Your derm-led routine breakdowns are exactly the credible voice our Spring Glow launch needs. Could we send a PR set your way?", note:'Top pick — derm credibility fits the clean-science angle.' },
+        'kiko.beauty': { status:'approved', dm_status:'not_sent', dm_draft:"Hi Kiki — Markato here, HK K-beauty distributor. Your micro-community engagement is incredible and very on-brand for our Spring Glow launch. Would you be open to a gifting collab?", note:'' },
+        'mattecake': { status:'rejected', dm_status:'not_sent', dm_draft:'', note:'Audience skews makeup, not skincare — low fit for this brief.' },
+        'citygirlgloss': { status:'rejected', dm_status:'not_sent', dm_draft:'', note:'Reach is high but HK audience share is too low.' },
+      },
+      s2: {},
+      s3: {
+        'veraglow': { status:'approved', dm_status:'sent', dm_draft:'Sent for LNY gifting set.', note:'' },
+        'citygirlgloss': { status:'approved', dm_status:'replied', dm_draft:'Replied — interested.', note:'Warm lead, follow up.' },
+        'tinabeautydiary': { status:'approved', dm_status:'sent', dm_draft:'Sent.', note:'' },
+      },
+    },
+    sessions: [
+      { id:'h1', accountCount:247, date:'12 Jun 2026 · 10:24', cfg:'Hong Kong · Beauty, Skincare', files:['laneige_tagged.xlsx','innisfree_tagged.xlsx'] },
+      { id:'h2', accountCount:138, date:'9 Jun 2026 · 16:02', cfg:'Hong Kong · Skincare', files:['spf_hashtag_scrape.xlsx'] },
+      { id:'h3', accountCount:312, date:'28 May 2026 · 09:41', cfg:'Hong Kong · Lifestyle, Beauty', files:['lny_gifting.xlsx'] },
+    ],
+    team: [
+      { id:'u1', email:'amy@markato.com', role:'admin', date:'2 Jan 2026' },
+      { id:'u2', email:'jas@markato.com', role:'assistant_bm', date:'15 Feb 2026' },
+      { id:'u3', email:'wing@markato.com', role:'brand_manager', date:'3 Mar 2026' },
+    ],
+    savingTeam: null,
+  };
+
+  ACCOUNTS = [
+    { username:'seoulskin.hk', fullName:'Joey Lam', sourceBrand:'laneige', overall:92, relevancy:9, engagement:9, accountLocation:'Hong Kong', followerCount:128400, engagementRate:4.8, avgLikes:6100, avgComments:210, medianLikes:5800, medianViews:41000, samplePostUrl:'#', samplePostLikes:7200, samplePostComments:260, samplePostPlays:52000, sampleCaption:'My 5-step winter routine — slugging edition. The barrier cream at step 4 changed my whole week 🤍', bio:'skincare obsessed · HK · daily routines & honest reviews', flags:['video-creator','beauty-niche'], nicheSignals:['skincare','glass skin','K-beauty'], hashtags:['skincare','kbeauty','hkbeauty','glowup','sheetmask','slugging'], verdict:'Strong niche match — consistent skincare content, high engagement, and a clearly HK-based audience.' },
+    { username:'veraglow', fullName:'Vera Cheng', sourceBrand:'innisfree', overall:88, relevancy:8, engagement:9, accountLocation:'Hong Kong', followerCount:64200, engagementRate:6.2, avgLikes:3980, avgComments:340, medianLikes:4100, medianViews:38000, samplePostUrl:'#', samplePostLikes:5100, samplePostComments:410, samplePostPlays:46000, sampleCaption:'unboxing the new vitamin C line — first impressions + my pores after 2 weeks', bio:'glow chaser ✦ skincare + a little lifestyle', flags:['video-creator','beauty-niche','paid-collab-history'], nicheSignals:['skincare','vitamin C','routines'], hashtags:['skincare','glow','hkblogger','beauty','vitaminc'], verdict:'High engagement relative to size; some paid-collab history but well-integrated content.' },
+    { username:'dermadiary.hk', fullName:'Dr. Ng', sourceBrand:'laneige', overall:95, relevancy:10, engagement:9, accountLocation:'Hong Kong', followerCount:41800, engagementRate:7.9, avgLikes:2950, avgComments:520, medianLikes:3100, medianViews:29000, samplePostUrl:'#', samplePostLikes:3600, samplePostComments:610, samplePostPlays:33000, sampleCaption:'Is niacinamide overhyped? A dermatologist breaks down what it actually does for your barrier.', bio:'dermatologist · evidence-based skincare · HK', flags:['video-creator','beauty-niche'], nicheSignals:['dermatology','skin science','education'], hashtags:['skincare','dermatologist','skinbarrier','niacinamide','hkbeauty'], verdict:'Highest-fit creator: derm credibility, education-led content, exceptional comment engagement.' },
+    { username:'kiko.beauty', fullName:'Kiki Lau', sourceBrand:'innisfree', overall:90, relevancy:9, engagement:10, accountLocation:'Hong Kong', followerCount:22500, engagementRate:9.1, avgLikes:1980, avgComments:290, medianLikes:2050, medianViews:24000, samplePostUrl:'#', samplePostLikes:2400, samplePostComments:320, samplePostPlays:27000, sampleCaption:'tiny haul, big feelings — the cleansing balm everyone in my comments asked about', bio:'micro creator · skincare diaries · 🇭🇰', flags:['video-creator','beauty-niche'], nicheSignals:['skincare','hauls','cleansing'], hashtags:['skincare','microinfluencer','hkbeauty','kbeauty','haul'], verdict:'Micro creator with elite engagement and a tight, loyal HK community.' },
+    { username:'mattecake', fullName:'Cake Wong', sourceBrand:'laneige', overall:64, relevancy:5, engagement:8, accountLocation:'Hong Kong', followerCount:311000, engagementRate:2.1, avgLikes:6400, avgComments:180, medianLikes:6600, medianViews:120000, samplePostUrl:'#', samplePostLikes:8800, samplePostComments:240, samplePostPlays:210000, sampleCaption:'full glam GRWM for the gala — this setting spray did NOT move all night', bio:'makeup artist · glam · collabs welcome', flags:['video-creator','paid-collab-history'], nicheSignals:['makeup','glam','GRWM'], hashtags:['makeup','mua','glam','grwm','beauty'], verdict:'Large reach but makeup-led; lower skincare relevancy and diluted engagement rate.' },
+    { username:'citygirlgloss', fullName:'Mandy Tsoi', sourceBrand:'innisfree', overall:58, relevancy:4, engagement:8, accountLocation:'Singapore', followerCount:540000, engagementRate:1.4, avgLikes:7200, avgComments:160, medianLikes:7000, medianViews:180000, samplePostUrl:'#', samplePostLikes:9100, samplePostComments:210, samplePostPlays:240000, sampleCaption:'a week of outfits + the lip combo I cannot stop wearing', bio:'fashion · beauty · travel ✈', flags:['paid-collab-history'], nicheSignals:['fashion','lifestyle','beauty'], hashtags:['fashion','ootd','beauty','travel','lifestyle'], verdict:'Big following but SG-based, low ER, and fashion-led — weak fit for an HK skincare brief.' },
+    { username:'honestlyhana', fullName:'Hana Ko', sourceBrand:'spf-scrape', overall:84, relevancy:8, engagement:8, accountLocation:'Hong Kong', followerCount:53900, engagementRate:5.6, avgLikes:2960, avgComments:240, medianLikes:3050, medianViews:31000, samplePostUrl:'#', samplePostLikes:3400, samplePostComments:280, samplePostPlays:35000, sampleCaption:'honest SPF review — the no-white-cast one I actually repurchased', bio:'honest reviews · sun care nerd · HK', flags:['video-creator','beauty-niche'], nicheSignals:['skincare','SPF','reviews'], hashtags:['spf','suncare','skincare','hkbeauty','review'], verdict:'Reliable mid-tier reviewer with strong SPF/sun-care relevancy for the summer brief.' },
+    { username:'tinabeautydiary', fullName:'Tina Ho', sourceBrand:'spf-scrape', overall:73, relevancy:6, engagement:8, accountLocation:'Hong Kong', followerCount:88700, engagementRate:3.4, avgLikes:3010, avgComments:150, medianLikes:3200, medianViews:54000, samplePostUrl:'#', samplePostLikes:3700, samplePostComments:190, samplePostPlays:61000, sampleCaption:'my desk-to-dinner routine — quick, sweat-proof, summer ready', bio:'beauty + lifestyle diary · HK girl', flags:['video-creator','paid-collab-history'], nicheSignals:['beauty','lifestyle','routines'], hashtags:['beauty','lifestyle','hkblogger','routine','summer'], verdict:'Solid generalist beauty creator; lifestyle crossover dilutes pure skincare relevancy.' },
+    { username:'glowwithgrace', fullName:'Grace Yip', sourceBrand:'spf-scrape', overall:81, relevancy:7, engagement:9, accountLocation:'Hong Kong', followerCount:34600, engagementRate:6.8, avgLikes:2350, avgComments:300, medianLikes:2480, medianViews:26000, samplePostUrl:'#', samplePostLikes:2900, samplePostComments:340, samplePostPlays:29000, sampleCaption:'the SPF I reach for on humid HK mornings — texture test in real light', bio:'soft glam + skincare · HK · grace 🌿', flags:['video-creator','beauty-niche'], nicheSignals:['skincare','SPF','soft glam'], hashtags:['skincare','spf','hkbeauty','softglam','glow'], verdict:'Engaged HK micro-creator with good SPF relevancy and clean, well-lit content.' },
+  ];
+
+  componentWillUnmount() { if (this._timer) clearInterval(this._timer); }
+
+  // ---------- helpers ----------
+  fmt(n) {
+    if (n == null) return '—';
+    if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'') + 'M';
+    if (n >= 1000) return (n/1000).toFixed(n >= 100000 ? 0 : 1).replace(/\.0$/,'') + 'K';
+    return '' + n;
+  }
+  acctMap() { const m = {}; for (const a of this.ACCOUNTS) m[a.username] = a; return m; }
+  scoreChrome(s) {
+    if (s >= 70) return { bg:'#4A7C59', color:'#fff' };
+    if (s >= 45) return { bg:'#C8A96E', color:'#fff' };
+    return { bg:'#ECE7DB', color:'#9A917F' };
+  }
+  scoreInk(s) { return s >= 70 ? '#3E6B4B' : s >= 45 ? '#9A7636' : '#A89E8C'; }
+  flagChrome(f) {
+    if (f === 'bot-risk') return 'background:#F4E2E6;color:#A8485E';
+    if (f === 'video-creator') return 'background:#F1E7D2;color:#8A6A22';
+    return 'background:#EEEAE0;color:#7E7768';
+  }
+  mockDm(a) {
+    const niche = (a.nicheSignals && a.nicheSignals[0]) || 'skincare';
+    return `Hi ${a.fullName || a.username} — we're Markato, the Hong Kong distributor behind several K-beauty skincare lines. We loved your recent ${niche} content and think you'd be a great fit for an upcoming launch. Could we send a PR package your way and share the details?`;
+  }
+  allReviewEntries() {
+    const out = [];
+    const rs = this.state.reviewStates;
+    for (const sub of this.state.submissions) {
+      for (const u of sub.accts) {
+        const e = (rs[sub.id] || {})[u] || {};
+        out.push({ subId: sub.id, brief: sub.brief, username: u, ...e });
+      }
+    }
+    return out;
+  }
+
+  // ---------- navigation ----------
+  go(screen) { this.setState({ screen, showColPicker:false, showReviewColPicker:false }); }
+  openReview(id) { this.setState({ screen:'review_detail', openReviewId:id, showReviewColPicker:false }); }
+  goNewRun() { this.setState({ screen:'seeder', step:'upload', hasResults:false }); }
+
+  navMeta(id, screen) {
+    const activeScreen = this.state.screen === 'review_detail' ? 'review_queue' : this.state.screen;
+    const active = activeScreen === id;
+    const base = "display:flex;align-items:center;gap:11px;width:100%;padding:8px 11px 8px 9px;border-radius:9px;font-size:13.5px;font-weight:" + (active?'600':'500') + ";text-align:left;position:relative;transition:background .12s,color .12s;";
+    const style = base + (active
+      ? "background:#fff;color:#221E18;box-shadow:0 1px 2px rgba(34,30,24,.06),0 0 0 1px #E8E2D5;"
+      : "background:transparent;color:#7B7464;");
+    const bar = "position:absolute;left:-9px;top:50%;transform:translateY(-50%);width:3px;height:17px;border-radius:3px;background:" + (active?'#C8A96E':'transparent') + ";";
+    return { style, bar, onClick: () => this.go(screen) };
+  }
+
+  // ---------- seeder: upload ----------
+  setUploadTab(t) { this.setState({ uploadTab: t }); }
+  addMockFiles() {
+    const samples = ['laneige_tagged.xlsx', 'innisfree_tagged.xlsx', 'spf_hashtag_scrape.xlsx'];
+    this.setState(st => {
+      const have = new Set(st.files);
+      const next = samples.find(f => !have.has(f));
+      return next ? { files: [...st.files, next] } : {};
+    });
+  }
+  removeFile(name) { this.setState(st => ({ files: st.files.filter(f => f !== name) })); }
+  parseFiles() { if (this.state.files.length) this.setState({ step: 'config', influencerCount: 247 }); }
+  setScrapeInput(v) { this.setState({ scrapeInput: v }); }
+  setLimit(n) { this.setState({ resultsLimit: n }); }
+  scrapeGroups() {
+    const lines = this.state.scrapeInput.split('\n').map(l => l.trim()).filter(Boolean);
+    const map = new Map();
+    for (const line of lines) {
+      const m = line.match(/instagram\.com\/([^/?#]+)/);
+      const brand = m ? m[1] : (line.startsWith('#') ? null : null);
+      const key = brand ?? '__misc__';
+      if (!map.has(key)) map.set(key, { brand, lines: [] });
+      map.get(key).lines.push(line);
+    }
+    return [...map.values()];
+  }
+  startScrape() {
+    const groups = this.scrapeGroups();
+    if (!groups.length) return;
+    this.setState({ scraping: true });
+    setTimeout(() => this.setState({ scraping: false, step: 'config', influencerCount: Math.round(this.state.resultsLimit * groups.length * 0.9) }), 1400);
+  }
+  // ---------- seeder: config ----------
+  toggleNiche(id) { this.setState(st => ({ niches: st.niches.includes(id) ? st.niches.filter(n => n !== id) : [...st.niches, id] })); }
+  setLocation(loc) { this.setState({ location: loc }); }
+  toggleVideo() { this.setState(st => ({ requireVideo: !st.requireVideo })); }
+  setMinEng(v) { this.setState({ minEngagement: Math.max(0, Number(v) || 0) }); }
+  setBrief(v) { this.setState({ campaignBrief: v }); }
+  startScoring() {
+    this.setState({ step: 'scoring', scorePct: 0 });
+    if (this._timer) clearInterval(this._timer);
+    this._timer = setInterval(() => {
+      this.setState(st => {
+        const next = Math.min(100, st.scorePct + Math.round(8 + Math.random() * 9));
+        if (next >= 100) {
+          clearInterval(this._timer); this._timer = null;
+          const scored = this.ACCOUNTS.filter(a => a.avgLikes >= (st.minEngagement || 0)).slice().sort((a, b) => b.overall - a.overall);
+          setTimeout(() => this.setState({ step: 'results', hasResults: true, results: scored }), 320);
+        }
+        return { scorePct: next };
+      });
+    }, 130);
+  }
+  restartSeeder() { this.setState({ step: 'upload', files: [], scrapeInput: '', hasResults: false, results: [], selectionMode: false, selected: {}, shareDone: false }); }
+  // ---------- results table ----------
+  toggleSort(key) {
+    this.setState(st => {
+      if (st.sortKey === key) return st.sortDir === 'desc' ? { sortDir: 'asc' } : { sortKey: null };
+      return { sortKey: key, sortDir: 'desc' };
+    });
+  }
+  setFilter(f) { this.setState({ filterFlag: f }); }
+  setMinScore(v) { this.setState({ minScore: Math.max(0, Math.min(100, Number(v) || 0)) }); }
+  toggleExpand(u) { this.setState(st => ({ expandedRow: st.expandedRow === u ? null : u })); }
+  toggleCol(id) { this.setState(st => ({ cols: { ...st.cols, [id]: !st.cols[id] } })); }
+  toggleColPicker() { this.setState(st => ({ showColPicker: !st.showColPicker })); }
+  enterSelection() { this.setState({ selectionMode: true, selected: {}, shareDone: false }); }
+  cancelSelection() { this.setState({ selectionMode: false, selected: {} }); }
+  toggleSelect(u) { this.setState(st => ({ selected: { ...st.selected, [u]: !st.selected[u] } })); }
+  selectAllResults() {
+    this.setState(st => {
+      const sel = {};
+      this.resultRows().forEach(r => { sel[r.username] = true; });
+      return { selected: sel };
+    });
+  }
+  sendForReview() {
+    const chosen = Object.keys(this.state.selected).filter(u => this.state.selected[u]);
+    if (!chosen.length) return;
+    const id = 'sub' + Date.now();
+    const brief = this.state.campaignBrief.trim() || 'Untitled scoring run';
+    const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    this.setState(st => ({
+      submissions: [{ id, brief, date, accts: chosen }, ...st.submissions],
+      reviewStates: { ...st.reviewStates, [id]: {} },
+      shareDone: true,
+    }));
+    setTimeout(() => this.setState({ selectionMode: false, selected: {}, shareDone: false }), 2600);
+  }
+  fetchLive() {
+    if (this.state.liveStatus === 'loading') return;
+    this.setState({ liveStatus: 'loading' });
+    setTimeout(() => this.setState({ liveStatus: 'done' }), 1600);
+  }
+  // filtered + sorted result rows (raw accounts)
+  resultRows() {
+    const s = this.state;
+    let list = (s.results.length ? s.results : []).filter(r => r.overall >= s.minScore);
+    if (s.filterFlag !== 'all') list = list.filter(r => (r.flags || []).includes(s.filterFlag));
+    if (s.sortKey) {
+      const val = r => ({ overall: r.overall, relevancy: r.relevancy, eng_score: r.engagement, engagement: r.engagementRate ?? 0, med_likes: r.medianLikes ?? -1 }[s.sortKey]);
+      list = [...list].sort((a, b) => s.sortDir === 'desc' ? val(b) - val(a) : val(a) - val(b));
+    }
+    return list;
+  }
+
+  // ---------- review ----------
+  setReview(subId, u, patch) {
+    this.setState(st => {
+      const sub = { ...(st.reviewStates[subId] || {}) };
+      sub[u] = { ...(sub[u] || {}), ...patch };
+      return { reviewStates: { ...st.reviewStates, [subId]: sub } };
+    });
+  }
+  approveAcct(subId, u) {
+    const acct = this.acctMap()[u];
+    const cur = (this.state.reviewStates[subId] || {})[u] || {};
+    this.setReview(subId, u, { status: 'approved', dm_status: cur.dm_status || 'not_sent', dm_draft: cur.dm_draft || this.mockDm(acct), note: cur.note || '' });
+  }
+  rejectAcct(subId, u) { this.setReview(subId, u, { status: 'rejected' }); }
+  undoAcct(subId, u) { this.setReview(subId, u, { status: null }); }
+  setNote(subId, u, text) { this.setReview(subId, u, { note: text }); }
+  setDmStatus(subId, u, st) { this.setReview(subId, u, { dm_status: st }); }
+  toggleNote(key) { this.setState(st => ({ noteOpen: { ...st.noteOpen, [key]: !st.noteOpen[key] } })); }
+  setReviewVariant(v) { this.setState({ reviewVariant: v }); }
+  toggleReviewCol(id) { this.setState(st => ({ reviewCols: { ...st.reviewCols, [id]: !st.reviewCols[id] } })); }
+  toggleReviewColPicker() { this.setState(st => ({ showReviewColPicker: !st.showReviewColPicker })); }
+  copyDm(text, key) {
+    if (text) navigator.clipboard && navigator.clipboard.writeText(text).catch(() => {});
+    this.setState({ copied: key });
+    setTimeout(() => this.setState(st => st.copied === key ? { copied: null } : {}), 1800);
+  }
+  copyAndSend(subId, u) {
+    const e = (this.state.reviewStates[subId] || {})[u] || {};
+    if (e.dm_draft) navigator.clipboard && navigator.clipboard.writeText(e.dm_draft).catch(() => {});
+    this.setReview(subId, u, { dm_status: 'sent' });
+  }
+  // ---------- history ----------
+  loadSession() { this.setState({ screen: 'seeder', step: 'results', hasResults: true, results: this.ACCOUNTS.slice().sort((a, b) => b.overall - a.overall) }); }
+  deleteSession(id) { this.setState(st => ({ sessions: st.sessions.filter(x => x.id !== id) })); }
+  // ---------- team ----------
+  changeRole(id, role) {
+    this.setState(st => ({ savingTeam: id, team: st.team.map(u => u.id === id ? { ...u, role } : u) }));
+    setTimeout(() => this.setState({ savingTeam: null }), 400);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const screen = s.screen;
+    const entries = this.allReviewEntries();
+    const pendingReview = entries.filter(e => !e.status).length;
+    const approvedCount = entries.filter(e => e.status === 'approved').length;
+    const dmsSent = entries.filter(e => e.status === 'approved' && (e.dm_status === 'sent' || e.dm_status === 'replied')).length;
+    const dmReady = entries.filter(e => e.status === 'approved' && (e.dm_status === 'not_sent' || !e.dm_status) && e.dm_draft).length;
+    const scoredTotal = s.sessions.reduce((a, x) => a + (x.accountCount || 0), 0);
+
+    // nav with counts
+    const nav = {
+      dashboard: this.navMeta('dashboard','dashboard'),
+      seeder: this.navMeta('seeder','seeder'),
+      history: this.navMeta('history','history'),
+      review_queue: this.navMeta('review_queue','review_queue'),
+      ready_to_send: this.navMeta('ready_to_send','ready_to_send'),
+      team: this.navMeta('team','team'),
+      help: this.navMeta('help','help'),
+    };
+    const countStyle = (active) => "min-width:19px;height:18px;padding:0 6px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;" + (active ? "background:#F1E7D2;color:#8A6A22;" : "background:#E6E0D3;color:#9A917F;");
+    const rqActive = (screen === 'review_queue' || screen === 'review_detail');
+    nav.review_queue.showCount = pendingReview > 0; nav.review_queue.count = pendingReview; nav.review_queue.countStyle = countStyle(rqActive);
+    nav.ready_to_send.showCount = dmReady > 0; nav.ready_to_send.count = dmReady; nav.ready_to_send.countStyle = countStyle(screen === 'ready_to_send');
+
+    // dashboard
+    const kpis = [
+      { label:'Sessions', value:'' + s.sessions.length, sub:'saved this month' },
+      { label:'Accounts scored', value:this.fmt(scoredTotal), sub:'across all runs' },
+      { label:'Approved', value:'' + approvedCount, sub:'by brand managers' },
+      { label:'DMs sent', value:'' + dmsSent, sub:dmsSent ? 'incl. replies' : 'none yet' },
+    ];
+    const campaigns = s.submissions.map(sub => {
+      const rs = s.reviewStates[sub.id] || {};
+      const approved = sub.accts.filter(u => rs[u]?.status === 'approved').length;
+      const pending = sub.accts.filter(u => !rs[u]?.status).length;
+      const brief = sub.brief.length > 64 ? sub.brief.slice(0,64) + '…' : sub.brief;
+      return { brief, accounts: sub.accts.length, approved, pending, date: sub.date, onOpen: () => this.openReview(sub.id) };
+    });
+    const attentionBits = [];
+    if (pendingReview > 0) attentionBits.push(`${pendingReview} account${pendingReview!==1?'s':''} pending brand-manager review`);
+    if (dmReady > 0) attentionBits.push(`${dmReady} approved DM draft${dmReady!==1?'s':''} ready to send`);
+
+    const mkSort = (key) => ({ active: s.sortKey === key, ind: s.sortKey === key ? (s.sortDir === 'desc' ? '↓' : '↑') : '↕', onClick: () => this.toggleSort(key) });
+    const rows = this.resultRows().map(r => {
+      const sc = this.scoreChrome(r.overall);
+      return {
+        username: r.username, fullName: r.fullName, igUrl: 'https://instagram.com/' + r.username, brand: r.sourceBrand || '—',
+        scoreVal: r.overall, scoreBg: sc.bg, scoreColor: sc.color,
+        relevancyVal: r.relevancy, relevancyW: (r.relevancy * 10) + '%',
+        engVal: r.engagement, engW: (r.engagement * 10) + '%',
+        erMain: r.engagementRate != null ? r.engagementRate + '%' : this.fmt(r.avgLikes),
+        erSub: r.engagementRate != null ? this.fmt(r.avgLikes) + ' avg likes' : this.fmt(r.avgComments) + ' cmts',
+        followersFmt: this.fmt(r.followerCount),
+        medLikesFmt: s.liveStatus === 'done' ? this.fmt(r.medianLikes) : '—',
+        medViewsFmt: s.liveStatus === 'done' ? this.fmt(r.medianViews) : '—',
+        hasSamplePost: !!r.samplePostUrl, samplePostUrl: r.samplePostUrl,
+        niche: (r.nicheSignals || []).join(', '),
+        flags: (r.flags || []).slice(0, 3).map(f => ({ label: f, style: this.flagChrome(f) })),
+        expanded: s.expandedRow === r.username, hashtags: r.hashtags || [],
+        verdict: r.verdict, nicheSignals: (r.nicheSignals || []).join(' · '), hasNiche: (r.nicheSignals || []).length > 0,
+        selected: !!s.selected[r.username], onToggle: () => this.toggleExpand(r.username), onSelect: () => this.toggleSelect(r.username),
+        checkStyle: 'width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid ' + (s.selected[r.username]?'#C8A96E':'#D0C9BA') + ';background:' + (s.selected[r.username]?'#C8A96E':'#fff') + ';',
+      };
+    });
+
+    // ===== review queue + detail =====
+    const DM_LABELS = { not_sent:'Not sent', sent:'Sent', replied:'Replied', no_response:'No response' };
+    const dmChrome = (st) => ({ not_sent:'background:#EEEAE0;color:#9A917F', sent:'background:#DCE6F2;color:#3F6699', replied:'background:#E1EFE3;color:#3E6B4B', no_response:'background:#F4E2E6;color:#A8485E' }[st] || 'background:#EEEAE0;color:#9A917F');
+    const reviewQueue = s.submissions.map(sub => {
+      const rs = s.reviewStates[sub.id] || {};
+      const total = sub.accts.length;
+      const approved = sub.accts.filter(u => rs[u]?.status === 'approved').length;
+      const rejected = sub.accts.filter(u => rs[u]?.status === 'rejected').length;
+      const pending = total - approved - rejected;
+      return { brief: sub.brief.length > 96 ? sub.brief.slice(0, 96) + '…' : sub.brief, date: sub.date, total, approved, rejected, pending, showPending: pending > 0, showApproved: approved > 0, showRejected: rejected > 0, onOpen: () => this.openReview(sub.id) };
+    });
+    const sub = s.submissions.find(x => x.id === s.openReviewId);
+    let reviewTitle = '', reviewBrief = '', reviewAccounts = [], rApproved = 0, rRejected = 0, rPending = 0;
+    if (sub) {
+      const rs = s.reviewStates[sub.id] || {};
+      reviewBrief = sub.brief;
+      reviewAccounts = sub.accts.map(u => {
+        const a = this.acctMap()[u]; const e = rs[u] || {};
+        const status = e.status || 'pending';
+        const key = sub.id + '__' + u;
+        const dms = e.dm_status || 'not_sent';
+        const cardStyle = status === 'approved' ? 'border:1px solid #BFD6C4;background:#F5F8F4;'
+          : status === 'rejected' ? 'border:1px solid #E6CDD3;background:#FBF5F6;opacity:.74;'
+          : 'border:1px solid #E7E2D6;background:#fff;';
+        return {
+          key, username: u, fullName: a.fullName, igUrl: 'https://instagram.com/' + u, brand: a.sourceBrand || '', hasBrand: !!a.sourceBrand,
+          scoreVal: a.overall, scoreInk: this.scoreInk(a.overall),
+          flags: (a.flags || []).map(f => ({ label: f, style: this.flagChrome(f) })),
+          isPending: status === 'pending', isApproved: status === 'approved', isRejected: status === 'rejected', cardStyle,
+          location: a.accountLocation, followersFmt: this.fmt(a.followerCount) + ' followers',
+          erLabel: a.engagementRate != null ? a.engagementRate + '% ER' : '', avgLikesLabel: '~' + this.fmt(a.avgLikes) + ' avg likes',
+          relevancyLabel: 'Relevancy ' + a.relevancy + '/10', engScoreLabel: 'Eng score ' + a.engagement + '/10',
+          niche: (a.nicheSignals || []).slice(0, 3).join(' · '),
+          sampleCaption: a.sampleCaption, hasCaption: !!a.sampleCaption, samplePostUrl: a.samplePostUrl,
+          note: e.note || '', hasNote: !!(e.note && e.note.trim()), noteOpen: !!s.noteOpen[key], noteOrOpen: !!s.noteOpen[key] || !!(e.note && e.note.trim()), noteClosed: !(!!s.noteOpen[key] || !!(e.note && e.note.trim())), notCopied: s.copied !== key,
+          quickStats: [a.accountLocation, this.fmt(a.followerCount) + ' followers', (a.engagementRate != null ? a.engagementRate + '% ER' : ''), (a.nicheSignals || []).slice(0, 2).join(' · ')].filter(Boolean).join('  ·  '),
+          dmDraft: e.dm_draft || '', hasDraft: !!(e.dm_draft && e.dm_draft.trim()),
+          dmStatusPills: ['not_sent', 'sent', 'replied', 'no_response'].map(ds => ({ key: ds, label: DM_LABELS[ds], style: 'padding:4px 11px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid ' + (dms === ds ? 'transparent;' + dmChrome(ds) : '#E1DBCD;background:#fff;color:#9A917F;'), onClick: () => this.setDmStatus(sub.id, u, ds) })),
+          copied: s.copied === key,
+          onApprove: () => this.approveAcct(sub.id, u), onReject: () => this.rejectAcct(sub.id, u), onUndo: () => this.undoAcct(sub.id, u),
+          onToggleNote: () => this.toggleNote(key), onNote: (ev) => this.setNote(sub.id, u, ev.target.value),
+          onCopy: () => this.copyDm(e.dm_draft, key), onDmDraftEdit: (ev) => this.setReview(sub.id, u, { dm_draft: ev.target.value }),
+        };
+      });
+      rApproved = reviewAccounts.filter(x => x.isApproved).length;
+      rRejected = reviewAccounts.filter(x => x.isRejected).length;
+      rPending = reviewAccounts.filter(x => x.isPending).length;
+      reviewTitle = sub.accts.length + ' account' + (sub.accts.length !== 1 ? 's' : '') + ' to review';
+    }
+    const reviewColItems = [
+      { id:'location', label:'Location' }, { id:'followers', label:'Followers' }, { id:'engagement', label:'Engagement' }, { id:'relevancy', label:'Relevancy' },
+      { id:'eng_score', label:'Eng. Score' }, { id:'niche', label:'Niche Signals' }, { id:'sample_post', label:'Sample Post' }, { id:'caption', label:'Scraped Caption' },
+    ].map(c => { const on = !!s.reviewCols[c.id]; return { ...c, on, onClick: () => this.toggleReviewCol(c.id), boxStyle: 'width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid ' + (on?'#C8A96E':'#D8D1C2') + ';background:' + (on?'#C8A96E':'#fff') + ';' }; });
+    const variantBtn = (v) => 'padding:6px 13px;border-radius:7px;font-size:12px;font-weight:600;transition:all .12s;' + (s.reviewVariant === v ? 'background:#fff;color:#221E18;box-shadow:0 1px 2px rgba(34,30,24,.08);' : 'background:transparent;color:#9A917F;');
+
+    // ===== ready to send =====
+    const readyItems = [];
+    for (const subm of s.submissions) {
+      const rs = s.reviewStates[subm.id] || {};
+      for (const u of subm.accts) {
+        const e = rs[u] || {};
+        if (e.status === 'approved' && (e.dm_status || 'not_sent') === 'not_sent' && e.dm_draft) {
+          const a = this.acctMap()[u];
+          readyItems.push({ key: subm.id + '__' + u, username: u, fullName: a.fullName, igUrl: 'https://instagram.com/' + u, brief: subm.brief, dmDraft: e.dm_draft, onCopy: () => this.copyAndSend(subm.id, u) });
+        }
+      }
+    }
+    // ===== history =====
+    const historySessions = s.sessions.map(h => ({ id: h.id, title: h.accountCount + ' accounts · ' + h.cfg, date: h.date, files: (h.files || []).join(', '), hasFiles: (h.files || []).length > 0, onLoad: () => this.loadSession(), onDelete: (ev) => { ev.stopPropagation(); this.deleteSession(h.id); } }));
+    // ===== team =====
+    const ROLE_LABELS = { assistant_bm:'Assistant BM', brand_manager:'Brand Manager', admin:'Admin' };
+    const roleChrome = (r) => ({ assistant_bm:'background:#F1E7D2;color:#8A6A22', brand_manager:'background:#EEEAE0;color:#7E7768', admin:'background:#E1EFE3;color:#3E6B4B' }[r] || 'background:#EEEAE0;color:#7E7768');
+    const teamMembers = s.team.map(u => ({ id: u.id, email: u.email, date: u.date, role: u.role, initials: u.email.slice(0,2).toUpperCase(), selectStyle: 'font-family:JetBrains Mono,monospace;font-size:11.5px;padding:5px 9px;border-radius:7px;border:none;outline:none;cursor:pointer;' + roleChrome(u.role), onChange: (ev) => this.changeRole(u.id, ev.target.value) }));
+
+    return {
+      isDashboard: screen === 'dashboard',
+      isSeeder: screen === 'seeder',
+      isHistory: screen === 'history',
+      isReviewQueue: screen === 'review_queue',
+      isReviewDetail: screen === 'review_detail',
+      isReadyToSend: screen === 'ready_to_send',
+      isTeam: screen === 'team',
+      isHelp: screen === 'help',
+      nav,
+      goNewRun: () => this.goNewRun(),
+      goReviewQueue: () => this.go('review_queue'),
+      kpis, campaigns,
+      hasAttention: attentionBits.length > 0,
+      attentionText: attentionBits.join('  ·  '),
+
+      // ===== seeder =====
+      stepUpload: s.step === 'upload', stepConfig: s.step === 'config', stepScoring: s.step === 'scoring', stepResults: s.step === 'results',
+      isUploadTab: s.uploadTab === 'upload', isScrapeTab: s.uploadTab === 'scrape',
+      uploadTabStyleA: 'flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;transition:all .12s;' + (s.uploadTab === 'upload' ? 'background:#fff;color:#221E18;box-shadow:0 1px 2px rgba(34,30,24,.08);' : 'background:transparent;color:#9A917F;'),
+      uploadTabStyleB: 'flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;transition:all .12s;' + (s.uploadTab === 'scrape' ? 'background:#fff;color:#221E18;box-shadow:0 1px 2px rgba(34,30,24,.08);' : 'background:transparent;color:#9A917F;'),
+      notScraping: !s.scraping,
+      scrapeBtnStyle: 'margin-top:18px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;font-size:14px;font-weight:600;' + ((s.scrapeInput.trim() && !s.scraping) ? 'background:#221E18;color:#fff;' : 'background:#E6E0D3;color:#B0A693;'),
+      startScoringStyle: 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:12px;font-size:14px;font-weight:600;' + (s.niches.length > 0 ? 'background:#221E18;color:#fff;' : 'background:#E6E0D3;color:#B0A693;'),
+      selectionIdle: !s.selectionMode && !s.shareDone,
+      selectionActive: s.selectionMode && !s.shareDone,
+      stopProp: (e) => e.stopPropagation(),
+      onUploadTab: () => this.setUploadTab('upload'), onScrapeTab: () => this.setUploadTab('scrape'),
+      onAddFiles: () => this.addMockFiles(),
+      files: s.files.map(f => ({ name: f, onRemove: () => this.removeFile(f) })),
+      hasFiles: s.files.length > 0, fileCount: s.files.length,
+      onParse: () => this.parseFiles(),
+      scrapeInput: s.scrapeInput, onScrapeInput: e => this.setScrapeInput(e.target.value),
+      scraping: s.scraping, onStartScrape: () => this.startScrape(),
+      hasScrapeInput: s.scrapeInput.trim().length > 0,
+      scrapeSummary: (() => { const g = this.scrapeGroups(); const brands = g.map(x => x.brand).filter(Boolean); return { jobs: g.length, cost: '~$' + Math.round(g.length * s.resultsLimit * 0.01), brands }; })(),
+      limitOpts: [100, 200, 500, 1000].map(n => { const on = s.resultsLimit === n; return { n, on, onClick: () => this.setLimit(n), style: 'padding:6px 13px;border-radius:8px;font-size:12px;border:1px solid ' + (on?'#221E18':'#E1DBCD') + ';background:' + (on?'#221E18':'#fff') + ';color:' + (on?'#fff':'#7E7768') + ';' }; }),
+      scrapeCostHint: '~$' + Math.round(s.resultsLimit * 0.01) + ' per brand',
+      nicheOpts: [
+        { id:'beauty', label:'Beauty & Makeup' }, { id:'skincare', label:'Skincare' }, { id:'lifestyle', label:'Lifestyle' },
+        { id:'fashion', label:'Fashion' }, { id:'health', label:'Health & Wellness' }, { id:'food', label:'Food & Dining' },
+      ].map(n => { const on = s.niches.includes(n.id); return { ...n, on, onClick: () => this.toggleNiche(n.id), chipStyle: 'padding:7px 14px;border-radius:20px;font-size:13px;border:1px solid ' + (on?'#C8A96E':'#E1DBCD') + ';background:' + (on?'#C8A96E':'#fff') + ';color:' + (on?'#fff':'#6C6555') + ';' }; }),
+      locOpts: ['Hong Kong', 'Taiwan', 'Singapore', 'Macau'].map(l => { const on = s.location === l; return { label: l, on, onClick: () => this.setLocation(l), chipStyle: 'padding:7px 14px;border-radius:20px;font-size:13px;border:1px solid ' + (on?'#221E18':'#E1DBCD') + ';background:' + (on?'#221E18':'#fff') + ';color:' + (on?'#fff':'#6C6555') + ';' }; }),
+      requireVideo: s.requireVideo, onToggleVideo: () => this.toggleVideo(),
+      videoTrackStyle: 'position:relative;width:42px;height:24px;border-radius:13px;flex:none;transition:background .15s;background:' + (s.requireVideo ? '#C8A96E' : '#DDD6C7'),
+      videoKnobStyle: 'position:absolute;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s;left:' + (s.requireVideo ? '21px' : '3px'),
+      minEngagement: s.minEngagement, onMinEng: e => this.setMinEng(e.target.value),
+      minEngHint: s.minEngagement === 0 ? 'No minimum' : '≥ ' + s.minEngagement.toLocaleString() + ' likes',
+      campaignBrief: s.campaignBrief, onBrief: e => this.setBrief(e.target.value),
+      influencerCount: s.influencerCount, canStartScoring: s.niches.length > 0,
+      onStartScoring: () => this.startScoring(), onRestart: () => this.restartSeeder(),
+      scorePct: s.scorePct, scorePctLabel: s.scorePct + '%', scoreBarW: s.scorePct + '%',
+
+      // ===== results =====
+      resultRows: rows,
+      resultCount: rows.length,
+      strongCount: s.results.filter(r => r.overall >= 70).length,
+      possibleCount: s.results.filter(r => r.overall >= 45 && r.overall < 70).length,
+      lowCount: s.results.filter(r => r.overall < 45).length,
+      cols: s.cols,
+      colItems: [
+        { id:'brand', label:'Brand' }, { id:'relevancy', label:'Relevancy' }, { id:'eng_score', label:'Eng. Score' },
+        { id:'engagement', label:'Eng. Rate' }, { id:'followers', label:'Followers' }, { id:'med_likes', label:'Med. Likes' },
+        { id:'med_views', label:'Med. Views' }, { id:'sample_post', label:'Scraped Post' }, { id:'niche', label:'Niche Signals' }, { id:'dm_status', label:'DM Status' },
+      ].map(c => { const on = !!s.cols[c.id]; return { ...c, on, onClick: () => this.toggleCol(c.id), boxStyle: 'width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex:none;border:1px solid ' + (on?'#C8A96E':'#D8D1C2') + ';background:' + (on?'#C8A96E':'#fff') + ';' }; }),
+      showColPicker: s.showColPicker, onToggleColPicker: () => this.toggleColPicker(),
+      filterOpts: ['all', 'video-creator', 'beauty-niche', 'paid-collab-history', 'bot-risk'].map(f => { const on = s.filterFlag === f; return { id: f, label: f === 'all' ? 'All' : f, on, onClick: () => this.setFilter(f), chipStyle: 'padding:5px 11px;border-radius:20px;font-size:11.5px;border:1px solid ' + (on?'#221E18':'#E1DBCD') + ';background:' + (on?'#221E18':'transparent') + ';color:' + (on?'#fff':'#7E7768') + ';' }; }),
+      minScore: s.minScore, onMinScore: e => this.setMinScore(e.target.value),
+      sort: {
+        overall: mkSort('overall'), relevancy: mkSort('relevancy'), eng_score: mkSort('eng_score'),
+        engagement: mkSort('engagement'), med_likes: mkSort('med_likes'),
+      },
+      selectionMode: s.selectionMode, selectedCount: Object.keys(s.selected).filter(u => s.selected[u]).length,
+      shareDone: s.shareDone,
+      onEnterSelection: () => this.enterSelection(), onCancelSelection: () => this.cancelSelection(),
+      onSelectAll: () => this.selectAllResults(), onSendForReview: () => this.sendForReview(),
+      liveStatus: s.liveStatus, liveIdle: s.liveStatus === 'idle', liveLoading: s.liveStatus === 'loading', liveDone: s.liveStatus === 'done',
+      onFetchLive: () => this.fetchLive(),
+
+      // ===== review =====
+      reviewQueue, reviewQueueCount: s.submissions.length,
+      reviewQueueCountLabel: s.submissions.length + (s.submissions.length === 1 ? ' submission' : ' submissions'),
+      reviewTitle, reviewBrief, hasReviewBrief: !!reviewBrief, reviewAccounts,
+      rApproved, rRejected, rPending,
+      onBackToQueue: () => this.go('review_queue'),
+      isDetailed: s.reviewVariant === 'detailed', isCompact: s.reviewVariant === 'compact',
+      onVariantDetailed: () => this.setReviewVariant('detailed'), onVariantCompact: () => this.setReviewVariant('compact'),
+      variantStyleA: variantBtn('detailed'), variantStyleB: variantBtn('compact'),
+      reviewCols: s.reviewCols, reviewColItems, showReviewColPicker: s.showReviewColPicker, onToggleReviewColPicker: () => this.toggleReviewColPicker(),
+
+      // ===== ready / history / team =====
+      readyItems, readyCount: readyItems.length, readyCountLabel: readyItems.length + (readyItems.length === 1 ? ' account' : ' accounts') + ' approved', hasReady: readyItems.length > 0, noReady: readyItems.length === 0,
+      historySessions, hasHistory: s.sessions.length > 0, noHistory: s.sessions.length === 0,
+      teamMembers,
+      helpSteps: [
+        { n:'1', title:'Get your dataset', body:'Upload an existing Apify .xlsx export, or paste competitor URLs and hashtags to kick off a fresh scrape — one job per brand.' },
+        { n:'2', title:'Configure & score', body:'Set target niches, location, content format and a minimum engagement floor. Each account is scored on deterministic relevancy and engagement signals.' },
+        { n:'3', title:'Shortlist & send for review', body:'Sort, filter and pick the accounts worth pursuing, then send the shortlist to a brand manager in the Review Queue.' },
+        { n:'4', title:'Approve & reach out', body:'Brand managers approve, reject and annotate each creator. Approved accounts generate a DM draft that lands in Ready to Send.' },
+      ],
+      intakeSteps: [
+        { n:'2', html:{__html:'On the <strong style="color:#221E18;font-weight:600">Configure</strong> screen, select your target niches and set a minimum engagement threshold. Optionally fill in a <strong style="color:#221E18;font-weight:600">Campaign brief</strong> — a sentence or two on the goal, audience, and tone. The brief is passed to AI Deep-Dive and makes its verdicts significantly more useful.'} },
+        { n:'3', html:{__html:'Click <strong style="color:#221E18;font-weight:600">Start scoring</strong>. Engagement and Relevancy scores are computed entirely in your browser from the uploaded data — no external calls happen at this step.'} },
+        { n:'4', html:{__html:'On the <strong style="color:#221E18;font-weight:600">Results</strong> screen, review the ranked table. Columns are customisable. Click <strong style="color:#221E18;font-weight:600">Fetch Live Stats</strong> to pull real-time median likes and views from Apify — this upgrades the Engagement Score with more accurate data but incurs cost (see the cost note above).'} },
+        { n:'5', html:{__html:'<strong style="color:#221E18;font-weight:600">Optional — AI Deep-Dive:</strong> set the top-N limit (default 50) and run it. This sends captions, hashtags, bio, and your campaign brief to Claude and returns a qualitative verdict per account. Results are cached 7 days per account + brief. This is the only step that calls an AI model.'} },
+        { n:'6', html:{__html:'Filter, sort, and customise columns, then click <strong style="color:#221E18;font-weight:600">Export to XLSX</strong>. The export includes per-brand colour coding, workflow dropdowns (Approve Yes/No, Reach-out Status), hyperlinked Instagram URLs, and AI verdicts if available.'} },
+      ],
+      dataSources: [
+        { source:'Apify export', fields:'avgLikes, avgComments, engagementRate, followerCount, videoRatio, hashtags, captions, locationNames — all available immediately on upload, no additional scraping needed.' },
+        { source:'Live scrape', fields:'medianLikes, medianViews — fetched on demand via Fetch Live Stats. Replaces the export-based Engagement Score estimate. Posts from the last 3 months are used; falls back to all 10 scraped posts if no recent content exists.' },
+      ],
+      scoreRows: [
+        { name:'Overall Score', range:'0 – 100', formula:'(engagement × 8) + (relevancy × 2)', body:'80% Engagement Score + 20% Relevancy Score. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail.' },
+        { name:'Engagement Score', range:'0 – 10', formula:'Before live: log(1 + avgLikes + avgComments×3)  |  After live: log(1 + medianLikes + medianViews×0.5)', body:'Measures raw audience activity using natural log, which compresses large follower differences so a 10k-like account doesn\u2019t swamp a 1k-like account. Before live stats, comments are weighted 3× as a proxy for replies (higher-intent than likes). After Fetch Live Stats, the formula upgrades to median likes and views — median is more robust than average against viral outliers. Views weighted 0.5× since they need less intent than a like. Photo-only accounts contribute 0 for views, which is correct. Overall updates in real time as live data arrives per account.' },
+        { name:'Relevancy Score', range:'0 – 10', formula:'5 + (hits in target niches) − (off-niche categories with hits)', body:'Starts at a neutral baseline of 5 — any account in the dataset already shows some affinity with the competitor. Adds 1 point per keyword match in hashtags, captions, and display name, using niche-specific keyword lists (e.g. \u201Cskincare\u201D, \u201C\u8B77\u819A\u201D, \u201Cmakeup\u201D, \u201C\u5316\u599D\u201D). Deducts 1 point per off-niche category that also has hits — so an account mixing skincare with unrelated food or fitness scores lower than a pure-niche account. Capped 0–10.' },
+        { name:'Bot Risk Score', range:'0 – 10 · informational', formula:'based on comments ÷ likes ratio', body:'Not in the Overall Score — informational only. Measures authenticity via comment-to-like ratio. Genuine engagement is typically 1–2%+. Rules: ratio < 0.5% with avg likes > 5,000 → 2 (high risk); < 1% with avg likes > 1,000 → 4; ≥ 2% → 9; ≥ 1% → 7; otherwise 5. Higher = more authentic. Accounts scoring 2–3 are flagged \u201Cbot-risk\u201D in the flags column.' },
+      ],
+      columnRows: [
+        { name:'Eng. Rate', range:'% · from export', formula:'(avgLikes + avgComments) ÷ followerCount × 100', body:'Standard engagement rate from the original export, per account across all posts. Available without live stats. Useful for comparing accounts relative to follower size — a 500-follower account at 10% ER is more engaged than a 100k-follower account at 0.5%.' },
+        { name:'Med. Likes', range:'live · from scrape', formula:'', body:'Median like count across the 10 most recent posts fetched live. Median avoids viral-post skew. Requires Fetch Live Stats.' },
+        { name:'Med. Views', range:'live · from scrape', formula:'', body:'Median video view count across the 10 most recent Reels or clips fetched live. Photo-only accounts show a dash. Requires Fetch Live Stats.' },
+        { name:'Scraped Post', range:'link · from export', formula:'', body:'URL of the most recent post found in the original export for this account. Opens the post directly on Instagram.' },
+        { name:'Post Likes / Comments / Plays', range:'from export', formula:'', body:'Raw like, comment, and play/view counts of that most recent scraped post. A quick sanity check on typical performance before clicking through.' },
+        { name:'Scraped Caption', range:'from export', formula:'', body:'Caption text of the most recent scraped post. A fast read on content style and language without leaving the tool.' },
+        { name:'AI Deep-Dive', range:'optional · Claude', formula:'', body:'Qualitative verdict from Claude after reviewing the account\u2019s captions, hashtags, bio, and your campaign brief. Only populated after you run AI Deep-Dive on Results. Cached 7 days per account + brief — a different brief generates a fresh verdict.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

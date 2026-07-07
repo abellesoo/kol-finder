@@ -9,7 +9,7 @@ function median(arr) {
 
 /**
  * Compute engagement stats from an array of Apify post items.
- * Hidden likes (likesCount === -1) are treated as 0.
+ * Hidden likes (likesCount === -1) are EXCLUDED from the median, not counted as 0.
  */
 export function computeStats(items) {
   const cutoff = new Date()
@@ -25,8 +25,10 @@ export function computeStats(items) {
   ).length
 
   const postsForMedian = recent.length > 0 ? recent : items
-  const withLikes = postsForMedian.filter((p) => typeof p.likesCount === 'number')
-  const medianLikes = median(withLikes.map((p) => Math.max(p.likesCount, 0)))
+  // Exclude hidden likes (-1) from the median entirely — counting them as 0 was
+  // collapsing the median (and the Overall score) the moment live data arrived.
+  const withLikes = postsForMedian.filter((p) => typeof p.likesCount === 'number' && p.likesCount >= 0)
+  const medianLikes = median(withLikes.map((p) => p.likesCount))
 
   const withViews = postsForMedian.filter(
     (p) => typeof p.videoViewCount === 'number' && p.videoViewCount > 0

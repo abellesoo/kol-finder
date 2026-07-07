@@ -7,9 +7,20 @@ const NICHE_KEYWORDS = {
   food: ['food', 'eat', 'restaurant', 'recipe', 'cooking', 'foodie', '美食', '食物', '餐廳', '食'],
 }
 
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// Match keywords as whole words for Latin-script terms (so 'skin' no longer
+// fires on 'skinny' or 'life' on 'lifestyle'). CJK terms have no word
+// boundaries, so fall back to substring matching for them.
 function textContainsAny(text, keywords) {
   const lower = text.toLowerCase()
-  return keywords.filter((kw) => lower.includes(kw.toLowerCase()))
+  return keywords.filter((kw) => {
+    const k = kw.toLowerCase()
+    if (/[^\x00-\x7f]/.test(k)) return lower.includes(k)
+    return new RegExp(`(^|[^a-z0-9])${escapeRegex(k)}([^a-z0-9]|$)`, 'i').test(lower)
+  })
 }
 
 // Engagement Score (export data): log(1 + avgLikes + avgComments×1.5)
@@ -61,21 +72,25 @@ function scoreRelevancy(inf, targetNiches) {
   return { score, signals: [...new Set(signals)].slice(0, 5) }
 }
 
+// Higher score = HIGHER bot risk (matches the field name `botRisk`).
+// A very low comment/like ratio on a high-like account is the classic
+// bought-engagement signal; healthy conversation lowers the risk.
 function scoreBotRisk(inf) {
   const likes = inf.avgLikes || 0
   const comments = inf.avgComments || 0
   const ratio = likes > 0 ? comments / likes : 0
 
-  if (likes > 5000 && ratio < 0.005) return { score: 2 }
-  if (ratio < 0.01 && likes > 1000) return { score: 4 }
-  if (ratio >= 0.02) return { score: 9 }
-  if (ratio >= 0.01) return { score: 7 }
+  if (likes > 5000 && ratio < 0.005) return { score: 8 }
+  if (ratio < 0.01 && likes > 1000) return { score: 6 }
+  if (ratio >= 0.02) return { score: 1 }
+  if (ratio >= 0.01) return { score: 3 }
   return { score: 5 }
 }
 
 function buildFlags(inf, relevancyScore, botScore, config) {
   const flags = []
-  if ((inf.videoRatio || 0) >= 0.5) flags.push('video-creator')
+  // videoRatio is a percentage (0–100) from parseXlsx, not a 0–1 fraction.
+  if ((inf.videoRatio || 0) >= 50) flags.push('video-creator')
   if (relevancyScore.score >= 7) {
     const niches = config.niches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0])
     if (niches.some((n) => ['beauty', 'makeup'].includes(n))) flags.push('beauty-niche')
@@ -83,7 +98,8 @@ function buildFlags(inf, relevancyScore, botScore, config) {
     if (niches.some((n) => n === 'lifestyle')) flags.push('lifestyle-niche')
   }
   if ((inf.paidCount || 0) > 0) flags.push('paid-collab-history')
-  if (botScore.score <= 3) flags.push('bot-risk')
+  // Both suspicious tiers (6 and 8) flag; healthy/neutral tiers (1,3,5) don't.
+  if (botScore.score >= 6) flags.push('bot-risk')
   if ((inf.avgLikes || 0) < 50) flags.push('low-engagement')
 
   const allText = [...inf.hashtags, ...inf.sampleCaptions].join(' ').toLowerCase()
@@ -99,21 +115,42 @@ export async function scoreInfluencers(influencers, config) {
     const relevancy = scoreRelevancy(inf, config.niches)
     const botRisk = scoreBotRisk(inf)
 
-    // Overall = 80% Engagement Score + 20% Relevancy Score (each 0–10, total 0–100)
-    const overall = Math.round(engagement.score * 8 + relevancy.score * 2)
+    // Apply the two config options that were previously collected but ignored:
+    // locationTarget and requireVideo. Baked into the relevancy sub-score so the
+    // effect survives ResultsStep's live engagement re-score (which only
+    // recomputes engagement and preserves relevancy).
+    let relevancyScore = relevancy.score
+    const configFlags = []
+    if (config.locationTarget && inf.accountLocation) {
+      if (inf.accountLocation === config.locationTarget) {
+        relevancyScore += 1
+        configFlags.push('location-match')
+      } else {
+        configFlags.push('off-location')
+      }
+    }
+    if (config.requireVideo && (inf.videoRatio || 0) < 50) {
+      relevancyScore -= 1
+      configFlags.push('no-video')
+    }
+    relevancyScore = Math.max(0, Math.min(10, relevancyScore))
+    const relevancyAdjusted = { score: relevancyScore, signals: relevancy.signals }
 
-    const flags = buildFlags(inf, relevancy, botRisk, config)
+    // Overall = 80% Engagement Score + 20% Relevancy Score (each 0–10, total 0–100)
+    const overall = Math.round(engagement.score * 8 + relevancyScore * 2)
+
+    const flags = [...buildFlags(inf, relevancyAdjusted, botRisk, config), ...configFlags]
 
     const verdictParts = []
-    if (relevancy.score >= 7) verdictParts.push('strong niche fit')
-    else if (relevancy.score >= 5) verdictParts.push('some niche relevancy')
+    if (relevancyScore >= 7) verdictParts.push('strong niche fit')
+    else if (relevancyScore >= 5) verdictParts.push('some niche relevancy')
     else verdictParts.push('weak niche relevancy')
-    if (botRisk.score <= 3) verdictParts.push('possible bot activity')
+    if (botRisk.score >= 6) verdictParts.push('possible bot activity')
 
     return {
       username: inf.username,
       scores: {
-        relevancy: parseFloat(relevancy.score.toFixed(1)),
+        relevancy: parseFloat(relevancyScore.toFixed(1)),
         engagement: engagement.score,
         botRisk: Math.round(botRisk.score),
       },

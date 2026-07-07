@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react'
 import { Search, Loader2, Heart, Eye, EyeOff, ExternalLink, AlertCircle } from 'lucide-react'
 import { startReelScraper, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 import { computeStats } from '../lib/computeStats'
-import { saveLookup } from '../lib/sessionHistory'
 
 function extractUsername(input) {
   const trimmed = input.trim().replace(/^@/, '')
@@ -33,7 +32,6 @@ export default function KolLookup({ initialUsername = '' }) {
       const items = await getDatasetItems(completed.defaultDatasetId)
       const computed = computeStats(items)
       setStats(computed)
-      saveLookup({ username: user, stats: computed })
       setStatus('done')
     } catch (err) {
       setError(err.message)
@@ -144,7 +142,7 @@ export default function KolLookup({ initialUsername = '' }) {
               </p>
               {stats.hiddenCount > 0 && (
                 <p className="text-xs text-ink/30 mt-1 font-mono">
-                  {stats.hiddenCount} counted as 0
+                  {stats.hiddenCount} hidden, excluded
                 </p>
               )}
             </div>

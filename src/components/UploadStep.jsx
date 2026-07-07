@@ -4,6 +4,11 @@ import { startSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyA
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 
+// Instagram path segments that are not usernames — they appear in post/reel/
+// explore URLs (e.g. /p/ABC, /reel/ABC, /explore/tags/x) and must never be
+// treated as a brand handle.
+const RESERVED_IG_SEGMENTS = new Set(['p', 'reel', 'reels', 'explore', 'tv', 'stories'])
+
 // Group input lines by brand. Each distinct instagram.com/username gets its
 // own group so we can run parallel Apify jobs and label results correctly.
 // Hashtags and post URLs with no clear profile owner go into a shared group.
@@ -12,7 +17,8 @@ function parseBrandGroups(inputText) {
   const map = new Map() // brand key → { brand, lines }
   for (const line of lines) {
     const match = line.match(/instagram\.com\/([^/?#]+)/)
-    const brand = match ? match[1] : null
+    const handle = match ? match[1] : null
+    const brand = handle && !RESERVED_IG_SEGMENTS.has(handle.toLowerCase()) ? handle : null
     const key = brand ?? '__misc__'
     if (!map.has(key)) map.set(key, { brand, lines: [] })
     map.get(key).lines.push(line)
@@ -51,6 +57,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   // Upload tab state
   const inputRef = useRef(null)
   const [files, setFiles] = useState([])
+  const [parsing, setParsing] = useState(false)
 
   // Scrape tab state
   const [scrapeInput, setScrapeInput] = useState('')
@@ -80,6 +87,17 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     addFiles(e.dataTransfer.files)
   }
 
+  // Guard against double-clicks kicking off two parses of the same files.
+  const handleParse = async () => {
+    if (parsing) return
+    setParsing(true)
+    try {
+      await onFiles(files)
+    } finally {
+      setParsing(false)
+    }
+  }
+
   // Scrape handler — runs one Apify job per brand sequentially to avoid
   // hitting Apify's concurrent-run limit (most plans allow 1 at a time).
   const handleScrape = async () => {
@@ -87,20 +105,43 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     if (groups.length === 0) return
     setScrapeStatus('running')
     setScrapeError(null)
-    try {
-      const brandedResults = []
-      for (const { brand, lines } of groups) {
+
+    // Run each brand independently so a later failure never discards the
+    // earlier (already-paid) results.
+    const brandedResults = []
+    const failedBrands = []
+    for (const { brand, lines } of groups) {
+      try {
         const run = await startSeederScrape(lines, resultsLimit)
         const completed = await pollUntilDone(run)
         const items = await getDatasetItems(completed.defaultDatasetId)
         brandedResults.push({ items, brand: brand || 'scraped' })
+      } catch (err) {
+        failedBrands.push(brand || 'scraped')
+        console.error(`Scrape failed for ${brand || 'scraped'}:`, err)
       }
-      setScrapeStatus('idle')
-      onScrapedItems(brandedResults)
-    } catch (err) {
-      setScrapeError(err.message)
-      setScrapeStatus('error')
     }
+
+    if (brandedResults.length === 0) {
+      setScrapeError(
+        failedBrands.length > 0
+          ? `Scrape failed for ${failedBrands.join(', ')}.`
+          : 'No results were scraped.'
+      )
+      setScrapeStatus('error')
+      return
+    }
+
+    // At least one brand succeeded — never drop those paid results. Surface any
+    // partial failures before handing the results off.
+    if (failedBrands.length > 0) {
+      alert(
+        `Some brands failed to scrape and were skipped: ${failedBrands.join(', ')}.\n` +
+        'Continuing with the results that succeeded.'
+      )
+    }
+    setScrapeStatus('idle')
+    onScrapedItems(brandedResults)
   }
 
   const isLoading = scrapeStatus === 'running'
@@ -180,11 +221,21 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
 
             {files.length > 0 && (
               <button
-                onClick={() => onFiles(files)}
-                className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all"
+                onClick={handleParse}
+                disabled={parsing}
+                className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Parse {files.length} file{files.length > 1 ? 's' : ''}
-                <ChevronRight size={16} />
+                {parsing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Parsing…
+                  </>
+                ) : (
+                  <>
+                    Parse {files.length} file{files.length > 1 ? 's' : ''}
+                    <ChevronRight size={16} />
+                  </>
+                )}
               </button>
             )}
           </>

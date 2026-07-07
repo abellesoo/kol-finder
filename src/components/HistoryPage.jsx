@@ -20,16 +20,24 @@ function formatConfig(config) {
 export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [loadingId, setLoadingId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
   const inputRef = useRef(null)
 
   useEffect(() => {
-    loadHistory().then((data) => {
-      setSessions(data)
-      setLoading(false)
-    })
+    loadHistory()
+      .then((data) => {
+        setSessions(data)
+        setLoadError(false)
+        setLoading(false)
+      })
+      .catch((err) => {
+        console.error('Failed to load history', err)
+        setLoadError(true)
+        setLoading(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -54,12 +62,17 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
     const title = editingTitle.trim()
     setEditingId(null)
     setEditingTitle('')
-    await updateSessionTitle(id, title)
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, config: { ...(s.config || {}), sessionTitle: title || undefined } } : s
+    try {
+      await updateSessionTitle(id, title)
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, config: { ...(s.config || {}), sessionTitle: title || undefined } } : s
+        )
       )
-    )
+    } catch (err) {
+      console.error('Failed to update session title', err)
+      window.alert('Failed to rename session. Please try again.')
+    }
   }
 
   const handleKeyDown = (e) => {
@@ -69,8 +82,19 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
 
   const handleDeleteSession = async (e, id) => {
     e.stopPropagation()
-    await deleteSession(id)
-    setSessions((prev) => prev.filter((s) => s.id !== id))
+    if (
+      !window.confirm(
+        'Delete this session permanently? This affects the whole team — everyone loses access to it and it cannot be undone.'
+      )
+    )
+      return
+    try {
+      await deleteSession(id)
+      setSessions((prev) => prev.filter((s) => s.id !== id))
+    } catch (err) {
+      console.error('Failed to delete session', err)
+      window.alert('Failed to delete session. Please try again.')
+    }
   }
 
   const handleClickSession = async (session) => {
@@ -101,6 +125,18 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
           <div className="flex items-center justify-center py-10 gap-2 text-faint">
             <Loader2 size={14} className="animate-spin" />
             <span className="text-sm">Loading…</span>
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-16">
+            <X size={32} className="text-rose mb-4" />
+            <h2 className="text-[17px] font-semibold text-ink mb-2">Couldn’t load history</h2>
+            <p className="text-[13.5px] text-muted mb-6 text-center">Something went wrong while loading your sessions. Check your connection and try again.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+            >
+              Retry
+            </button>
           </div>
         ) : sessions.length === 0 ? (
           <div className="flex flex-col items-center py-16">

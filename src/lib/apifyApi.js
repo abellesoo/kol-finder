@@ -1,4 +1,5 @@
 import { computeStats } from './computeStats'
+import { supabase } from './supabase'
 
 // Public URL of the Cloudflare Worker proxy — not a secret.
 // In production this is set via VITE_PROXY_URL in GitHub Actions.
@@ -6,11 +7,24 @@ import { computeStats } from './computeStats'
 // in the /worker directory (listens on http://localhost:8787 by default).
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
+// The worker requires an `Authorization: Bearer <supabase_access_token>` header
+// on all of its endpoints. Merge that token into the headers of every
+// worker-bound request. (All fetches in this file hit PROXY / the worker.)
+async function workerHeaders(extra = {}) {
+  const headers = { ...extra }
+  if (supabase) {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (token) headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
+
 async function startInstagramScraper(usernames, resultsLimit = 30) {
   const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
   const res = await fetch(`${PROXY}/start-run/instagram-scraper`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
   })
   if (!res.ok) {
@@ -40,7 +54,7 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
     } else {
       // Treat as hashtag (strip leading # if present)
       const tag = line.replace(/^#/, '').trim()
-      if (tag) directUrls.push(`https://www.instagram.com/explore/tags/${tag}/`)
+      if (tag) directUrls.push(`https://www.instagram.com/explore/tags/${encodeURIComponent(tag)}/`)
     }
   }
   if (directUrls.length === 0) throw new Error('No valid URLs or hashtags provided')
@@ -49,7 +63,7 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
   const resultsType = directUrls.some((u) => u.includes('/tagged/')) ? 'mentions' : 'posts'
   const res = await fetch(`${PROXY}/start-run/instagram-scraper`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ directUrls, resultsType, resultsLimit }),
   })
   if (!res.ok) {
@@ -65,7 +79,7 @@ export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]
   const res = await fetch(`${PROXY}/start-run/reel-scraper`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ username: list, resultsLimit }),
   })
   if (!res.ok) throw new Error(`Failed to start actor (${res.status})`)
@@ -74,14 +88,14 @@ export async function startReelScraper(usernames, resultsLimit = 30) {
 }
 
 export async function getRun(runId) {
-  const res = await fetch(`${PROXY}/run-status/${runId}`)
+  const res = await fetch(`${PROXY}/run-status/${runId}`, { headers: await workerHeaders() })
   if (!res.ok) throw new Error(`Failed to get run (${res.status})`)
   const { data } = await res.json()
   return data
 }
 
 export async function getDatasetItems(datasetId) {
-  const res = await fetch(`${PROXY}/dataset/${datasetId}`)
+  const res = await fetch(`${PROXY}/dataset/${datasetId}`, { headers: await workerHeaders() })
   if (!res.ok) throw new Error(`Failed to fetch dataset (${res.status})`)
   return res.json()
 }
@@ -89,10 +103,14 @@ export async function getDatasetItems(datasetId) {
 // Poll with backoff: 3s → 5s → 8s → 10s (cap)
 const POLL_DELAYS = [3000, 5000, 8000, 10000]
 
-export async function pollUntilDone(run) {
+export async function pollUntilDone(run, { timeoutMs = 300000 } = {}) {
   let runData = run
   let attempt = 0
+  const deadline = Date.now() + timeoutMs
   while (runData.status === 'READY' || runData.status === 'RUNNING') {
+    if (Date.now() >= deadline) {
+      throw new Error(`Apify run timed out after ${Math.round(timeoutMs / 1000)}s`)
+    }
     const delay = POLL_DELAYS[Math.min(attempt, POLL_DELAYS.length - 1)]
     await new Promise((r) => setTimeout(r, delay))
     attempt++
@@ -114,7 +132,10 @@ export async function fetchBatchStats(usernames, onProgress) {
     chunks.push(usernames.slice(i, i + CHUNK))
   }
 
-  await Promise.all(chunks.map(async (chunk) => {
+  // Use allSettled so a single failed chunk does not throw away the results of
+  // chunks that already succeeded (each chunk is a separate paid Apify run).
+  const failed = []
+  const settled = await Promise.allSettled(chunks.map(async (chunk) => {
     const run = await startInstagramScraper(chunk, 10)
     const completed = await pollUntilDone(run)
     const items = await getDatasetItems(completed.defaultDatasetId)
@@ -144,6 +165,22 @@ export async function fetchBatchStats(usernames, onProgress) {
     done += chunk.length
     if (onProgress) onProgress(Math.min(done, usernames.length), usernames.length)
   }))
+
+  // Surface which usernames could not be fetched without discarding the
+  // succeeded (already-paid) results still present in statsMap.
+  settled.forEach((outcome, i) => {
+    if (outcome.status === 'rejected') {
+      failed.push(...chunks[i])
+      done += chunks[i].length
+      if (onProgress) onProgress(Math.min(done, usernames.length), usernames.length)
+      console.error(`fetchBatchStats: chunk failed for ${chunks[i].join(', ')}:`, outcome.reason)
+    }
+  })
+
+  // Attach the failed usernames as a non-enumerable property so existing
+  // callers that iterate the map (e.g. Object.entries) are unaffected, while
+  // callers that care about partial failure can read statsMap._failed.
+  Object.defineProperty(statsMap, '_failed', { value: failed, enumerable: false })
 
   return statsMap
 }

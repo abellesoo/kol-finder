@@ -2,14 +2,22 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
+import { mergeReviewEntry } from '../lib/reviewState'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
 async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignBrief }) {
+  // The worker now requires a Supabase Bearer token on every endpoint.
+  const headers = { 'Content-Type': 'application/json' }
+  if (supabase) {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    if (token) headers['Authorization'] = `Bearer ${token}`
+  }
   const res = await fetch(`${PROXY}/draft-dm`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ username, bio, hashtags, sampleCaptions, campaignBrief }),
   })
   if (!res.ok) {
@@ -134,17 +142,24 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
   const [notesSaving, setNotesSaving] = useState(false)
   const notesTimerRef = useRef(null)
+  const draftTimerRef = useRef(null)
+  // Refs mirror the latest local values so async callbacks (draft generation)
+  // don't overwrite notes/draft the user typed while a request was in flight.
+  const localNotesRef = useRef(localNotes)
+  const localDraftRef = useRef(localDraft)
 
-  useEffect(() => { setLocalDraft(dmDraft) }, [dmDraft])
-  useEffect(() => { setLocalNotes(reviewEntry?.notes || '') }, [reviewEntry?.notes])
+  useEffect(() => { setLocalDraft(dmDraft); localDraftRef.current = dmDraft }, [dmDraft])
+  useEffect(() => { setLocalNotes(reviewEntry?.notes || ''); localNotesRef.current = reviewEntry?.notes || '' }, [reviewEntry?.notes])
 
-  // Helper so every onUpdate call includes the full current entry
+  // Helper so every onUpdate call includes the full current entry (from refs,
+  // never a stale closure).
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraft, notes: localNotes, ...overrides,
+    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current, ...overrides,
   })
 
   const handleNotesChange = (val) => {
     setLocalNotes(val)
+    localNotesRef.current = val
     setNotesSaving(true)
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => {
@@ -153,8 +168,16 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
     }, 800)
   }
 
-  const handleApprove = async () => {
-    onUpdate(account.username, entry({ status: 'approved' }))
+  const handleDraftChange = (val) => {
+    setLocalDraft(val)
+    localDraftRef.current = val
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      onUpdate(account.username, entry({ status: 'approved', dm_draft: val }))
+    }, 800)
+  }
+
+  const generateDraft = async () => {
     setDrafting(true)
     setDraftError(null)
     try {
@@ -166,6 +189,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         campaignBrief,
       })
       setLocalDraft(draft)
+      localDraftRef.current = draft
       onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
     } catch (err) {
       setDraftError(err.message)
@@ -174,8 +198,19 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
     }
   }
 
+  const handleApprove = () => {
+    onUpdate(account.username, entry({ status: 'approved' }))
+    generateDraft()
+  }
+
   const handleReject = () => {
     onUpdate(account.username, entry({ status: 'rejected' }))
+  }
+
+  // Undo returns to the pending state — it must NOT flip to the opposite
+  // decision (which previously also fired a paid DM draft).
+  const handleUndo = () => {
+    onUpdate(account.username, entry({ status: 'pending' }))
   }
 
   const isPending = status === 'pending'
@@ -233,13 +268,13 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
           {isApproved && !drafting && (
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
-              <button onClick={handleReject} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
+              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
             </div>
           )}
           {isRejected && (
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
-              <button onClick={handleApprove} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
+              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
             </div>
           )}
         </div>
@@ -308,22 +343,28 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
               <Loader2 size={13} className="animate-spin" /> Generating DM draft…
             </div>
           )}
-          {draftError && (
-            <p className="text-[11px] text-rose mb-3">Draft failed: {draftError}</p>
+          {draftError && !drafting && (
+            <div className="flex items-center gap-3 mb-3">
+              <p className="text-[11px] text-rose">Draft failed: {draftError}</p>
+              <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Retry</button>
+            </div>
           )}
           {localDraft && !drafting && (
             <>
-              <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-2">DM Draft</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">DM Draft</p>
+                <button onClick={generateDraft} className="text-[10px] font-mono text-faint hover:text-ink transition-colors">Regenerate</button>
+              </div>
               <textarea
                 value={localDraft}
-                onChange={(e) => {
-                  setLocalDraft(e.target.value)
-                  onUpdate(account.username, entry({ status: 'approved', dm_draft: e.target.value }))
-                }}
+                onChange={(e) => handleDraftChange(e.target.value)}
                 rows={5}
                 className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
               />
             </>
+          )}
+          {!localDraft && !drafting && !draftError && (
+            <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Generate DM draft</button>
           )}
         </div>
       )}
@@ -342,16 +383,20 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
   const [notesSaving, setNotesSaving] = useState(false)
   const notesTimerRef = useRef(null)
+  const draftTimerRef = useRef(null)
+  const localNotesRef = useRef(localNotes)
+  const localDraftRef = useRef(localDraft)
 
-  useEffect(() => { setLocalDraft(dmDraft) }, [dmDraft])
-  useEffect(() => { setLocalNotes(reviewEntry?.notes || '') }, [reviewEntry?.notes])
+  useEffect(() => { setLocalDraft(dmDraft); localDraftRef.current = dmDraft }, [dmDraft])
+  useEffect(() => { setLocalNotes(reviewEntry?.notes || ''); localNotesRef.current = reviewEntry?.notes || '' }, [reviewEntry?.notes])
 
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraft, notes: localNotes, ...overrides,
+    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current, ...overrides,
   })
 
   const handleNotesChange = (val) => {
     setLocalNotes(val)
+    localNotesRef.current = val
     setNotesSaving(true)
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => {
@@ -360,10 +405,16 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
     }, 800)
   }
 
-  const handleApprove = async (e) => {
-    e.stopPropagation()
-    setExpanded(true)
-    onUpdate(account.username, entry({ status: 'approved' }))
+  const handleDraftChange = (val) => {
+    setLocalDraft(val)
+    localDraftRef.current = val
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      onUpdate(account.username, entry({ status: 'approved', dm_draft: val }))
+    }, 800)
+  }
+
+  const generateDraft = async () => {
     setDrafting(true)
     setDraftError(null)
     try {
@@ -375,12 +426,20 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
         campaignBrief,
       })
       setLocalDraft(draft)
+      localDraftRef.current = draft
       onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
     } catch (err) {
       setDraftError(err.message)
     } finally {
       setDrafting(false)
     }
+  }
+
+  const handleApprove = (e) => {
+    e.stopPropagation()
+    setExpanded(true)
+    onUpdate(account.username, entry({ status: 'approved' }))
+    generateDraft()
   }
 
   const handleReject = (e) => {
@@ -511,20 +570,28 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
                     <Loader2 size={13} className="animate-spin" /> Generating DM draft…
                   </div>
                 )}
-                {draftError && <p className="text-[11px] text-rose">Draft failed: {draftError}</p>}
+                {draftError && !drafting && (
+                  <div className="flex items-center gap-3">
+                    <p className="text-[11px] text-rose">Draft failed: {draftError}</p>
+                    <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Retry</button>
+                  </div>
+                )}
                 {localDraft && !drafting && (
                   <>
-                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1">DM Draft</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em]">DM Draft</p>
+                      <button onClick={generateDraft} className="text-[10px] font-mono text-faint hover:text-ink transition-colors">Regenerate</button>
+                    </div>
                     <textarea
                       value={localDraft}
-                      onChange={(e) => {
-                        setLocalDraft(e.target.value)
-                        onUpdate(account.username, entry({ status: 'approved', dm_draft: e.target.value }))
-                      }}
+                      onChange={(e) => handleDraftChange(e.target.value)}
                       rows={4}
                       className="w-full px-3 py-2 border border-card-edge rounded-[10px] text-[12px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
                     />
                   </>
+                )}
+                {!localDraft && !drafting && !draftError && (
+                  <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Generate DM draft</button>
                 )}
               </div>
             )}
@@ -596,15 +663,22 @@ export default function ReviewPage({ reviewId, onBack }) {
     load()
   }, [reviewId])
 
-  const persistUpdate = useCallback(async (newState) => {
-    reviewStateRef.current = newState
+  const persistUpdate = useCallback(async (username, entry) => {
     setSaving(true)
     try {
-      // Always preserve notes when writing review_state
-      const { error } = await supabase.from('shared_results')
-        .update({ review_state: { ...newState, __notes__: bmNotesRef.current } })
-        .eq('id', reviewId)
-      if (error) throw new Error(error.message)
+      // Per-account merge (server-side when the RPC is deployed) so concurrent
+      // reviewers editing *other* accounts are never clobbered.
+      const merged = await mergeReviewEntry(reviewId, username, entry)
+      // Reconcile local state with authoritative server state so others'
+      // concurrent edits appear here instead of being silently lost. Guard:
+      // only trust the map if it actually contains the account we just wrote —
+      // otherwise keep the optimistic local state rather than wiping it.
+      if (merged && merged[username]) {
+        const { __notes__, ...accountState } = merged
+        reviewStateRef.current = accountState
+        if (typeof __notes__ === 'string') bmNotesRef.current = __notes__
+        setReviewState(accountState)
+      }
     } catch (e) {
       console.error('Failed to persist review state', e)
     } finally {
@@ -633,11 +707,10 @@ export default function ReviewPage({ reviewId, onBack }) {
   }, [briefDraft, campaignBrief, reviewId])
 
   const handleUpdate = useCallback((username, entry) => {
-    setReviewState((prev) => {
-      const next = { ...prev, [username]: entry }
-      persistUpdate(next)
-      return next
-    })
+    // Optimistic local update for snappy UI; persistUpdate reconciles with the
+    // merged server state (picking up other reviewers' concurrent changes).
+    setReviewState((prev) => ({ ...prev, [username]: entry }))
+    persistUpdate(username, entry)
   }, [persistUpdate])
 
   if (loading) {

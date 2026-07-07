@@ -57,14 +57,19 @@ export function aggregatePostItems(rows, brandName = '') {
     const posts = inf.posts
     const n = posts.length
 
-    // Engagement — hidden likes (likesCount === -1) treated as 0, not excluded
-    const totalLikes = posts.reduce((s, p) => {
+    // Engagement — hidden likes (likesCount === -1 / null) are EXCLUDED from the
+    // average, not counted as 0, so a few hidden posts don't deflate avgLikes.
+    const visibleLikePosts = posts.filter((p) => {
       const v = Number(p.likesCount)
-      return s + (isNaN(v) || v < 0 ? 0 : v)
-    }, 0)
-    const totalComments = posts.reduce((s, p) => s + (Number(p.commentsCount) || 0), 0)
-    const avgLikes = Math.round(totalLikes / n)
-    const avgComments = Math.round(totalComments / n)
+      return !isNaN(v) && v >= 0
+    })
+    const totalLikes = visibleLikePosts.reduce((s, p) => s + Number(p.likesCount), 0)
+    const avgLikes = visibleLikePosts.length ? Math.round(totalLikes / visibleLikePosts.length) : 0
+
+    // Comments — likewise exclude hidden/negative counts (a -1 would subtract).
+    const visibleCommentPosts = posts.filter((p) => Number(p.commentsCount) >= 0)
+    const totalComments = visibleCommentPosts.reduce((s, p) => s + Number(p.commentsCount), 0)
+    const avgComments = visibleCommentPosts.length ? Math.round(totalComments / visibleCommentPosts.length) : 0
 
     // Follower count — take first non-zero value across posts
     const followerCount =
@@ -99,11 +104,11 @@ export function aggregatePostItems(rows, brandName = '') {
       (p) => p['paidPartnership'] === true || p['paidPartnership'] === 'TRUE'
     ).length
 
-    // Export-derived median stats (no date filter; user controls period in Apify)
-    const xlsxLikeValues = posts.map((p) => {
-      const v = Number(p['likesCount'])
-      return isNaN(v) || v < 0 ? 0 : v
-    })
+    // Export-derived median stats (no date filter; user controls period in Apify).
+    // Hidden/invalid likes are EXCLUDED from the median rather than counted as 0.
+    const xlsxLikeValues = posts
+      .map((p) => Number(p['likesCount']))
+      .filter((v) => !isNaN(v) && v >= 0)
     const xlsxViewValues = posts.map(getVideoViews).filter((v) => v > 0)
     const xlsxHiddenCount = posts.filter(
       (p) => p['likesCount'] === -1 || p['likesCount'] == null
@@ -246,7 +251,7 @@ export function parseApifyXlsx(file, brandName = null) {
         reject(err)
       }
     }
-    reader.onerror = reject
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file?.name || 'unknown'}`))
     reader.readAsArrayBuffer(file)
   })
 }

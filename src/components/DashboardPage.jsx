@@ -19,7 +19,7 @@ function KpiCard({ label, value, sub }) {
   )
 }
 
-export default function DashboardPage({ onNavigate }) {
+export default function DashboardPage({ onNavigate, onOpenReview }) {
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState([])
@@ -56,7 +56,7 @@ export default function DashboardPage({ onNavigate }) {
     const accounts = c.accounts || []
     accounts.forEach((a) => {
       const entry = rs[a.username]
-      if (!entry?.status) {
+      if (!entry?.status || entry.status === 'pending') {
         pendingReview++
       } else if (entry.status === 'approved') {
         approved++
@@ -167,9 +167,11 @@ export default function DashboardPage({ onNavigate }) {
               const accounts = c.accounts || []
               const total = accounts.length
               const approvedCount = accounts.filter((a) => rs[a.username]?.status === 'approved').length
-              const pendingCount = accounts.filter((a) => !rs[a.username]?.status).length
+              const pendingCount = accounts.filter((a) => {
+                const s = rs[a.username]?.status
+                return !s || s === 'pending'
+              }).length
               const brief = c.campaign_brief || '—'
-              const url = `${window.location.pathname}?review=${c.id}&view=assistant`
 
               return (
                 <div
@@ -183,13 +185,13 @@ export default function DashboardPage({ onNavigate }) {
                   <span className="font-mono text-[13px] text-sage font-medium">{approvedCount}</span>
                   <span className="font-mono text-[13px] text-faint">{pendingCount}</span>
                   <span className="font-mono text-[11.5px] text-faint">{formatDate(c.created_at)}</span>
-                  <a
-                    href={url}
+                  <button
+                    onClick={() => (onOpenReview ? onOpenReview(c.id) : onNavigate?.('review_queue'))}
                     className="flex items-center justify-center text-[#C2BAA8] hover:text-ink transition-colors"
                     title="View results"
                   >
                     <ArrowRight size={14} />
-                  </a>
+                  </button>
                 </div>
               )
             })}

@@ -16,7 +16,8 @@ export async function saveSession({ fileNames, config, results, influencers }) {
   }
 
   if (supabase) {
-    await supabase.from('sessions').insert(session)
+    const { error } = await supabase.from('sessions').insert(session)
+    if (error) throw error
   } else {
     try {
       const existing = loadLocalHistory()
@@ -41,11 +42,12 @@ export async function updateSessionLiveStats(id, statsMap) {
 
 export async function loadHistory() {
   if (supabase) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sessions')
       .select('id, file_names, account_count, config, created_at')
       .order('created_at', { ascending: false })
       .limit(MAX_SESSIONS)
+    if (error) throw error
     return (data || []).map(normalizeRow)
   }
   return loadLocalHistory()
@@ -65,9 +67,12 @@ export async function loadSessionFull(id) {
 
 export async function updateSessionTitle(id, title) {
   if (supabase) {
-    const { data } = await supabase.from('sessions').select('config').eq('id', id).single()
-    const config = { ...(data?.config || {}), sessionTitle: title || undefined }
-    await supabase.from('sessions').update({ config }).eq('id', id)
+    const { data, error } = await supabase.from('sessions').select('config').eq('id', id).single()
+    if (error) throw error
+    if (!data) throw new Error(`Session ${id} not found`)
+    const config = { ...(data.config || {}), sessionTitle: title || undefined }
+    const { error: updateError } = await supabase.from('sessions').update({ config }).eq('id', id)
+    if (updateError) throw updateError
   } else {
     try {
       const updated = loadLocalHistory().map((s) =>
@@ -80,7 +85,8 @@ export async function updateSessionTitle(id, title) {
 
 export async function deleteSession(id) {
   if (supabase) {
-    await supabase.from('sessions').delete().eq('id', id)
+    const { error } = await supabase.from('sessions').delete().eq('id', id)
+    if (error) throw error
   } else {
     try {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(loadLocalHistory().filter((s) => s.id !== id)))

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
+import { mergeReviewEntry } from '../lib/reviewState'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
@@ -142,12 +143,8 @@ export default function ReadyToSendPage() {
         : i
     ))
     try {
-      const { data: row } = await supabase.from('shared_results').select('review_state').eq('id', item.rowId).single()
-      const newState = {
-        ...(row?.review_state || {}),
-        [item.username]: { ...item.reviewEntry, dm_status: newStatus },
-      }
-      await supabase.from('shared_results').update({ review_state: newState }).eq('id', item.rowId)
+      // Per-account merge so we don't clobber concurrent edits to other accounts.
+      await mergeReviewEntry(item.rowId, item.username, { ...item.reviewEntry, dm_status: newStatus })
     } catch (e) {
       console.error('Failed to update dm_status', e)
     }

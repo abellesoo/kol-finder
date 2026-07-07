@@ -37,21 +37,41 @@ jobs:
 
   deploy-worker:
     runs-on: ubuntu-latest
+    # Only deploy the worker if the frontend built + deployed successfully, so a
+    # failed build can't leave the new auth-required worker live against an old
+    # frontend that sends no token (which would 401 every request).
+    needs: build-and-deploy
+    # Protected environment gate — create "worker-production" under repo
+    # Settings → Environments and add required reviewers so a worker deploy
+    # (which touches paid Apify/DeepSeek keys) can't run unreviewed.
+    environment:
+      name: worker-production
     steps:
       - uses: actions/checkout@v4
       - name: Deploy Cloudflare Worker
-        run: npx wrangler@latest deploy
+        run: npx wrangler@3 deploy
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      - name: Sync Supabase JWT secret into Worker secret
+        run: |
+          if [ -n "$SUPABASE_JWT_SECRET" ]; then
+            echo "$SUPABASE_JWT_SECRET" | npx wrangler@3 secret put SUPABASE_JWT_SECRET
+          else
+            echo "::warning::SUPABASE_JWT_SECRET repo secret not set — skipping sync. The worker requires it and will fail closed until it is set."
+          fi
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
       - name: Sync Apify key into Worker secret
-        run: echo "$APIFY_API_KEY" | npx wrangler@latest secret put APIFY_API_KEY
+        run: echo "$APIFY_API_KEY" | npx wrangler@3 secret put APIFY_API_KEY
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           APIFY_API_KEY: ${{ secrets.APIFY_API_KEY }}
       - name: Sync DeepSeek key into Worker secret
-        run: echo "$DEEPSEEK_API_KEY" | npx wrangler@latest secret put DEEPSEEK_API_KEY
+        run: echo "$DEEPSEEK_API_KEY" | npx wrangler@3 secret put DEEPSEEK_API_KEY
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

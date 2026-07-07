@@ -8,6 +8,7 @@ export const EXPORT_COLUMNS = [
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
   { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
   { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => live?.medianViews ?? '' },
+  { id: 'live_median_comments', label: 'median_comments', getValue: (r, inf, live) => live?.medianComments ?? '' },
   { id: 'approve',           label: 'Approve Yes/No',     getValue: (r, inf, live, rs)      => rs?.status === 'approved' ? 'Yes' : rs?.status === 'rejected' ? 'No' : '' },
   { id: 'reachout_status',   label: 'Reach-out Status',   getValue: ()                      => 'Not sent' },
   { id: 'remarks',           label: 'Remarks',            getValue: ()                      => '' },
@@ -51,6 +52,13 @@ const REACHOUT_COLORS = {
   'Shipped':                 'FF8E7CC3',
   'no reply after follow-up':'FFD9D2E9',
   'Not sent':                'FF434343',
+}
+
+// Guard against CSV/formula injection: prefix any string starting with a
+// formula/control character so spreadsheet apps treat it as literal text.
+function sanitizeCell(v) {
+  if (typeof v !== 'string') return v
+  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
 }
 
 function colIndexToLetter(n) {
@@ -106,7 +114,7 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
     const inf = map[r.username] || {}
     const live = liveStats[r.username]
     const rs = reviewState[r.username]
-    ws.addRow(cols.map((c) => c.getValue(r, inf, live, rs)))
+    ws.addRow(cols.map((c) => sanitizeCell(c.getValue(r, inf, live, rs))))
   })
 
   // Style header row

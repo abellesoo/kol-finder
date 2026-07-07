@@ -11,7 +11,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div style={{ padding: 32, fontFamily: 'monospace', color: 'red' }}>
           <strong>Runtime error:</strong>
-          <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{this.state.error?.message}\n{this.state.error?.stack}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>{`${this.state.error?.message}\n${this.state.error?.stack}`}</pre>
         </div>
       )
     }

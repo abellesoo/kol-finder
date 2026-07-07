@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send } from 'lucide-react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
@@ -160,6 +160,7 @@ function MainApp({ user, role, onSignOut }) {
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
   const [currentSessionId, setCurrentSessionId] = useState(null)
+  const startingRef = useRef(false)
 
   const handleLoadSeederSession = (session) => {
     setFileNames(session.fileNames)
@@ -176,9 +177,15 @@ function MainApp({ user, role, onSignOut }) {
     for (const batch of batches) {
       for (const inf of batch) {
         const existing = merged[inf.username]
-        if (!existing || inf.totalEngagement > existing.totalEngagement) {
-          merged[inf.username] = inf
-        }
+        // Prefer the record built from more posts (richer data) rather than the
+        // one with higher engagement, so we don't drop the batch that actually
+        // saw more of this account. NOTE: aggregates can't be losslessly merged
+        // here — a full cross-batch merge would need re-aggregating raw rows.
+        const better =
+          !existing ||
+          inf.postCount > existing.postCount ||
+          (inf.postCount === existing.postCount && inf.totalEngagement > existing.totalEngagement)
+        if (better) merged[inf.username] = inf
       }
     }
     return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
@@ -215,6 +222,9 @@ function MainApp({ user, role, onSignOut }) {
   }
 
   const handleStart = async (cfg) => {
+    // Guard against a double-click starting two scoring runs (and two sessions).
+    if (startingRef.current) return
+    startingRef.current = true
     setConfig(cfg)
     setStep('scoring')
     setProgress({ done: 0, total: influencers.length, error: null })
@@ -238,14 +248,22 @@ function MainApp({ user, role, onSignOut }) {
         .catch(console.error)
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
+    } finally {
+      startingRef.current = false
     }
   }
 
   const pct = progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0
 
   const handleNav = (newMode) => {
+    // Enforce role-based nav gating here too, so links like the dashboard
+    // empty-state button can't route a brand_manager into a restricted view.
+    if (newMode !== 'review_detail') {
+      const allowed = new Set(navGroupsForRole(role).flatMap((g) => g.items.map((i) => i.id)))
+      if (!allowed.has(newMode)) return
+      setOpenReviewId(null)
+    }
     setMode(newMode)
-    if (newMode !== 'review_detail') setOpenReviewId(null)
   }
 
   const handleOpenReview = (id) => {
@@ -257,7 +275,7 @@ function MainApp({ user, role, onSignOut }) {
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
-        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} />}
+        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} onOpenReview={handleOpenReview} />}
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && role === 'admin' && <TeamPage />}
         {mode === 'review_queue' && (

@@ -444,6 +444,10 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   })
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
   const [liveError, setLiveError] = useState(null)
+  // True once a live fetch completes in THIS session — lets us flag when the
+  // shown medians came only from the shared (possibly stale) local cache.
+  const [fetchedThisSession, setFetchedThisSession] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const infMap = useMemo(() => {
     const m = {}
@@ -453,6 +457,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
 
   const enriched = useMemo(() => {
     return results.map((r) => {
+      const inf = infMap[r.username]
       const live = liveStats[r.username]
       const hasLive = live && (live.medianLikes != null || live.medianViews != null)
       const engScore = hasLive
@@ -460,12 +465,18 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         : (r.scores?.engagement ?? 0)
       const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
       return {
-        ...r, ...infMap[r.username],
+        ...r, ...inf,
         scores: { ...r.scores, engagement: engScore },
         overall,
-        medianLikes: live?.medianLikes ?? r.xlsxMedianLikes ?? null,
-        medianViews: live?.medianViews ?? r.xlsxMedianViews ?? null,
+        // xlsx medians live on the influencer record (inf), not the result (r).
+        medianLikes: live?.medianLikes ?? inf?.xlsxMedianLikes ?? null,
+        medianViews: live?.medianViews ?? inf?.xlsxMedianViews ?? null,
         medianComments: live?.medianComments ?? null,
+        // Live-only values so sorting matches the live median columns, which
+        // display live data only (not the hidden xlsx-median fallback).
+        liveMedianLikes: live?.medianLikes ?? null,
+        liveMedianViews: live?.medianViews ?? null,
+        liveMedianComments: live?.medianComments ?? null,
       }
     })
   }, [results, infMap, liveStats])
@@ -478,9 +489,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         sortKey === 'overall'             ? r.overall
         : sortKey === 'relevancy'         ? (r.scores?.relevancy ?? 0)
         : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
-        : sortKey === 'live_median_likes' ? (r.medianLikes ?? -1)
-        : sortKey === 'live_median_views'    ? (r.medianViews ?? -1)
-        : sortKey === 'live_median_comments' ? (r.medianComments ?? -1)
+        : sortKey === 'live_median_likes' ? (r.liveMedianLikes ?? -1)
+        : sortKey === 'live_median_views'    ? (r.liveMedianViews ?? -1)
+        : sortKey === 'live_median_comments' ? (r.liveMedianComments ?? -1)
         : r.overall
       list = [...list].sort((a, b) =>
         sortDir === 'desc' ? getVal(b) - getVal(a) : getVal(a) - getVal(b)
@@ -519,7 +530,19 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) updated[u] = { stats, ts: Date.now() }
       }
       writeCache(updated)
-      setLiveStats((prev) => ({ ...prev, ...statsMap }))
+      // Merge with the same guard as the cache: never let an empty/failed
+      // re-scrape overwrite live stats we already have in memory.
+      setLiveStats((prev) => {
+        const next = { ...prev }
+        for (const [u, stats] of Object.entries(statsMap)) {
+          if (hasRealData(stats) || !hasRealData(next[u])) next[u] = stats
+        }
+        return next
+      })
+      setFetchedThisSession(true)
+      // fetchBatchStats attaches failed usernames as a non-enumerable _failed.
+      const failed = statsMap._failed || []
+      setLiveError(failed.length ? `${failed.length} account(s) couldn't be fetched — others updated.` : null)
       setLiveStatus('done')
       updateSessionLiveStats(sessionIdRef.current, statsMap).catch(console.error)
     } catch (err) {
@@ -527,6 +550,23 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       setLiveStatus('error')
     }
   }, [])
+
+  const handleExport = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const exportIds = [
+        ...ALWAYS_EXPORT_IDS,
+        ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
+      ]
+      await exportToCsv(filtered, influencers, exportIds, liveStats, reviewState)
+    } catch (e) {
+      console.error('Export failed', e)
+      alert('Export failed: ' + (e?.message || 'unknown error'))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const handleToggleSelect = (username) => {
     setSelectedAccounts((prev) => {
@@ -655,15 +695,22 @@ export default function ResultsStep({ results, influencers, config, sessionId })
               Fetching {liveProgress.done}/{liveProgress.total}
             </div>
           ) : liveStatus === 'error' ? (
-            <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+            // Retry does NOT force — accounts already fetched (cached with real
+            // data) are skipped so we don't re-pay for them.
+            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-[10px] text-[13px] hover:bg-rose/5 transition-all">
               <RefreshCw size={14} /> Retry
             </button>
           ) : liveStatus === 'done' ? (
-            <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
-              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
-              <RefreshCw size={14} /> Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              {!fetchedThisSession && (
+                <span className="text-[11px] font-mono text-faint" title="Shown from local cache — click Refresh to fetch fresh data">cached</span>
+              )}
+              <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+                className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
           ) : (
             <button onClick={() => handleFetchLive(results.map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
@@ -672,16 +719,12 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           )}
 
           <button
-            onClick={() => {
-              const exportIds = [
-                ...ALWAYS_EXPORT_IDS,
-                ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
-              ]
-              exportToCsv(filtered, influencers, exportIds, liveStats, reviewState).catch(console.error)
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all disabled:opacity-50"
           >
-            <Download size={14} /> Export XLSX
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {exporting ? 'Exporting…' : 'Export XLSX'}
           </button>
         </div>
       </div>

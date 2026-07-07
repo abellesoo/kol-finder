@@ -1,7 +1,6 @@
 import { supabase } from './supabase'
 
 const LOCAL_KEY = 'kol_session_history'
-const MAX_SESSIONS = 20
 
 // ── Supabase-backed session history (shared across all users) ──────────────
 
@@ -21,7 +20,7 @@ export async function saveSession({ fileNames, config, results, influencers }) {
   } else {
     try {
       const existing = loadLocalHistory()
-      localStorage.setItem(LOCAL_KEY, JSON.stringify([session, ...existing].slice(0, MAX_SESSIONS)))
+      localStorage.setItem(LOCAL_KEY, JSON.stringify([session, ...existing]))
     } catch {}
   }
   return session.id
@@ -46,7 +45,6 @@ export async function loadHistory() {
       .from('sessions')
       .select('id, file_names, account_count, config, created_at')
       .order('created_at', { ascending: false })
-      .limit(MAX_SESSIONS)
     if (error) throw error
     return (data || []).map(normalizeRow)
   }

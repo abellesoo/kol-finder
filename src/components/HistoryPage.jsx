@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight } from 'lucide-react'
+import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight, AlertTriangle } from 'lucide-react'
 import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle } from '../lib/sessionHistory'
 
 function formatDate(iso) {
@@ -24,6 +24,8 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
   const [loadingId, setLoadingId] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editingTitle, setEditingTitle] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -43,6 +45,15 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
   useEffect(() => {
     if (editingId && inputRef.current) inputRef.current.focus()
   }, [editingId])
+
+  useEffect(() => {
+    if (!deleteTarget) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setDeleteTarget(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [deleteTarget])
 
   const startEdit = (e, session) => {
     e.stopPropagation()
@@ -80,20 +91,24 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
     if (e.key === 'Escape') cancelEdit(e)
   }
 
-  const handleDeleteSession = async (e, id) => {
+  const requestDeleteSession = (e, session) => {
     e.stopPropagation()
-    if (
-      !window.confirm(
-        'Delete this session permanently? This affects the whole team — everyone loses access to it and it cannot be undone.'
-      )
-    )
-      return
+    setDeleteTarget(session)
+  }
+
+  const confirmDeleteSession = async () => {
+    if (!deleteTarget) return
+    const id = deleteTarget.id
+    setDeleting(true)
     try {
       await deleteSession(id)
       setSessions((prev) => prev.filter((s) => s.id !== id))
+      setDeleteTarget(null)
     } catch (err) {
       console.error('Failed to delete session', err)
       window.alert('Failed to delete session. Please try again.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -216,7 +231,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
                     </button>
                   )}
                   <button
-                    onClick={(e) => handleDeleteSession(e, session.id)}
+                    onClick={(e) => requestDeleteSession(e, session)}
                     className="text-faint hover:text-rose transition-colors"
                     title="Delete session"
                   >
@@ -228,6 +243,44 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
           </div>
         )}
       </section>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
+          onClick={() => !deleting && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-[380px] bg-white rounded-[16px] shadow-xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-rose/10 mb-4">
+              <AlertTriangle size={18} className="text-rose" />
+            </div>
+            <h2 className="text-[16px] font-semibold text-ink mb-1.5">Delete this session?</h2>
+            <p className="text-[13px] text-muted mb-6 leading-relaxed">
+              {`"${deleteTarget.config?.sessionTitle || `${deleteTarget.accountCount} accounts`}"`} will be permanently
+              deleted for the whole team. This cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-ink hover:bg-surface transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteSession}
+                disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-rose text-white text-[13px] font-medium hover:bg-rose/90 transition-colors disabled:opacity-60"
+              >
+                {deleting && <Loader2 size={13} className="animate-spin" />}
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

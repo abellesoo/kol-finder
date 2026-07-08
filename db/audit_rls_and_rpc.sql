@@ -46,6 +46,14 @@ as $$ select coalesce((auth.jwt() ->> 'email') like '%@markato.com', false) $$;
 -- ── users ───────────────────────────────────────────────────────────────────
 alter table public.users enable row level security;
 
+-- Drop the legacy ad-hoc policies from before this migration existed. There
+-- was no UPDATE or DELETE policy at all under the old names, so role changes
+-- from the Team page were silently failing (0 rows updated, no error) — the
+-- same failure mode as the shared_results delete bug below.
+drop policy if exists "Users can insert their own row" on public.users;
+drop policy if exists "team can view all users" on public.users;
+drop policy if exists "Users can read their own row" on public.users;
+
 drop policy if exists users_select_self_or_admin on public.users;
 create policy users_select_self_or_admin on public.users
   for select using (id = auth.uid() or public.is_admin());
@@ -71,12 +79,35 @@ create policy users_delete_admin on public.users
 -- ── sessions (team-shared) ───────────────────────────────────────────────────
 alter table public.sessions enable row level security;
 
+-- Drop the legacy ad-hoc policies from before this migration existed. These
+-- gated on `authenticated` only (any logged-in Supabase user), not on the
+-- @markato.com email check — replaced below with the is_markato()-gated
+-- policy for defense-in-depth against the OAuth hosted-domain restriction.
+drop policy if exists "team can manage sessions" on public.sessions;
+drop policy if exists "all users delete sessions" on public.sessions;
+drop policy if exists "all users insert sessions" on public.sessions;
+drop policy if exists "all users read sessions" on public.sessions;
+drop policy if exists "all users update sessions" on public.sessions;
+
 drop policy if exists sessions_team_all on public.sessions;
 create policy sessions_team_all on public.sessions
   for all using (public.is_markato()) with check (public.is_markato());
 
 -- ── shared_results (team-shared) ─────────────────────────────────────────────
 alter table public.shared_results enable row level security;
+
+-- Drop the legacy ad-hoc policies from before this migration existed. These
+-- granted the `anon` role unconditional read/insert/update (qual = true) —
+-- i.e. anyone with the public anon key could read or write every campaign
+-- without logging in — and had NO delete policy at all, which is why deletes
+-- silently matched 0 rows (Postgres denies a command outright when no policy
+-- covers it, without raising an error).
+drop policy if exists anon_select on public.shared_results;
+drop policy if exists anon_insert on public.shared_results;
+drop policy if exists anon_update on public.shared_results;
+drop policy if exists "Anyone can read shared results" on public.shared_results;
+drop policy if exists "Authenticated users can insert" on public.shared_results;
+drop policy if exists "Authenticated users can update" on public.shared_results;
 
 drop policy if exists shared_results_team_all on public.shared_results;
 create policy shared_results_team_all on public.shared_results

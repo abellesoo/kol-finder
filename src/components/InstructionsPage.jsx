@@ -136,7 +136,7 @@ export default function InstructionsPage() {
             {
               n: 2,
               title: 'Define your brief',
-              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Optionally write a <strong>Campaign brief</strong> — a sentence or two on your campaign goal, target audience, and tone. The brief is used later to generate campaign-specific AI verdicts.</>,
+              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Also write a <strong>Campaign brief</strong> — it's used later to generate each approved account's personalised DM draft, so it works best filled in with five structured fields: brand name, brand background, new product (+ where it's sold, + hook), collab format, and per-product selling points. DeepSeek only ever uses what's written here — it won't invent ingredients, numbers, or claims. Click <strong>"How to fill this in →"</strong> on the Configure screen for the full guide and a filled-in example.</>,
             },
             {
               n: 3,
@@ -177,7 +177,7 @@ export default function InstructionsPage() {
       <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
         <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-3">Important — costs</p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
-          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM tracking all run at no cost. Only two actions call a paid API:
+          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM status tracking all run at no cost. Three actions call a paid API:
         </p>
         <div className="space-y-2 mt-3">
           <div className="flex gap-3">
@@ -187,6 +187,10 @@ export default function InstructionsPage() {
           <div className="flex gap-3">
             <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Fetch Live Stats</span>
             <p className="text-[13px] text-body leading-relaxed">Apify batch scrape — approximately <strong>$0.01 per account</strong>. A run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-running the same dataset won't re-charge for already-fetched accounts.</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Generate DM draft</span>
+            <p className="text-[13px] text-body leading-relaxed">DeepSeek chat API — cost is negligible, a small fraction of a cent per draft.</p>
           </div>
         </div>
       </div>

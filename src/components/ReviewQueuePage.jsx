@@ -56,10 +56,14 @@ export default function ReviewQueuePage({ onOpenReview }) {
     if (!deleteTarget) return
     const { id, campaign_brief } = deleteTarget
     setDeleting(true)
-    const { error: deleteError } = await supabase.from('shared_results').delete().eq('id', id)
+    const { data, error: deleteError } = await supabase.from('shared_results').delete().eq('id', id).select('id')
     setDeleting(false)
     if (deleteError) {
       setToast({ type: 'error', message: deleteError.message || 'Failed to delete campaign' })
+      return
+    }
+    if (!data || data.length === 0) {
+      setToast({ type: 'error', message: 'Delete was blocked (0 rows removed) — check Supabase permissions' })
       return
     }
     setRows((prev) => prev.filter((r) => r.id !== id))

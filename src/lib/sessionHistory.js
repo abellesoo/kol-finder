@@ -83,8 +83,11 @@ export async function updateSessionTitle(id, title) {
 
 export async function deleteSession(id) {
   if (supabase) {
-    const { error } = await supabase.from('sessions').delete().eq('id', id)
+    const { data, error } = await supabase.from('sessions').delete().eq('id', id).select('id')
     if (error) throw error
+    if (!data || data.length === 0) {
+      throw new Error('Delete was blocked (0 rows removed) — check Supabase permissions for the sessions table')
+    }
   } else {
     try {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(loadLocalHistory().filter((s) => s.id !== id)))

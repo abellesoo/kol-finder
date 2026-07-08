@@ -10,6 +10,46 @@ const NICHE_OPTIONS = [
   { id: 'food', label: '🍜 Food & Dining' },
 ]
 
+const BRIEF_GUIDE = `點樣填 Campaign Brief
+─────────────────────
+DM 入面所有品牌／產品資料都只會用你喺度填嘅內容——DeepSeek 唔會自己作成分或數字。
+所以產品 block 需要嘅嘢，一定要喺度寫齊。跟住以下五行填：
+
+品牌：（品牌名，例：Wellage 唯拉珠）
+      ↳ 自我介紹會自動變成「我係 [品牌] 嘅 Marketing」，唔使自己寫成個句
+品牌背景：（母公司或品牌定位，一句，例：韓國醫美大廠 Hugel 旗下品牌）
+新品：（系列／產品名 + 上架渠道 + 一句主打賣點，
+      例：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮）
+合作形式：（例：寄產品體驗，Feed／Reels feature 都可以）
+產品詳情：（每件產品：名稱 + 兩個賣點；成分／濃度／數字照官方寫。可以一件或多件）
+【產品一名稱】
+・賣點 1
+・賣點 2
+【產品二名稱】
+・賣點 1
+・賣點 2
+
+─────────────────────
+填寫範例（可以照呢個 shape 抄）：
+
+品牌：Wellage 唯拉珠
+品牌背景：韓國醫美大廠 Hugel 旗下品牌
+新品：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮
+合作形式：寄產品體驗，Feed／Reels feature 都可以
+產品詳情：
+【Wellage 唯拉珠 維C高效亮白七日套裝】
+・醫美等級濃度 30% 生維 C ✕ 純穀胱甘肽，改善暗啞及膚色不均
+・即開即用高濃度維他命 C 膠囊，減低氧化，發揮亮白效果
+【Wellage 唯拉珠 維C高效亮白安瓶精華】
+・美白針同款穀胱甘肽，5 秒內透光，2 周打造水光肌
+・蘊含 100% 高親膚純淨穀胱甘肽，令純維他命 C 長效發揮作用
+
+─────────────────────
+三個提示：
+1. 賣點冇寫入 Brief 就唔會出現喺 DM（防止作大成分／功效）。
+2. 美白／醫美級字眼照官方 listing 原文寫，唔好自己加大——香港《商品說明條例》有風險。
+3. 個人化開場靠 KOL 自己嘅 IG 內容自動生成，唔使你喺 Brief 度寫。`
+
 function StepProgress({ current }) {
   const steps = [
     { num: 1, label: 'Get Data' },
@@ -42,6 +82,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
   const [requireVideo, setRequireVideo] = useState(true)
   const [minEngagement, setMinEngagement] = useState(0)
   const [campaignBrief, setCampaignBrief] = useState('')
+  const [showBriefGuide, setShowBriefGuide] = useState(false)
 
   const toggleNiche = (id) => {
     setNiches((prev) =>
@@ -181,9 +222,21 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
             Campaign brief
             <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">optional · used for DM generation</span>
           </label>
-          <p className="text-[12px] text-faint mb-3">
+          <p className="text-[12px] text-faint mb-2">
             Describe the brand aesthetic, campaign goals, and content style you're looking for. Used to generate personalised DM drafts for approved accounts.
           </p>
+          <button
+            type="button"
+            onClick={() => setShowBriefGuide((v) => !v)}
+            className="text-[12px] text-accent hover:text-accent/70 transition-colors mb-3 underline underline-offset-2"
+          >
+            {showBriefGuide ? 'Hide guide' : 'How to fill this in →'}
+          </button>
+          {showBriefGuide && (
+            <div className="mb-3 px-4 py-3.5 bg-surface border border-card-edge rounded-[12px] text-[12.5px] text-body whitespace-pre-wrap leading-relaxed font-mono">
+              {BRIEF_GUIDE}
+            </div>
+          )}
           <textarea
             value={campaignBrief}
             onChange={(e) => setCampaignBrief(e.target.value)}

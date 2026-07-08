@@ -125,20 +125,49 @@ export async function pollUntilDone(run, { timeoutMs = 300000 } = {}) {
 export async function fetchBatchStats(usernames, onProgress) {
   const CHUNK = 50
   const statsMap = {}
+  const failed = []
   let done = 0
+  const total = usernames.length
 
-  const chunks = []
-  for (let i = 0; i < usernames.length; i += CHUNK) {
-    chunks.push(usernames.slice(i, i + CHUNK))
+  const reportProgress = (n) => {
+    done += n
+    if (onProgress) onProgress(Math.min(done, total), total)
   }
 
-  // Use allSettled so a single failed chunk does not throw away the results of
-  // chunks that already succeeded (each chunk is a separate paid Apify run).
-  const failed = []
-  const settled = await Promise.allSettled(chunks.map(async (chunk) => {
-    const run = await startInstagramScraper(chunk, 10)
-    const completed = await pollUntilDone(run)
-    const items = await getDatasetItems(completed.defaultDatasetId)
+  // Run one Apify actor call for a batch of usernames. Apify persists
+  // whatever it scraped before an error into the run's dataset even when the
+  // run's final status isn't SUCCEEDED (e.g. one private/unscrapable account
+  // trips an abort) — that data has already been paid for, so read it
+  // regardless of status instead of discarding the whole run. Each username
+  // is then judged individually against what's actually in the dataset: this
+  // isolates a bad account for free, with no extra Apify runs. Bisection
+  // retry only kicks in as a last resort, when the run couldn't even be
+  // started/reached at all (so there's no dataset to recover from).
+  async function fetchBatch(batch) {
+    let completed
+    try {
+      const run = await startInstagramScraper(batch, 10)
+      try {
+        completed = await pollUntilDone(run)
+      } catch {
+        completed = run // non-SUCCEEDED or our poll timed out — recover what's there
+      }
+    } catch (err) {
+      if (batch.length === 1) {
+        failed.push(batch[0])
+        reportProgress(1)
+        console.error(`fetchBatchStats: failed to start run for ${batch[0]}:`, err)
+        return
+      }
+      const mid = Math.ceil(batch.length / 2)
+      await Promise.allSettled([
+        fetchBatch(batch.slice(0, mid)),
+        fetchBatch(batch.slice(mid)),
+      ])
+      return
+    }
+
+    const items = completed.defaultDatasetId ? await getDatasetItems(completed.defaultDatasetId) : []
 
     const followerMap = {}
     const byUser = {}
@@ -156,26 +185,23 @@ export async function fetchBatchStats(usernames, onProgress) {
       byUser[u].push(item)
     }
 
-    for (const username of chunk) {
-      const stats = computeStats(byUser[username] || [])
-      if (followerMap[username] != null) stats.followerCount = followerMap[username]
-      statsMap[username] = stats
+    for (const username of batch) {
+      if (byUser[username] || followerMap[username] != null) {
+        const stats = computeStats(byUser[username] || [])
+        if (followerMap[username] != null) stats.followerCount = followerMap[username]
+        statsMap[username] = stats
+      } else {
+        failed.push(username)
+      }
     }
+    reportProgress(batch.length)
+  }
 
-    done += chunk.length
-    if (onProgress) onProgress(Math.min(done, usernames.length), usernames.length)
-  }))
-
-  // Surface which usernames could not be fetched without discarding the
-  // succeeded (already-paid) results still present in statsMap.
-  settled.forEach((outcome, i) => {
-    if (outcome.status === 'rejected') {
-      failed.push(...chunks[i])
-      done += chunks[i].length
-      if (onProgress) onProgress(Math.min(done, usernames.length), usernames.length)
-      console.error(`fetchBatchStats: chunk failed for ${chunks[i].join(', ')}:`, outcome.reason)
-    }
-  })
+  const chunks = []
+  for (let i = 0; i < usernames.length; i += CHUNK) {
+    chunks.push(usernames.slice(i, i + CHUNK))
+  }
+  await Promise.allSettled(chunks.map((chunk) => fetchBatch(chunk)))
 
   // Attach the failed usernames as a non-enumerable property so existing
   // callers that iterate the map (e.g. Object.entries) are unaffected, while

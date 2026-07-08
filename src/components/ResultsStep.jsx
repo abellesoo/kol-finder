@@ -542,7 +542,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       setFetchedThisSession(true)
       // fetchBatchStats attaches failed usernames as a non-enumerable _failed.
       const failed = statsMap._failed || []
-      setLiveError(failed.length ? `${failed.length} account(s) couldn't be fetched — others updated.` : null)
+      setLiveError(failed.length ? `${failed.length} account(s) couldn't be fetched — others updated. Click Refresh to retry just those.` : null)
       setLiveStatus('done')
       updateSessionLiveStats(sessionIdRef.current, statsMap).catch(console.error)
     } catch (err) {
@@ -738,8 +738,10 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         </div>
       </div>
 
-      {liveStatus === 'error' && (
-        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Live fetch failed: {liveError}</div>
+      {liveError && (
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">
+          {liveStatus === 'error' ? `Live fetch failed: ${liveError}` : liveError}
+        </div>
       )}
       {shareStatus === 'error' && (
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Failed to send for review. Check your Supabase env vars.</div>

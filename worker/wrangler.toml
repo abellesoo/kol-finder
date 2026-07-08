@@ -1,3 +1,8 @@
 name = "kol-finder-proxy"
 main = "worker.js"
 compatibility_date = "2024-11-01"
+
+# Public value (already shipped in the client bundle as VITE_SUPABASE_URL) —
+# used to fetch Supabase's JWKS for verifying ES256-signed auth tokens.
+[vars]
+SUPABASE_URL = "https://hfhiunlqburusuwysyyr.supabase.co"

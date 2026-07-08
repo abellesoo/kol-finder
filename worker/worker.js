@@ -19,7 +19,7 @@ function json(data, status, origin) {
   })
 }
 
-// --- Supabase JWT auth (HS256, dependency-free via Web Crypto) ---
+// --- Supabase JWT auth (HS256 or ES256, dependency-free via Web Crypto) ---
 
 // Decode a base64url string into raw bytes.
 function base64UrlToBytes(b64url) {
@@ -36,25 +36,66 @@ function base64UrlToString(b64url) {
   return new TextDecoder().decode(base64UrlToBytes(b64url))
 }
 
-// Verify a Supabase-issued HS256 JWT: signature + expiry + basic claims.
-// Returns the decoded payload on success, or null on any failure.
-async function verifyJwt(token, secret) {
+// Supabase's newer projects sign session tokens with an asymmetric key
+// (ES256) rather than the legacy shared HS256 secret. Verifying ES256 needs
+// the public key, published at the project's JWKS endpoint. Cache it for a
+// bit so we're not fetching it on every single request.
+let jwksCache = null
+let jwksCacheAt = 0
+const JWKS_TTL_MS = 10 * 60 * 1000
+
+async function getJwks(supabaseUrl) {
+  if (jwksCache && Date.now() - jwksCacheAt < JWKS_TTL_MS) return jwksCache
+  const res = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`)
+  if (!res.ok) throw new Error(`Failed to fetch Supabase JWKS (${res.status})`)
+  const { keys } = await res.json()
+  jwksCache = keys
+  jwksCacheAt = Date.now()
+  return keys
+}
+
+// Verify a Supabase-issued JWT: signature + expiry + basic claims. Supports
+// both the legacy HS256 shared-secret model and the newer ES256/JWKS model,
+// since Supabase projects can be on either depending on when they were
+// created. Returns the decoded payload on success, or null on any failure.
+async function verifyJwt(token, env) {
   const parts = token.split('.')
   if (parts.length !== 3) return null
   const [headerB64, payloadB64, signatureB64] = parts
   try {
     const header = JSON.parse(base64UrlToString(headerB64))
-    if (header.alg !== 'HS256') return null // reject alg:none and other algs
-
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify'],
-    )
     const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`)
-    const valid = await crypto.subtle.verify('HMAC', key, base64UrlToBytes(signatureB64), data)
+    const signature = base64UrlToBytes(signatureB64)
+
+    let valid = false
+    if (header.alg === 'HS256') {
+      if (!env.SUPABASE_JWT_SECRET) return null
+      const key = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(env.SUPABASE_JWT_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['verify'],
+      )
+      valid = await crypto.subtle.verify('HMAC', key, signature, data)
+    } else if (header.alg === 'ES256') {
+      if (!env.SUPABASE_URL) return null
+      const keys = await getJwks(env.SUPABASE_URL)
+      const jwk = keys.find((k) => k.kid === header.kid)
+      if (!jwk) return null
+      const key = await crypto.subtle.importKey(
+        'jwk',
+        jwk,
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,
+        ['verify'],
+      )
+      // JOSE ES256 signatures are raw r||s (64 bytes) — exactly what Web
+      // Crypto's ECDSA verify expects, no DER conversion needed.
+      valid = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, signature, data)
+    } else {
+      return null // reject alg:none and anything else unexpected
+    }
     if (!valid) return null
 
     const payload = JSON.parse(base64UrlToString(payloadB64))
@@ -71,13 +112,12 @@ async function verifyJwt(token, secret) {
 
 // Guard for data/action endpoints. Returns null when the request is authorised,
 // or a ready-to-send Response (with CORS headers) describing the failure.
-// Fails CLOSED: a missing secret rejects rather than allowing open access.
+// Fails CLOSED: missing config rejects rather than allowing open access.
 async function verifyAuth(request, env) {
   const origin = request.headers.get('Origin') || ''
-  const secret = env.SUPABASE_JWT_SECRET
-  if (!secret) {
+  if (!env.SUPABASE_JWT_SECRET && !env.SUPABASE_URL) {
     return json(
-      { error: 'SUPABASE_JWT_SECRET not configured in Worker secrets — set it to enable authentication' },
+      { error: 'Worker auth not configured — set SUPABASE_URL and/or SUPABASE_JWT_SECRET in Worker vars/secrets' },
       500,
       origin,
     )
@@ -87,7 +127,7 @@ async function verifyAuth(request, env) {
   if (!match) {
     return json({ error: 'Missing or malformed Authorization header (expected "Bearer <token>")' }, 401, origin)
   }
-  const payload = await verifyJwt(match[1].trim(), secret)
+  const payload = await verifyJwt(match[1].trim(), env)
   if (!payload) {
     return json({ error: 'Invalid or expired token' }, 401, origin)
   }

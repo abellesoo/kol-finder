@@ -7,6 +7,56 @@ import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
+// Structured rejection reasons — these become labeled training signal for the
+// AI fit score (a bare "rejected" is ambiguous; "off-niche" vs "already
+// contacted" teach very different lessons). Keep the values stable: they are
+// persisted in review_state and read back by the AI scorer.
+const REJECT_REASONS = [
+  { value: 'off_niche', label: 'Off-niche / wrong category' },
+  { value: 'audience_mismatch', label: 'Audience mismatch' },
+  { value: 'content_quality', label: 'Content quality' },
+  { value: 'too_small', label: 'Too small / low engagement' },
+  { value: 'bot_risk', label: 'Bot / fake engagement' },
+  { value: 'already_contacted', label: 'Already contacted / worked with' },
+  { value: 'other', label: 'Other' },
+]
+
+// Compact reason picker shown after a reject so categorising stays optional and
+// never blocks the one-click reject.
+function RejectReasonSelect({ value, onChange }) {
+  return (
+    <select
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value || null)}
+      onClick={(e) => e.stopPropagation()}
+      className="text-[11px] font-mono text-body bg-white border border-card-edge rounded-[7px] px-2 py-1 focus:outline-none focus:border-ink/30 cursor-pointer"
+    >
+      <option value="">Reason…</option>
+      {REJECT_REASONS.map((r) => (
+        <option key={r.value} value={r.value}>{r.label}</option>
+      ))}
+    </select>
+  )
+}
+
+// 1–5 fit rating shown on approvals — lets the AI learn "great fit" vs "just
+// acceptable" instead of treating every approval as equally strong.
+function FitRating({ value, onChange }) {
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()} title="How strong a fit? (feeds AI scoring)">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          onClick={() => onChange(value === n ? null : n)}
+          className={`text-[13px] leading-none transition-colors ${n <= (value || 0) ? 'text-accent' : 'text-mist hover:text-faint'}`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  )
+}
+
 async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignBrief }) {
   // The worker now requires a Supabase Bearer token on every endpoint.
   const headers = { 'Content-Type': 'application/json' }
@@ -51,6 +101,7 @@ const TABLE_ROW_COLS = {
   overall:               { label: 'Score',      min: '72px',  center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
   relevancy_score:       { label: 'Relevancy',  min: '100px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
   engagement_score:      { label: 'Eng. Score', min: '100px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
+  ai_fit:                { label: 'AI Fit',      min: '72px',  center: true, render: (a) => a.aiScore != null ? <div className="flex justify-center"><ScoreBadge score={a.aiScore} /></div> : <span className="font-mono text-xs text-ink/30">—</span> },
   account_location:      { label: 'Location',   min: '80px',  render: (a) => <span className="font-mono text-xs text-body">{a.accountLocation || '—'}</span> },
   follower_count:        { label: 'Followers',  min: '80px',  render: (a) => <span className="font-mono text-xs text-ink">{a.followerCount != null ? a.followerCount.toLocaleString() : '—'}</span> },
   niche_signals:         { label: 'Niches',     min: '100px', flex: 2, render: (a) => <div className="flex flex-wrap gap-1">{(a.nicheSignals || []).slice(0, 2).map(t => <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>)}</div> },
@@ -135,6 +186,8 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
   const dmDraft = reviewEntry?.dm_draft || ''
+  const rejectReason = reviewEntry?.reject_reason || null
+  const fitRating = reviewEntry?.fit_rating || null
 
   const [drafting, setDrafting] = useState(false)
   const [draftError, setDraftError] = useState(null)
@@ -154,7 +207,8 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   // Helper so every onUpdate call includes the full current entry (from refs,
   // never a stale closure).
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current, ...overrides,
+    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current,
+    reject_reason: rejectReason, fit_rating: fitRating, ...overrides,
   })
 
   const handleNotesChange = (val) => {
@@ -266,15 +320,21 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
             </div>
           )}
           {isApproved && !drafting && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
-              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
+                <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
+              </div>
+              <FitRating value={fitRating} onChange={(r) => onUpdate(account.username, entry({ fit_rating: r }))} />
             </div>
           )}
           {isRejected && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
-              <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
+                <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
+              </div>
+              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(account.username, entry({ reject_reason: r }))} />
             </div>
           )}
         </div>
@@ -286,6 +346,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         {col('follower_count') && account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
         {col('relevancy_score') && account.scores?.relevancy != null && <span>Relevancy {account.scores.relevancy}/10</span>}
         {col('engagement_score') && account.scores?.engagement != null && <span>Eng score {account.scores.engagement}/10</span>}
+        {col('ai_fit') && account.aiScore != null && <span title={account.aiReason || ''}>AI fit {account.aiScore}/100</span>}
         {col('niche_signals') && account.nicheSignals?.length > 0 && (
           <span>{account.nicheSignals.slice(0, 3).join(' · ')}</span>
         )}
@@ -376,6 +437,8 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
   const dmDraft = reviewEntry?.dm_draft || ''
+  const rejectReason = reviewEntry?.reject_reason || null
+  const fitRating = reviewEntry?.fit_rating || null
   const [expanded, setExpanded] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [draftError, setDraftError] = useState(null)
@@ -391,7 +454,8 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   useEffect(() => { setLocalNotes(reviewEntry?.notes || ''); localNotesRef.current = reviewEntry?.notes || '' }, [reviewEntry?.notes])
 
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current, ...overrides,
+    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current,
+    reject_reason: rejectReason, fit_rating: fitRating, ...overrides,
   })
 
   const handleNotesChange = (val) => {
@@ -441,6 +505,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
     onUpdate(account.username, entry({ status: 'approved' }))
     generateDraft()
   }
+
 
   const handleReject = (e) => {
     e.stopPropagation()
@@ -505,13 +570,15 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
             </>
           )}
           {isApproved && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <FitRating value={fitRating} onChange={(r) => onUpdate(account.username, entry({ fit_rating: r }))} />
               <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
               <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
             </div>
           )}
           {isRejected && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(account.username, entry({ reject_reason: r }))} />
               <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
               <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
             </div>
@@ -630,6 +697,10 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [editingBrief, setEditingBrief] = useState(false)
   const [briefDraft, setBriefDraft] = useState('')
   const briefInputRef = useRef(null)
+  const [criteria, setCriteria] = useState('')
+  const [editingCriteria, setEditingCriteria] = useState(false)
+  const [criteriaDraft, setCriteriaDraft] = useState('')
+  const criteriaInputRef = useRef(null)
   const [viewMode, setViewMode] = useState(null)
   // Refs so persistUpdate can always read latest values without stale closures
   const bmNotesRef = useRef('')
@@ -649,10 +720,14 @@ export default function ReviewPage({ reviewId, onBack }) {
       }
       const accs = data.accounts || []
       const rs = data.review_state || {}
-      // Notes are stored inside review_state under __notes__ to avoid schema changes
+      // Campaign-level values live in review_state under reserved __keys__ (same
+      // pattern as __notes__) so no schema migration is needed.
       const notes = typeof rs.__notes__ === 'string' ? rs.__notes__ : ''
-      const accountState = Object.fromEntries(Object.entries(rs).filter(([k]) => k !== '__notes__'))
+      const crit = typeof rs.__criteria__ === 'string' ? rs.__criteria__ : ''
+      const RESERVED = new Set(['__notes__', '__criteria__'])
+      const accountState = Object.fromEntries(Object.entries(rs).filter(([k]) => !RESERVED.has(k)))
       setCampaignBrief(data.campaign_brief || '')
+      setCriteria(crit)
       setAccounts(accs)
       setReviewState(accountState)
       reviewStateRef.current = accountState
@@ -674,9 +749,10 @@ export default function ReviewPage({ reviewId, onBack }) {
       // only trust the map if it actually contains the account we just wrote —
       // otherwise keep the optimistic local state rather than wiping it.
       if (merged && merged[username]) {
-        const { __notes__, ...accountState } = merged
+        const { __notes__, __criteria__, ...accountState } = merged
         reviewStateRef.current = accountState
         if (typeof __notes__ === 'string') bmNotesRef.current = __notes__
+        if (typeof __criteria__ === 'string') setCriteria(__criteria__)
         setReviewState(accountState)
       }
     } catch (e) {
@@ -705,6 +781,29 @@ export default function ReviewPage({ reviewId, onBack }) {
       console.error('Failed to save campaign brief', e)
     }
   }, [briefDraft, campaignBrief, reviewId])
+
+  const startEditCriteria = () => {
+    setCriteriaDraft(criteria)
+    setEditingCriteria(true)
+    setTimeout(() => criteriaInputRef.current?.focus(), 0)
+  }
+
+  const cancelEditCriteria = () => setEditingCriteria(false)
+
+  // Criteria lives in review_state.__criteria__ — persisted via the same
+  // atomic merge helper as per-account entries (a bare string is valid jsonb),
+  // so it can't clobber concurrent per-account edits.
+  const commitCriteria = useCallback(async () => {
+    const trimmed = criteriaDraft.trim()
+    setEditingCriteria(false)
+    if (trimmed === criteria) return
+    setCriteria(trimmed)
+    try {
+      await mergeReviewEntry(reviewId, '__criteria__', trimmed)
+    } catch (e) {
+      console.error('Failed to save seeding criteria', e)
+    }
+  }, [criteriaDraft, criteria, reviewId])
 
   const handleUpdate = useCallback((username, entry) => {
     // Optimistic local update for snappy UI; persistUpdate reconciles with the
@@ -821,6 +920,44 @@ export default function ReviewPage({ reviewId, onBack }) {
             </div>
           ) : (
             <p className="text-[13px] text-body whitespace-pre-wrap">{campaignBrief || <span className="text-faint italic">No brief — click pencil to add one</span>}</p>
+          )}
+        </div>
+
+        <div className="mt-3 px-4 py-3 bg-surface border border-card-edge rounded-[12px] group/criteria">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">Seeding criteria — what makes a good fit</p>
+            {!editingCriteria && (
+              <button
+                onClick={startEditCriteria}
+                className="text-faint hover:text-ink transition-colors opacity-0 group-hover/criteria:opacity-100"
+                title="Edit criteria"
+              >
+                <Pencil size={12} />
+              </button>
+            )}
+          </div>
+          {editingCriteria ? (
+            <div>
+              <textarea
+                ref={criteriaInputRef}
+                value={criteriaDraft}
+                onChange={(e) => setCriteriaDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') cancelEditCriteria() }}
+                rows={3}
+                placeholder="e.g. Genuine skincare enthusiasts who film real routines; HK-based; authentic engagement over follower count; avoid accounts that only do paid hauls."
+                className="w-full text-[13px] text-ink bg-white border border-ink/30 rounded-[8px] px-3 py-2 focus:outline-none resize-none placeholder:text-faint"
+              />
+              <div className="flex gap-2 mt-2">
+                <button onClick={commitCriteria} className="flex items-center gap-1 px-3 py-1 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 transition-all">
+                  <Check size={12} /> Save
+                </button>
+                <button onClick={cancelEditCriteria} className="text-[12px] text-faint hover:text-ink transition-colors px-2">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[13px] text-body whitespace-pre-wrap">{criteria || <span className="text-faint italic">No criteria yet — describe what you're looking for so the AI can learn your taste</span>}</p>
           )}
         </div>
 

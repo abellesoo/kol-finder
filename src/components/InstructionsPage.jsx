@@ -92,10 +92,10 @@ export default function InstructionsPage() {
           Bring in accounts two ways: upload an Apify <strong>.xlsx</strong> export, or paste competitor post URLs and hashtags directly and let the tool trigger the scrape. Either way, accounts are deduplicated, scored across Engagement and Relevancy, and surfaced in a ranked table ready to filter and shortlist.
         </p>
         <p className="text-body leading-relaxed mb-3">
-          From the Results table, move approved accounts into the <strong>Review Queue</strong> for your team to assess, then into <strong>Ready to Send</strong> where you can track DM status per account and coordinate outreach without double-sending.
+          From the Results table, move approved accounts into the <strong>Review Queue</strong> for your team to assess, then into <strong>Ready to Send</strong> where you can track DM status per account and coordinate outreach without double-sending. In the Review Queue, brand managers categorise why an account was rejected, rate the fit of approvals, and set the campaign's seeding criteria — this structured feedback is what the <strong>AI Fit</strong> score learns from over time.
         </p>
         <p className="text-body leading-relaxed">
-          All scoring is deterministic arithmetic in your browser. Live stats (Apify) are the only opt-in paid feature — everything else runs locally with no external calls.
+          The rule-based Engagement and Relevancy scoring is deterministic arithmetic in your browser with no external calls. Three features are opt-in and call a paid API: Live Stats and direct scraping (Apify), and AI Fit scoring plus DM drafts (DeepSeek) — see the cost breakdown below.
         </p>
       </div>
 
@@ -141,12 +141,12 @@ export default function InstructionsPage() {
             {
               n: 3,
               title: 'Score & enrich',
-              text: <>Click <strong>Start scoring</strong> to rank every account by Engagement and Relevancy — computed instantly in your browser, no external calls. Then click <strong>Fetch Live Stats</strong> on the Results screen to pull real-time median likes, views, and comments from Apify, upgrading scores with fresher data. Live stats cost ~$0.01/account and are cached for 7 days.</>,
+              text: <>Click <strong>Start scoring</strong> to rank every account by Engagement and Relevancy — computed instantly in your browser, no external calls. Then click <strong>Fetch Live Stats</strong> on the Results screen to pull real-time median likes, views, and comments from Apify, upgrading scores with fresher data. Live stats cost ~$0.01/account and are cached for 7 days. Optionally click <strong>Score fit with AI</strong> to add an AI Fit column that rates each account against your brief and your team's past review decisions — advisory unless you tick <strong>Blend into Overall</strong>.</>,
             },
             {
               n: 4,
               title: 'Review & shortlist',
-              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see the scoring verdict, niche signals, top hashtags, and flags.</>,
+              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see the scoring verdict, AI Fit reasoning, niche signals, top hashtags, and flags.</>,
             },
             {
               n: 5,
@@ -177,7 +177,7 @@ export default function InstructionsPage() {
       <div className="mb-10 px-5 py-4 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px]">
         <p className="font-mono text-[9.5px] tracking-[.16em] text-[#8A6A22] uppercase mb-3">Important — costs</p>
         <p className="text-[13px] text-body leading-relaxed mb-2">
-          Most of the tool is <strong>free</strong> — scoring, the Review Queue, Ready to Send, and DM status tracking all run at no cost. Three actions call a paid API:
+          Most of the tool is <strong>free</strong> — rule-based scoring, the Review Queue, Ready to Send, and DM status tracking all run at no cost. Four actions call a paid API:
         </p>
         <div className="space-y-2 mt-3">
           <div className="flex gap-3">
@@ -187,6 +187,10 @@ export default function InstructionsPage() {
           <div className="flex gap-3">
             <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Fetch Live Stats</span>
             <p className="text-[13px] text-body leading-relaxed">Apify batch scrape — approximately <strong>$0.01 per account</strong>. A run of 100–200 accounts costs around $1–2. Results are cached for 7 days, so re-running the same dataset won't re-charge for already-fetched accounts.</p>
+          </div>
+          <div className="flex gap-3">
+            <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Score fit with AI</span>
+            <p className="text-[13px] text-body leading-relaxed">DeepSeek chat API — one call per 15 accounts, with your past review decisions attached. Cost is negligible: well under $0.50 for a 200-account run.</p>
           </div>
           <div className="flex gap-3">
             <span className="font-mono text-[11px] text-[#8A6A22] w-28 shrink-0 pt-px">Generate DM draft</span>
@@ -203,9 +207,11 @@ export default function InstructionsPage() {
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body">
             <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 6 + Relevancy × 1 + (AI Fit ÷ 10) × 3 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (60% Eng / 10% Rel / 30% AI)</span></p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
             <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
+            <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–100 vs. brief + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
           </div>
         </div>
 
@@ -277,11 +283,36 @@ export default function InstructionsPage() {
             formula="based on comments ÷ likes ratio"
             description="Not included in the Overall Score — informational only. Measures authenticity using the comment-to-like ratio. Genuine engagement typically produces a ratio of 1–2%+. Rules: ratio < 0.5% with avg likes > 5,000 → score 2 (high bot risk); ratio < 1% with avg likes > 1,000 → score 4; ratio ≥ 2% → score 9; ratio ≥ 1% → score 7; otherwise score 5. Higher score = more authentic. Accounts scoring 2–3 are flagged as 'bot-risk' in the flags column."
           />
+          <ScoreRow
+            name="AI Fit Score"
+            range="0 – 100 · opt-in, advisory"
+            formula="DeepSeek rating vs. brief + seeding criteria + past decisions"
+            description={<>
+              <p className="mb-2">A learning layer on top of the deterministic scores. Click <strong>Score fit with AI</strong> on the Results screen and DeepSeek rates each account 0–100 for how well it fits <em>this</em> campaign, with a one-line reason (expand a row to read it).</p>
+              <div className="border border-card-edge rounded-[10px] bg-surface px-4 py-3 mb-3">
+                <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">How it actually learns — no trained model, no stored agent</p>
+                <p className="mb-2">There is <strong>no fine-tuned model and no agent that remembers things between runs.</strong> Nothing is written into model weights. The "learning" lives entirely in your data. Each time you click Score fit with AI, the app:</p>
+                <ol className="list-decimal ml-4 space-y-1 mb-2">
+                  <li>Pulls your team's <strong>~40 most recent approve/reject decisions</strong> from past campaigns in the database — each with its categorised rejection reason, 1–5 fit rating, and that account's bio, hashtags, niches, flags, and follower count.</li>
+                  <li>Sends those labeled examples <strong>plus</strong> the campaign brief and seeding criteria <strong>plus</strong> the accounts being scored to DeepSeek in a single prompt.</li>
+                  <li>DeepSeek reads the examples as context and imitates your demonstrated taste, weighing the criteria and brief first, then the patterns in what you've approved vs. rejected.</li>
+                </ol>
+                <p className="mb-2">Because it re-reads the latest decisions every run, it improves the moment your team logs more reviews — no training step, no waiting. The trade-offs: it looks at the <strong>most recent ~40 decisions</strong> (not your entire history forever — a token-budget limit), and it's matching demonstrated patterns, not tracking specific past "mistakes" with a correction signal. On a brand-new database with no decisions yet, it scores on the brief alone and stays deliberately moderate.</p>
+                <p className="text-[12px] text-faint">This is why <strong className="text-body">Phase 1 matters</strong>: the more consistently brand managers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
+              </div>
+              <p>By default it's <strong>advisory</strong> — shown in its own column but it does not move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>60% Engagement + 10% Relevancy + 30% AI Fit</strong> (Engagement × 6 + Relevancy × 1 + AI Fit ÷ 10 × 3).</p>
+            </>}
+          />
         </div>
 
         {/* Column guide */}
         <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Column guide</p>
         <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
+          <ScoreRow
+            name="AI Fit"
+            range="0 – 100 · opt-in"
+            description="DeepSeek's fit rating for this campaign, learned from your brief, seeding criteria, and past review decisions. Appears after Score fit with AI; expand a row for the reasoning. Advisory unless Blend into Overall is ticked."
+          />
           <ScoreRow
             name="Med. Likes"
             range="Live · from scrape"

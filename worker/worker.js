@@ -304,6 +304,110 @@ Hi dear,
       return json({ draft }, 200, origin)
     }
 
+    // POST /ai-score
+    // Rates a batch of candidate accounts 0–100 for campaign fit, learning from
+    // the team's own past approve/reject decisions (with reasons + fit ratings)
+    // plus the campaign brief and seeding criteria. Advisory only — the client
+    // decides whether to surface or blend the score.
+    // Body: { candidates: [{username, bio, hashtags, nicheSignals, flags,
+    //          followerCount, medianLikes, medianViews, overall}],
+    //          criteria, campaignBrief,
+    //          examples: [{status, reject_reason, fit_rating, bio, hashtags,
+    //          nicheSignals, flags, followerCount}] }
+    // Returns: { results: [{ username, fit_score, reason }] }
+    if (pathname === '/ai-score' && request.method === 'POST') {
+      const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
+      if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
+
+      const { candidates = [], criteria = '', campaignBrief = '', examples = [] } = await request.json()
+      if (!Array.isArray(candidates) || candidates.length === 0) {
+        return json({ error: 'candidates required' }, 400, origin)
+      }
+
+      const clean = (s) => String(s || '')
+        .replace(/[ --]/g, ' ')
+        .replace(/[\uD800-\uDFFF]/g, '')
+        .trim()
+      const tags = (arr) => (Array.isArray(arr) ? arr.slice(0, 8).map(clean).filter(Boolean).join(', ') : '')
+      const num = (n) => (n == null ? '?' : Number(n).toLocaleString('en-US'))
+
+      // Compact one-line-per-account encodings keep the token budget bounded.
+      const exampleLines = examples.slice(0, 40).map((e) => {
+        const verdict = e.status === 'approved'
+          ? `APPROVED${e.fit_rating ? ` (fit ${e.fit_rating}/5)` : ''}`
+          : `REJECTED${e.reject_reason ? ` (${e.reject_reason})` : ''}`
+        const note = clean(e.notes) ? ` | note: ${clean(e.notes).slice(0, 120)}` : ''
+        return `- ${verdict}: bio="${clean(e.bio).slice(0, 120)}"; niches=[${tags(e.nicheSignals)}]; hashtags=[${tags(e.hashtags)}]; flags=[${tags(e.flags)}]; ${num(e.followerCount)} followers${note}`
+      }).join('\n')
+
+      const candidateLines = candidates.map((c) => (
+        `@${clean(c.username)}: bio="${clean(c.bio).slice(0, 160)}"; niches=[${tags(c.nicheSignals)}]; hashtags=[${tags(c.hashtags)}]; flags=[${tags(c.flags)}]; ${num(c.followerCount)} followers; ~${num(c.medianLikes)} median likes; rule_score=${c.overall == null ? '?' : c.overall}`
+      )).join('\n')
+
+      const prompt = `You are an assistant helping a Hong Kong beauty/skincare brand's marketing team decide which Instagram KOLs fit a seeding campaign. Rate each candidate 0–100 for how well they fit THIS campaign.
+
+# Campaign brief
+${clean(campaignBrief) || '(none provided)'}
+
+# What the team is looking for (seeding criteria)
+${clean(criteria) || '(none provided)'}
+
+# The team's past decisions on similar accounts — LEARN their taste from these
+${exampleLines || '(no past decisions yet — rate on criteria + brief alone)'}
+
+# Candidates to rate now
+${candidateLines}
+
+# How to score
+- Weigh the seeding criteria and brief most heavily, then the patterns in past decisions (what they approved vs rejected, and why).
+- A high rule_score (engagement/relevancy) is a positive signal but NOT decisive — a niche/audience mismatch or a rejection-worthy pattern should pull the score down even if engagement is high.
+- If there are few or no past decisions, score on the criteria and brief; be moderate, don't over-confidently give extremes.
+- reason: ONE short English sentence (max ~15 words) explaining the score, referencing a concrete signal or a past-decision pattern when relevant.
+
+# Output
+Return ONLY valid JSON, no markdown, in exactly this shape:
+{"results":[{"username":"<exact username, no @>","fit_score":<integer 0-100>,"reason":"<one short sentence>"}]}
+Include every candidate exactly once.`
+
+      const res = await fetch(DEEPSEEK_API, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${DEEPSEEK_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: DEEPSEEK_MODEL,
+          max_tokens: 2048,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      })
+
+      if (!res.ok) {
+        const errBody = await res.text()
+        return json({ error: `DeepSeek error ${res.status}: ${errBody}` }, 502, origin)
+      }
+
+      const aiRes = await res.json()
+      const content = aiRes.choices?.[0]?.message?.content?.trim() || '{}'
+      let results = []
+      try {
+        const parsed = JSON.parse(content)
+        results = Array.isArray(parsed.results) ? parsed.results : []
+      } catch {
+        return json({ error: 'AI returned unparseable output', raw: content.slice(0, 500) }, 502, origin)
+      }
+      // Normalise: clamp scores, coerce types, drop malformed rows.
+      results = results
+        .filter((r) => r && r.username != null)
+        .map((r) => ({
+          username: String(r.username).replace(/^@/, ''),
+          fit_score: Math.max(0, Math.min(100, Math.round(Number(r.fit_score) || 0))),
+          reason: clean(r.reason).slice(0, 200),
+        }))
+      return json({ results }, 200, origin)
+    }
+
     return new Response('Not found', { status: 404, headers: corsHeaders(origin) })
   },
 }

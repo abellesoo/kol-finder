@@ -1,8 +1,9 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Send, Check, X } from 'lucide-react'
+import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Send, Check, X, Sparkles } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { fetchBatchStats } from '../lib/apifyApi'
+import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
 import { updateSessionLiveStats } from '../lib/sessionHistory'
 import { supabase } from '../lib/supabase'
@@ -39,6 +40,16 @@ const COLUMN_INFO = {
       '· ~4 = micro (~50 likes)',
       '· ~6–7 = mid-tier (~500–1k likes)',
       '· ~9–10 = large (10k+ likes)',
+    ],
+  },
+  ai_fit: {
+    title: 'AI Fit (0–100)',
+    lines: [
+      'DeepSeek rates each account against your campaign brief and your',
+      "team's own past approve/reject decisions (with reasons + ratings).",
+      'Advisory by default — it does not move the Overall score unless you',
+      'tick "Blend into Overall". Expand a row to see the reasoning.',
+      'Populated after you click "Score fit with AI".',
     ],
   },
   live_median_likes: {
@@ -195,7 +206,7 @@ function ColumnPicker({ selected, onChange }) {
 }
 
 
-function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
   // Extra leading column for checkbox when in selection mode
   const gridTemplate = selectionMode
@@ -226,6 +237,12 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           return <p className="font-mono text-sm text-ink">{r.accountLocation || '—'}</p>
         case 'engagement_score':
           return <MiniBar value={r.scores?.engagement ?? 0} color="bg-ink/50" />
+        case 'ai_fit': {
+          if (aiStatus === 'loading' && r.aiScore == null) return <Loader2 size={11} className="animate-spin text-faint" />
+          if (r.aiScore == null) return <p className="font-mono text-sm text-ink/30">—</p>
+          const cls = r.aiScore >= 70 ? 'score-high' : r.aiScore >= 45 ? 'score-mid' : 'score-low'
+          return <span className={`score-badge ${cls}`} title={r.aiReason || ''}>{r.aiScore}</span>
+        }
         case 'live_median_likes':
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
           if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
@@ -338,6 +355,12 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
               <div>
                 <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-2">Scoring Verdict</p>
                 <p className="text-body text-[12px] leading-relaxed">{r.verdict || '—'}</p>
+                {r.aiScore != null && (
+                  <div className="mt-3">
+                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1 flex items-center gap-1"><Sparkles size={10} /> AI Fit — {r.aiScore}/100</p>
+                    <p className="text-body text-[12px] leading-relaxed">{r.aiReason || '—'}</p>
+                  </div>
+                )}
               </div>
               <div>
                 {r.nicheSignals?.length > 0 && (
@@ -449,6 +472,23 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const [fetchedThisSession, setFetchedThisSession] = useState(false)
   const [exporting, setExporting] = useState(false)
 
+  // AI fit scoring (Phase 2) — advisory by default. { [username]: {score, reason} }
+  const [aiStats, setAiStats] = useState(() => {
+    const seed = {}
+    for (const r of results) {
+      if (r.aiScore != null) seed[r.username] = { score: r.aiScore, reason: r.aiReason || '' }
+    }
+    return seed
+  })
+  const [aiStatus, setAiStatus] = useState(() =>
+    results.some((r) => r.aiScore != null) ? 'done' : 'idle'
+  ) // idle | loading | done | error
+  const [aiProgress, setAiProgress] = useState({ done: 0, total: 0 })
+  const [aiError, setAiError] = useState(null)
+  // Phase 3: blend AI fit into Overall. OFF by default — turn on only after
+  // eyeballing the AI scores against a few real campaigns.
+  const [blendAi, setBlendAi] = useState(false)
+
   const infMap = useMemo(() => {
     const m = {}
     for (const inf of influencers) m[inf.username] = inf
@@ -459,15 +499,24 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     return results.map((r) => {
       const inf = infMap[r.username]
       const live = liveStats[r.username]
+      const ai = aiStats[r.username]
       const hasLive = live && (live.medianLikes != null || live.medianViews != null)
       const engScore = hasLive
         ? computeLiveEngagementScore(live.medianLikes, live.medianViews, live.medianComments)
         : (r.scores?.engagement ?? 0)
-      const overall = Math.round(engScore * 8 + (r.scores?.relevancy ?? 0) * 2)
+      const relScore = r.scores?.relevancy ?? 0
+      // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,
+      // reweight to 60% Engagement + 10% Relevancy + 30% AI fit:
+      // Eng×6 + Rel×1 + (AIfit÷10)×3 (each term 0–10 → total 0–100).
+      const overall = (blendAi && ai?.score != null)
+        ? Math.round(engScore * 6 + relScore * 1 + (ai.score / 10) * 3)
+        : Math.round(engScore * 8 + relScore * 2)
       return {
         ...r, ...inf,
         scores: { ...r.scores, engagement: engScore },
         overall,
+        aiScore: ai?.score ?? null,
+        aiReason: ai?.reason || '',
         // xlsx medians live on the influencer record (inf), not the result (r).
         medianLikes: live?.medianLikes ?? inf?.xlsxMedianLikes ?? null,
         medianViews: live?.medianViews ?? inf?.xlsxMedianViews ?? null,
@@ -479,7 +528,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         liveMedianComments: live?.medianComments ?? null,
       }
     })
-  }, [results, infMap, liveStats])
+  }, [results, infMap, liveStats, aiStats, blendAi])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
@@ -489,6 +538,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         sortKey === 'overall'             ? r.overall
         : sortKey === 'relevancy'         ? (r.scores?.relevancy ?? 0)
         : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
+        : sortKey === 'ai_fit'            ? (r.aiScore ?? -1)
         : sortKey === 'live_median_likes' ? (r.liveMedianLikes ?? -1)
         : sortKey === 'live_median_views'    ? (r.liveMedianViews ?? -1)
         : sortKey === 'live_median_comments' ? (r.liveMedianComments ?? -1)
@@ -551,6 +601,37 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     }
   }, [])
 
+  const handleScoreAi = useCallback(async () => {
+    setAiStatus('loading')
+    setAiError(null)
+    setAiProgress({ done: 0, total: enriched.length })
+    try {
+      const candidates = enriched.map((r) => ({
+        username: r.username,
+        bio: r.bio,
+        hashtags: r.hashtags,
+        nicheSignals: r.nicheSignals,
+        flags: r.flags,
+        followerCount: r.followerCount,
+        medianLikes: r.medianLikes,
+        medianViews: r.medianViews,
+        overall: r.overall,
+      }))
+      const scoreMap = await fetchAiScores(
+        candidates,
+        { campaignBrief: config?.campaignBrief || '' },
+        (done, total) => setAiProgress({ done, total }),
+      )
+      setAiStats((prev) => ({ ...prev, ...scoreMap }))
+      const failed = scoreMap._failed || []
+      setAiError(failed.length ? `${failed.length} account(s) couldn't be scored — others updated. Click Re-score to retry.` : null)
+      setAiStatus('done')
+    } catch (err) {
+      setAiError(err.message)
+      setAiStatus('error')
+    }
+  }, [enriched, config])
+
   const handleExport = async () => {
     if (exporting) return
     setExporting(true)
@@ -610,6 +691,8 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           medianLikes: r.medianLikes ?? null,
           medianViews: r.medianViews ?? null,
           medianComments: r.medianComments ?? null,
+          aiScore: r.aiScore ?? null,
+          aiReason: r.aiReason || '',
         }))
 
       const { error } = await supabase
@@ -718,6 +801,35 @@ export default function ResultsStep({ results, influencers, config, sessionId })
             </button>
           )}
 
+          {/* AI fit scoring — learns from past review decisions */}
+          {aiStatus === 'loading' ? (
+            <div className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-muted">
+              <Loader2 size={14} className="animate-spin" />
+              Scoring {aiProgress.done}/{aiProgress.total}
+            </div>
+          ) : aiStatus === 'error' ? (
+            <button onClick={handleScoreAi}
+              className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-[10px] text-[13px] hover:bg-rose/5 transition-all">
+              <Sparkles size={14} /> Retry AI scoring
+            </button>
+          ) : aiStatus === 'done' ? (
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-[11px] font-mono text-muted cursor-pointer select-none" title="Reweight Overall to 60% Engagement + 10% Relevancy + 30% AI fit (Eng×6 + Rel×1 + AI×3)">
+                <input type="checkbox" checked={blendAi} onChange={(e) => setBlendAi(e.target.checked)} className="w-3.5 h-3.5 accent-ink cursor-pointer" />
+                Blend into Overall
+              </label>
+              <button onClick={handleScoreAi}
+                className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
+                <Sparkles size={14} /> Re-score
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleScoreAi}
+              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
+              <Sparkles size={14} /> Score fit with AI
+            </button>
+          )}
+
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -743,6 +855,16 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           {liveStatus === 'error' ? `Live fetch failed: ${liveError}` : liveError}
         </div>
       )}
+      {aiError && (
+        <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">
+          {aiStatus === 'error' ? `AI scoring failed: ${aiError}` : aiError}
+        </div>
+      )}
+      {aiStatus === 'done' && !aiError && (
+        <div className="mb-4 px-4 py-3 bg-accent-dim/20 border border-accent/20 rounded-[12px] text-[12px] text-body">
+          AI fit scores are advisory — they learn from your team's past approve/reject decisions. Tick <strong>Blend into Overall</strong> above once you trust them to fold them into the ranking. Expand a row to see the reasoning.
+        </div>
+      )}
       {shareStatus === 'error' && (
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Failed to send for review. Check your Supabase env vars.</div>
       )}
@@ -764,6 +886,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           toggleSort={toggleSort}
           liveStats={liveStats}
           liveStatus={liveStatus}
+          aiStatus={aiStatus}
           reviewState={reviewState}
           selectedAccounts={selectedAccounts}
           onToggleSelect={handleToggleSelect}

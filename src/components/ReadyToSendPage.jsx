@@ -247,6 +247,14 @@ export default function ReadyToSendPage() {
                       </a>
                       {item.fullName && <p className="text-[12px] text-faint">{item.fullName}</p>}
                     </div>
+                    {item.accountData?.aiScore != null && (
+                      <span
+                        title={item.accountData.aiReason || ''}
+                        className="flex-shrink-0 font-mono text-[11px] text-body bg-white border border-card-edge rounded-[7px] px-2 py-1"
+                      >
+                        AI Fit {item.accountData.aiScore}
+                      </span>
+                    )}
                   </div>
 
                   {item.dm_draft ? (

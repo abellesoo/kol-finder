@@ -5,6 +5,7 @@ export const TABLE_COLUMNS = [
   { id: 'overall',               label: 'Overall',         width: '1fr', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
   { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
   { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
+  { id: 'ai_fit',                label: 'AI Fit',          width: '1fr', sortKey: 'ai_fit',       infoKey: 'ai_fit',           exportIds: ['ai_fit', 'ai_fit_reason'] },
   { id: 'account_location',      label: 'Location',        width: '1fr',                                                       exportIds: ['account_location'] },
   { id: 'follower_count',        label: 'Followers',       width: '1fr',                                                       exportIds: ['follower_count'] },
   { id: 'live_median_likes',     label: 'Med. Likes',      width: '1fr', sortKey: 'live_median_likes', infoKey: 'live_median_likes',  exportIds: ['live_median_likes'] },
@@ -19,7 +20,7 @@ export const TABLE_COLUMNS = [
 ]
 
 export const DEFAULT_SELECTED_COLUMNS = [
-  'brand', 'overall', 'relevancy_score', 'engagement_score',
+  'brand', 'overall', 'relevancy_score', 'engagement_score', 'ai_fit',
   'live_median_likes', 'live_median_views', 'live_median_comments',
   'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
 ]

@@ -43,7 +43,7 @@ const COLUMN_INFO = {
     ],
   },
   ai_fit: {
-    title: 'AI Fit (0–100)',
+    title: 'AI Fit (0–10)',
     lines: [
       'DeepSeek rates each account against your campaign brief and your',
       "team's own past approve/reject decisions (with reasons + ratings).",
@@ -240,8 +240,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         case 'ai_fit': {
           if (aiStatus === 'loading' && r.aiScore == null) return <Loader2 size={11} className="animate-spin text-faint" />
           if (r.aiScore == null) return <p className="font-mono text-sm text-ink/30">—</p>
-          const cls = r.aiScore >= 70 ? 'score-high' : r.aiScore >= 45 ? 'score-mid' : 'score-low'
-          return <span className={`score-badge ${cls}`} title={r.aiReason || ''}>{r.aiScore}</span>
+          return <span title={r.aiReason || ''}><MiniBar value={r.aiScore} color="bg-accent" /></span>
         }
         case 'live_median_likes':
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
@@ -357,7 +356,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
                 <p className="text-body text-[12px] leading-relaxed">{r.verdict || '—'}</p>
                 {r.aiScore != null && (
                   <div className="mt-3">
-                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1 flex items-center gap-1"><Sparkles size={10} /> AI Fit — {r.aiScore}/100</p>
+                    <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1 flex items-center gap-1"><Sparkles size={10} /> AI Fit — {r.aiScore}/10</p>
                     <p className="text-body text-[12px] leading-relaxed">{r.aiReason || '—'}</p>
                   </div>
                 )}
@@ -507,9 +506,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       const relScore = r.scores?.relevancy ?? 0
       // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,
       // reweight to 60% Engagement + 10% Relevancy + 30% AI fit:
-      // Eng×6 + Rel×1 + (AIfit÷10)×3 (each term 0–10 → total 0–100).
+      // Eng×6 + Rel×1 + AIfit×3 (each sub-score 0–10 → total 0–100).
       const overall = (blendAi && ai?.score != null)
-        ? Math.round(engScore * 6 + relScore * 1 + (ai.score / 10) * 3)
+        ? Math.round(engScore * 6 + relScore * 1 + ai.score * 3)
         : Math.round(engScore * 8 + relScore * 2)
       return {
         ...r, ...inf,

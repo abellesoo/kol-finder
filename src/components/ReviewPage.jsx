@@ -101,7 +101,7 @@ const TABLE_ROW_COLS = {
   overall:               { label: 'Score',      min: '72px',  center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
   relevancy_score:       { label: 'Relevancy',  min: '100px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
   engagement_score:      { label: 'Eng. Score', min: '100px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
-  ai_fit:                { label: 'AI Fit',      min: '72px',  center: true, render: (a) => a.aiScore != null ? <div className="flex justify-center"><ScoreBadge score={a.aiScore} /></div> : <span className="font-mono text-xs text-ink/30">—</span> },
+  ai_fit:                { label: 'AI Fit',      min: '100px', render: (a) => a.aiScore != null ? <span title={a.aiReason || ''}><MiniBar value={a.aiScore} color="bg-accent" /></span> : <span className="font-mono text-xs text-ink/30">—</span> },
   account_location:      { label: 'Location',   min: '80px',  render: (a) => <span className="font-mono text-xs text-body">{a.accountLocation || '—'}</span> },
   follower_count:        { label: 'Followers',  min: '80px',  render: (a) => <span className="font-mono text-xs text-ink">{a.followerCount != null ? a.followerCount.toLocaleString() : '—'}</span> },
   niche_signals:         { label: 'Niches',     min: '100px', flex: 2, render: (a) => <div className="flex flex-wrap gap-1">{(a.nicheSignals || []).slice(0, 2).map(t => <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>)}</div> },
@@ -346,7 +346,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         {col('follower_count') && account.followerCount != null && <span>{account.followerCount.toLocaleString()} followers</span>}
         {col('relevancy_score') && account.scores?.relevancy != null && <span>Relevancy {account.scores.relevancy}/10</span>}
         {col('engagement_score') && account.scores?.engagement != null && <span>Eng score {account.scores.engagement}/10</span>}
-        {col('ai_fit') && account.aiScore != null && <span title={account.aiReason || ''}>AI fit {account.aiScore}/100</span>}
+        {col('ai_fit') && account.aiScore != null && <span title={account.aiReason || ''}>AI fit {account.aiScore}/10</span>}
         {col('niche_signals') && account.nicheSignals?.length > 0 && (
           <span>{account.nicheSignals.slice(0, 3).join(' · ')}</span>
         )}

@@ -252,7 +252,7 @@ export default function ReadyToSendPage() {
                         title={item.accountData.aiReason || ''}
                         className="flex-shrink-0 font-mono text-[11px] text-body bg-white border border-card-edge rounded-[7px] px-2 py-1"
                       >
-                        AI Fit {item.accountData.aiScore}
+                        AI Fit {item.accountData.aiScore}/10
                       </span>
                     )}
                   </div>

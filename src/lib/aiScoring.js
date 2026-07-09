@@ -119,7 +119,10 @@ export async function fetchAiScores(candidates, { criteria = '', campaignBrief =
       for (const c of batch) {
         const r = byLower[String(c.username).toLowerCase()]
         if (r) {
-          scoreMap[c.username] = { score: r.fit_score, reason: r.reason }
+          // Worker rates 0–100 (finer AI granularity); the app displays and
+          // scores on a 0–10 scale like Relevancy/Engagement, so convert here.
+          const score10 = Math.round(Number(r.fit_score) || 0) / 10
+          scoreMap[c.username] = { score: score10, reason: r.reason }
         } else {
           failed.push(c.username)
         }

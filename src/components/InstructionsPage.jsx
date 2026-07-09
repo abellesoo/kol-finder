@@ -207,11 +207,11 @@ export default function InstructionsPage() {
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body">
             <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
-            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 6 + Relevancy × 1 + (AI Fit ÷ 10) × 3 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (60% Eng / 10% Rel / 30% AI)</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 6 + Relevancy × 1 + AI Fit × 3 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (60% Eng / 10% Rel / 30% AI)</span></p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
             <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
-            <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–100 vs. brief + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
+            <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–10 vs. brief + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
           </div>
         </div>
 
@@ -285,10 +285,10 @@ export default function InstructionsPage() {
           />
           <ScoreRow
             name="AI Fit Score"
-            range="0 – 100 · opt-in, advisory"
+            range="0 – 10 · opt-in, advisory"
             formula="DeepSeek rating vs. brief + seeding criteria + past decisions"
             description={<>
-              <p className="mb-2">A learning layer on top of the deterministic scores. Click <strong>Score fit with AI</strong> on the Results screen and DeepSeek rates each account 0–100 for how well it fits <em>this</em> campaign, with a one-line reason (expand a row to read it).</p>
+              <p className="mb-2">A learning layer on top of the deterministic scores. Click <strong>Score fit with AI</strong> on the Results screen and DeepSeek rates each account 0–10 for how well it fits <em>this</em> campaign, with a one-line reason (expand a row to read it).</p>
               <div className="border border-card-edge rounded-[10px] bg-surface px-4 py-3 mb-3">
                 <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">How it actually learns — no trained model, no stored agent</p>
                 <p className="mb-2">There is <strong>no fine-tuned model and no agent that remembers things between runs.</strong> Nothing is written into model weights. The "learning" lives entirely in your data. Each time you click Score fit with AI, the app:</p>
@@ -300,7 +300,7 @@ export default function InstructionsPage() {
                 <p className="mb-2">Because it re-reads the latest decisions every run, it improves the moment your team logs more reviews — no training step, no waiting. The trade-offs: it looks at the <strong>most recent ~40 decisions</strong> (not your entire history forever — a token-budget limit), and it's matching demonstrated patterns, not tracking specific past "mistakes" with a correction signal. On a brand-new database with no decisions yet, it scores on the brief alone and stays deliberately moderate.</p>
                 <p className="text-[12px] text-faint">This is why <strong className="text-body">Phase 1 matters</strong>: the more consistently brand managers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
               </div>
-              <p>By default it's <strong>advisory</strong> — shown in its own column but it does not move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>60% Engagement + 10% Relevancy + 30% AI Fit</strong> (Engagement × 6 + Relevancy × 1 + AI Fit ÷ 10 × 3).</p>
+              <p>By default it's <strong>advisory</strong> — shown in its own column but it does not move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>60% Engagement + 10% Relevancy + 30% AI Fit</strong> (Engagement × 6 + Relevancy × 1 + AI Fit × 3).</p>
             </>}
           />
         </div>
@@ -310,7 +310,7 @@ export default function InstructionsPage() {
         <div className="border border-card-edge rounded-[12px] px-4 py-1 mb-6 bg-white">
           <ScoreRow
             name="AI Fit"
-            range="0 – 100 · opt-in"
+            range="0 – 10 · opt-in"
             description="DeepSeek's fit rating for this campaign, learned from your brief, seeding criteria, and past review decisions. Appears after Score fit with AI; expand a row for the reasoning. Advisory unless Blend into Overall is ticked."
           />
           <ScoreRow

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send } from 'lucide-react'
+import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket } from 'lucide-react'
 import UploadStep from './components/UploadStep'
 import ConfigStep from './components/ConfigStep'
 import ResultsStep from './components/ResultsStep'
@@ -9,6 +9,8 @@ import HistoryPage from './components/HistoryPage'
 import ReviewPage from './components/ReviewPage'
 import ReviewQueuePage from './components/ReviewQueuePage'
 import ReadyToSendPage from './components/ReadyToSendPage'
+import CampaignsPage from './components/CampaignsPage'
+import CampaignDetailPage from './components/CampaignDetailPage'
 import LoginPage from './components/LoginPage'
 import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
@@ -30,6 +32,12 @@ const NAV_GROUPS = [
     items: [
       { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
       { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { id: 'campaigns', label: 'Campaigns', icon: Rocket },
     ],
   },
   {
@@ -82,7 +90,10 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
   const groups = navGroupsForRole(role)
   const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Local dev'
   const initials = displayName.slice(0, 2).toUpperCase()
-  const activeId = mode === 'review_detail' ? 'review_queue' : mode
+  const activeId =
+    mode === 'review_detail' ? 'review_queue'
+    : mode === 'campaign_detail' ? 'campaigns'
+    : mode
 
   return (
     <aside
@@ -153,6 +164,8 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 function MainApp({ user, role, onSignOut }) {
   const [mode, setMode] = useState('help')
   const [openReviewId, setOpenReviewId] = useState(null)
+  const [openCampaignId, setOpenCampaignId] = useState(null)
+  const [campaignSeed, setCampaignSeed] = useState(null) // { runId, name, count } from "Start campaign"
   const [step, setStep] = useState('upload')
   const [fileNames, setFileNames] = useState([])
   const [influencers, setInfluencers] = useState([])
@@ -258,17 +271,33 @@ function MainApp({ user, role, onSignOut }) {
   const handleNav = (newMode) => {
     // Enforce role-based nav gating here too, so links like the dashboard
     // empty-state button can't route a brand_manager into a restricted view.
-    if (newMode !== 'review_detail') {
+    // Detail views (review_detail, campaign_detail) aren't nav items — exempt them.
+    if (newMode !== 'review_detail' && newMode !== 'campaign_detail') {
       const allowed = new Set(navGroupsForRole(role).flatMap((g) => g.items.map((i) => i.id)))
       if (!allowed.has(newMode)) return
       setOpenReviewId(null)
+      setOpenCampaignId(null)
+      setCampaignSeed(null) // a manual nav shouldn't reopen a stale "start campaign" form
     }
     setMode(newMode)
+  }
+
+  const handleStartCampaign = (seed) => {
+    // Bridge from a reviewed seeding run → pre-filled campaign with its approved
+    // KOLs auto-attached. Set the seed first, then land on the Campaigns tab.
+    setOpenCampaignId(null)
+    setCampaignSeed(seed)
+    setMode('campaigns')
   }
 
   const handleOpenReview = (id) => {
     setOpenReviewId(id)
     setMode('review_detail')
+  }
+
+  const handleOpenCampaign = (id) => {
+    setOpenCampaignId(id)
+    setMode('campaign_detail')
   }
 
   return (
@@ -279,7 +308,7 @@ function MainApp({ user, role, onSignOut }) {
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && role === 'admin' && <TeamPage />}
         {mode === 'review_queue' && (
-          <ReviewQueuePage onOpenReview={handleOpenReview} />
+          <ReviewQueuePage onOpenReview={handleOpenReview} onStartCampaign={handleStartCampaign} />
         )}
         {mode === 'review_detail' && openReviewId && (
           <ReviewPage
@@ -288,6 +317,19 @@ function MainApp({ user, role, onSignOut }) {
           />
         )}
         {mode === 'ready_to_send' && <ReadyToSendPage />}
+        {mode === 'campaigns' && (
+          <CampaignsPage
+            onOpenCampaign={handleOpenCampaign}
+            seed={campaignSeed}
+            onSeedConsumed={() => setCampaignSeed(null)}
+          />
+        )}
+        {mode === 'campaign_detail' && openCampaignId && (
+          <CampaignDetailPage
+            campaignId={openCampaignId}
+            onBack={() => { setMode('campaigns'); setOpenCampaignId(null) }}
+          />
+        )}
         {mode === 'history' && (
           <HistoryPage onLoadSeederSession={handleLoadSeederSession} onNavigate={handleNav} />
         )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react'
+import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle, Rocket } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function formatDate(isoStr) {
@@ -7,7 +7,7 @@ function formatDate(isoStr) {
   return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default function ReviewQueuePage({ onOpenReview }) {
+export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rows, setRows] = useState([])
@@ -136,6 +136,15 @@ export default function ReviewQueuePage({ onOpenReview }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {approved > 0 && onStartCampaign && (
+                    <button
+                      onClick={() => onStartCampaign({ runId: row.id, name: '', count: approved })}
+                      title={`Start a campaign with ${approved} approved KOL${approved === 1 ? '' : 's'}`}
+                      className="flex items-center gap-1.5 px-3 py-2 border border-sage/30 text-sage rounded-[10px] text-[13px] hover:bg-sage/5 transition-all"
+                    >
+                      <Rocket size={13} /> Start campaign
+                    </button>
+                  )}
                   <button
                     onClick={() => onOpenReview(row.id)}
                     className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"

@@ -4,3 +4,7 @@ dist
 *.local
 .DS_Store
 worker/.dev.vars
+
+# Internal planning/handoff docs — keep local, repo is public
+campaign-ops-context.md
+campaign-ops-handoff.md

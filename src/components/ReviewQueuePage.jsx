@@ -85,7 +85,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Review Queue</p>
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">{rows.length} {rows.length === 1 ? 'submission' : 'submissions'}</h1>
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{rows.length} {rows.length === 1 ? 'submission' : 'submissions'}</h1>
           <p className="text-[14px] text-muted">All accounts sent for review, newest first.</p>
         </div>
         <button

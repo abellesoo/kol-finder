@@ -353,7 +353,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             <div className="px-4 py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
               <div>
                 <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-2">Scoring Verdict</p>
-                <p className="text-body text-[12px] leading-relaxed">{r.verdict || '—'}</p>
+                <p className="font-serif italic text-ink text-[15px] leading-snug">{r.verdict || '—'}</p>
                 {r.aiScore != null && (
                   <div className="mt-3">
                     <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-1 flex items-center gap-1"><Sparkles size={10} /> AI Fit — {r.aiScore}/10</p>
@@ -723,7 +723,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-[25px] font-bold tracking-[-0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
+          <h1 className="text-[32px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-[13.5px] text-muted">
             <span className="text-sage font-semibold">{highCount} strong matches</span>
             {' · '}

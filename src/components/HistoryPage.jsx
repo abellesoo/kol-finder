@@ -128,7 +128,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
     <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
       <div className="mb-10">
         <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">History</p>
-        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink">Past activity</h1>
+        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">Past activity</h1>
       </div>
 
       <section>

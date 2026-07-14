@@ -151,7 +151,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       <div className="max-w-[720px]">
         <StepProgress current={1} />
         <div className="mb-8">
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-2">Get your dataset</h1>
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-2">Get your dataset</h1>
           <p className="text-muted text-[14px]">
             Have an existing Apify export? Upload it. Starting a new scrape? Paste URLs or hashtags directly.
           </p>

@@ -58,7 +58,7 @@ export default function TeamPage() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Admin</p>
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink">Team</h1>
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">Team</h1>
           <p className="text-[14px] text-muted mt-1">Manage who can access the seeding tool and what they can do.</p>
         </div>
         <button

@@ -857,7 +857,7 @@ export default function ReviewPage({ reviewId, onBack }) {
         <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">KOL Review</p>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">{accounts.length} accounts to review</h1>
+            <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{accounts.length} accounts to review</h1>
             <p className="text-[13.5px] text-muted">
               <span className="text-sage font-semibold">{approvedCount} approved</span>
               {' · '}

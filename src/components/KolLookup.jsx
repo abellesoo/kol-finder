@@ -53,7 +53,7 @@ export default function KolLookup({ initialUsername = '' }) {
         <p className="font-mono text-xs tracking-widest text-ink/40 uppercase mb-2">
           Apify · Live Data
         </p>
-        <h1 className="text-2xl font-semibold text-ink mb-1">Profile Analyzer</h1>
+        <h1 className="text-[32px] font-serif font-bold tracking-[0.02em] text-ink mb-1">Profile Analyzer</h1>
         <p className="text-sm text-ink/50">
           Fetch real-time reels data and calculate median likes over the last 90 days.
         </p>

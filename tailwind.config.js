@@ -5,7 +5,15 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Schibsted Grotesk', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        // Editorial accent — display serif for primary page titles, doc section
+        // titles, and scoring verdicts. Fraunces is a variable font (weight
+        // 300–900 + italic, optical sizing), so titles can go genuinely bold.
+        serif: ['Fraunces', 'Georgia', 'Cambria', 'serif'],
+        // Legacy alias: labels/badges/metadata used to be JetBrains Mono. We've
+        // dropped the monospace entirely — the one workhorse sans now carries the
+        // "data" voice too (differentiated by uppercase + tracking + weight).
+        // Kept pointing at the sans so existing `font-mono` classes still resolve.
+        mono: ['Schibsted Grotesk', 'system-ui', 'sans-serif'],
       },
       colors: {
         ink: '#221E18',

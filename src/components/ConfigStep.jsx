@@ -107,7 +107,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
     <div className="px-8 py-8">
       <div className="max-w-[720px]">
         <StepProgress current={2} />
-        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">Configure your search</h1>
+        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">Configure your search</h1>
         <p className="text-muted text-[14px] mb-8">
           Found <span className="font-mono font-semibold text-ink">{influencerCount}</span> unique accounts
           {fileNames.length > 0 && (

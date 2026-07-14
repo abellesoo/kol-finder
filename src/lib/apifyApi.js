@@ -122,6 +122,53 @@ export async function pollUntilDone(run, { timeoutMs = 300000 } = {}) {
   return runData
 }
 
+// ── Campaign Ops Phase 2 ──────────────────────────────────────────────────────
+// Trigger the verification engine for one campaign on demand (the worker also
+// runs it on a cron). Returns { checked, matched, overdue, posts }.
+export async function runVerification(campaignId) {
+  const res = await fetch(`${PROXY}/verify-campaign`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ campaignId }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Verification failed (${res.status}): ${text || 'no response body'}`)
+  }
+  const { summary } = await res.json()
+  return summary
+}
+
+// Generate an overdue nudge DM draft. Language follows the market (HK →
+// Cantonese, TW → zh-TW) — the worker never mixes them. Returns { draft, language }.
+export async function draftNudge({ handle, brand, market }) {
+  const res = await fetch(`${PROXY}/draft-nudge`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ handle, brand, market }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Nudge draft failed (${res.status}): ${text || 'no response body'}`)
+  }
+  return res.json()
+}
+
+// Create-or-sync the campaign's Google Sheet (one-way push). `values` is the 2D
+// grid from buildCampaignSheetValues. Returns { url, created }.
+export async function syncCampaignSheet(campaignId, title, values) {
+  const res = await fetch(`${PROXY}/campaign-sheet`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ campaignId, title, values }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Sheet sync failed (${res.status}): ${text || 'no response body'}`)
+  }
+  return res.json()
+}
+
 export async function fetchBatchStats(usernames, onProgress) {
   const CHUNK = 50
   const statsMap = {}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Loader2, X, Upload, FileSpreadsheet, ArrowRight } from 'lucide-react'
-import { createCampaign, importCampaignKols } from '../lib/campaigns'
+import { createCampaign, importCampaignKols, tierLabel } from '../lib/campaigns'
 import {
   readWorkbook, detectHeaderRow, detectColumns, buildRows,
   IMPORT_FIELDS, IMPORT_FIELD_LABELS, REQUIRED_FIELDS,
@@ -260,7 +260,7 @@ export default function ImportCampaignModal({ onClose, onImported }) {
                           <span className="text-[12.5px] font-medium text-ink flex-1 truncate">@{r.handle}</span>
                           {r.post_url && <span className="text-[10px] font-mono text-sage">post</span>}
                           {r.agreed_fee > 0 && <span className="text-[10px] font-mono text-faint">${r.agreed_fee.toLocaleString()}</span>}
-                          <span className="text-[10px] font-mono text-faint">T{r.tier}</span>
+                          <span className="text-[10px] font-mono text-faint">{tierLabel(r.tier)}</span>
                           <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${STATE_CLS[r.state]}`} title={r.raw_status}>
                             {STATE_LABEL[r.state]}
                           </span>

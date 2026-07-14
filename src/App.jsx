@@ -304,7 +304,7 @@ function MainApp({ user, role, onSignOut }) {
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
-        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} onOpenReview={handleOpenReview} />}
+        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} onOpenReview={handleOpenReview} onOpenCampaign={handleOpenCampaign} />}
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && role === 'admin' && <TeamPage />}
         {mode === 'review_queue' && (

@@ -3,6 +3,30 @@ main = "worker.js"
 compatibility_date = "2024-11-01"
 
 # Public value (already shipped in the client bundle as VITE_SUPABASE_URL) —
-# used to fetch Supabase's JWKS for verifying ES256-signed auth tokens.
+# used both to fetch Supabase's JWKS (ES256 auth verification) and as the base
+# for the Phase 2 verification engine's PostgREST calls.
 [vars]
 SUPABASE_URL = "https://hfhiunlqburusuwysyyr.supabase.co"
+# Phase 4: campaign Google Sheets are shared (writer) with everyone on this
+# Google Workspace domain. Public value, safe to commit.
+GOOGLE_WORKSPACE_DOMAIN = "markato.com"
+# Phase 4: sheets are created inside this Shared Drive because service accounts
+# have no My Drive storage quota. Public value (a Drive folder id), safe to commit.
+GOOGLE_SHARED_DRIVE_ID = "0ABfdVzKMj04FUk9PVA"
+
+# Phase 2 verification engine runs unattended twice a day (09:00 & 21:00 HK =
+# 01:00 & 13:00 UTC): scrape awaiting/overdue KOLs, match posts, flip to posted.
+[triggers]
+crons = ["0 1,13 * * *"]
+
+# ── Secrets (set with `wrangler secret put <NAME>`, never commit) ──────────────
+#   APIFY_API_KEY             — Apify token (already set; Instagram scraper)
+#   DEEPSEEK_API_KEY          — DeepSeek key (already set; DM + nudge drafts)
+#   SUPABASE_SERVICE_ROLE_KEY — NEW for Phase 2. Lets the cron read/write
+#                               campaign tables with no logged-in user (bypasses
+#                               RLS). Server-side only — never ship to the client.
+#   GOOGLE_SERVICE_ACCOUNT_KEY — NEW for Phase 4. The full service-account JSON
+#                               key (one line). Used to create/update campaign
+#                               Google Sheets. Server-side only. See
+#                               worker/PHASE4_GOOGLE_SHEETS_SETUP.md.
+#   SUPABASE_JWT_SECRET       — optional; only if the project uses legacy HS256.

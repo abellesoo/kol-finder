@@ -1,7 +1,42 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload } from 'lucide-react'
+import {
+  Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
+  LayoutGrid, Table2, FileSpreadsheet,
+} from 'lucide-react'
 import { listCampaigns, createCampaign, parseTokens, getApprovedKolsForRun, attachKols } from '../lib/campaigns'
 import ImportCampaignModal from './ImportCampaignModal'
+
+// Roll a campaign's per-state counts up to the numbers the table view shows.
+function campaignMetrics(c) {
+  const counts = c.counts || {}
+  const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  const posted = counts.posted || 0
+  const overdue = counts.overdue || 0
+  return { total, posted, overdue, fulfilled: total ? Math.round((posted / total) * 100) : 0 }
+}
+
+// Opens the campaign's live Google Sheet (created in Phase 4). Disabled until the
+// sheet exists so it never dead-ends.
+function OpenSheetButton({ url, size = 'sm' }) {
+  const cls = size === 'sm'
+    ? 'px-2.5 py-1.5 text-[12px]'
+    : 'px-4 py-2 text-[13px]'
+  if (!url) {
+    return (
+      <span title="Created automatically once the campaign's list is approved (Phase 4)"
+        className={`inline-flex items-center gap-1.5 ${cls} border border-mist rounded-[10px] text-faint/70 cursor-not-allowed whitespace-nowrap`}>
+        <FileSpreadsheet size={13} /> Sheet
+      </span>
+    )
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+      title="Open the campaign's Google Sheet"
+      className={`inline-flex items-center gap-1.5 ${cls} border border-mist rounded-[10px] text-ink hover:border-ink/40 hover:bg-surface transition-all whitespace-nowrap`}>
+      <FileSpreadsheet size={13} /> Sheet
+    </a>
+  )
+}
 
 const MARKETS = ['HK', 'TW', 'SG', 'MY', 'Other']
 const CAMPAIGN_TYPES = ['gifted', 'paid', 'mixed']
@@ -167,6 +202,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
   const [campaigns, setCampaigns] = useState([])
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [view, setView] = useState('cards') // 'cards' | 'table'
   const [seedState, setSeedState] = useState(null) // { runId, name, count }
   const seedRunRef = useRef(null)
 
@@ -235,7 +271,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Campaigns</p>
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">
             {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
           </h1>
           <p className="text-[14px] text-muted">
@@ -243,6 +279,20 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {campaigns.length > 0 && (
+            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5 mr-1">
+              <button onClick={() => setView('cards')} title="Card view"
+                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
+                  view === 'cards' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
+                <LayoutGrid size={14} />
+              </button>
+              <button onClick={() => setView('table')} title="Table view"
+                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
+                  view === 'table' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
+                <Table2 size={14} />
+              </button>
+            </div>
+          )}
           <button onClick={() => setShowImport(true)}
             className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white whitespace-nowrap">
             <Upload size={14} /> Import
@@ -274,41 +324,90 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
         </div>
       )}
 
-      <div className="space-y-3">
-        {campaigns.map((c) => {
-          const total = Object.values(c.counts).reduce((a, b) => a + b, 0)
-          return (
-            <div key={c.id}
-              className="border border-card-edge rounded-[14px] px-5 py-4 bg-white hover:border-[#D6CEBD] transition-all">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <p className="font-semibold text-[14px] text-ink truncate">{c.name}</p>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                      c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'
-                    }`}>{c.status}</span>
+      {view === 'table' && campaigns.length > 0 ? (
+        <div className="overflow-x-auto border border-card-edge rounded-[14px] bg-white">
+          <table className="w-full text-[12.5px] border-collapse">
+            <thead>
+              <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint border-b border-mist">
+                <th className="px-4 py-3 font-normal">Campaign</th>
+                <th className="px-3 py-3 font-normal">Brand</th>
+                <th className="px-3 py-3 font-normal">Market</th>
+                <th className="px-3 py-3 font-normal">Deadline</th>
+                <th className="px-3 py-3 font-normal text-right">KOLs</th>
+                <th className="px-3 py-3 font-normal text-right">Posted</th>
+                <th className="px-3 py-3 font-normal text-right">Overdue</th>
+                <th className="px-3 py-3 font-normal text-right">Fulfilled</th>
+                <th className="px-3 py-3 font-normal">Status</th>
+                <th className="px-4 py-3 font-normal"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((c) => {
+                const m = campaignMetrics(c)
+                return (
+                  <tr key={c.id} onClick={() => onOpenCampaign(c.id)}
+                    className="border-b border-mist/60 last:border-0 hover:bg-surface cursor-pointer transition-colors">
+                    <td className="px-4 py-2.5 font-medium text-ink max-w-[220px] truncate">{c.name}</td>
+                    <td className="px-3 py-2.5 text-body">{c.brand}</td>
+                    <td className="px-3 py-2.5 text-body font-mono">{c.market}</td>
+                    <td className="px-3 py-2.5 text-body font-mono whitespace-nowrap">{formatDate(c.posting_deadline)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-body">{m.total || '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sage">{m.posted || '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-rose/80">{m.overdue || '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-body">{m.total ? `${m.fulfilled}%` : '—'}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{c.status}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                      <span onClick={(e) => e.stopPropagation()}><OpenSheetButton url={c.sheet_url} /></span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {campaigns.map((c) => {
+            const total = Object.values(c.counts).reduce((a, b) => a + b, 0)
+            return (
+              <div key={c.id}
+                className="border border-card-edge rounded-[14px] px-5 py-4 bg-white hover:border-[#D6CEBD] transition-all">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="font-semibold text-[14px] text-ink truncate">{c.name}</p>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'
+                      }`}>{c.status}</span>
+                    </div>
+                    <p className="text-[11px] text-faint font-mono">
+                      {c.brand} · {c.market} · {c.campaign_type} · deadline {formatDate(c.posting_deadline)}
+                    </p>
+                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
+                      {total === 0 && <span className="text-[11px] font-mono text-faint">no KOLs attached</span>}
+                      {COUNT_ORDER.map(({ key, label, cls }) => (
+                        c.counts[key] ? (
+                          <span key={key} className={`text-[11px] font-mono ${cls}`}>{c.counts[key]} {label}</span>
+                        ) : null
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-faint font-mono">
-                    {c.brand} · {c.market} · {c.campaign_type} · deadline {formatDate(c.posting_deadline)}
-                  </p>
-                  <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
-                    {total === 0 && <span className="text-[11px] font-mono text-faint">no KOLs attached</span>}
-                    {COUNT_ORDER.map(({ key, label, cls }) => (
-                      c.counts[key] ? (
-                        <span key={key} className={`text-[11px] font-mono ${cls}`}>{c.counts[key]} {label}</span>
-                      ) : null
-                    ))}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <OpenSheetButton url={c.sheet_url} size="lg" />
+                    <button onClick={() => onOpenCampaign(c.id)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
+                      Open <ArrowRight size={13} />
+                    </button>
                   </div>
                 </div>
-                <button onClick={() => onOpenCampaign(c.id)}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all flex-shrink-0">
-                  Open <ArrowRight size={13} />
-                </button>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {showNew && (
         <NewCampaignModal

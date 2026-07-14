@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Loader2, ArrowLeft, ExternalLink, UserPlus, X, RefreshCw, Trash2,
-  Truck, CalendarClock, Search,
+  Truck, CalendarClock, Search, ScanLine, CheckCircle2, Circle, Copy, Check,
+  MessageSquarePlus, Info, LayoutList, Table2, ChevronDown, FileSpreadsheet,
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
   updateKolState, setDeadlineOverride, detachKol,
-  nextStates, effectiveDeadline,
+  effectiveDeadline, KOL_STATES,
+  getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
+  saveNudge, markNudgeSent,
+  tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
+  getScoringByHandle, buildCampaignSheetValues,
 } from '../lib/campaigns'
+import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -168,17 +174,179 @@ function AttachModal({ campaignId, existingHandles, onClose, onAttached }) {
   )
 }
 
-function KolRow({ kol, campaign, onStateChange, onOverride, onDetach }) {
+// Compact status control. This is a manual ops tool, so it offers EVERY state —
+// a manager can correct a KOL freely (e.g. a false-positive `posted` back to
+// `awaiting_post`), not just follow the pipeline forward.
+function StatusSelect({ kol, onStateChange }) {
   const [busy, setBusy] = useState(false)
-  const eff = effectiveDeadline(kol, campaign)
-  const pastDeadline = eff && eff < todayStr() && ['shipped', 'awaiting_post'].includes(kol.state)
-  const targets = nextStates(kol.state)
-  const forward = targets.find((t) => t !== 'opted_out')
-
-  const doTransition = async (to) => {
+  const change = async (to) => {
+    if (to === kol.state) return
     setBusy(true)
     try { await onStateChange(kol, to) } finally { setBusy(false) }
   }
+  return (
+    <div className="relative inline-flex items-center flex-shrink-0">
+      <select value={kol.state} disabled={busy} onChange={(e) => change(e.target.value)}
+        title="Change status"
+        className={`appearance-none cursor-pointer text-[11px] font-mono pl-2.5 pr-6 py-1 rounded-full border border-transparent focus:outline-none focus:border-ink/30 disabled:opacity-50 ${STATE_META[kol.state]?.cls || ''}`}>
+        {KOL_STATES.map((s) => <option key={s} value={s}>{STATE_META[s]?.label || s}</option>)}
+      </select>
+      {busy
+        ? <Loader2 size={11} className="animate-spin absolute right-1.5 pointer-events-none opacity-60" />
+        : <ChevronDown size={11} className="absolute right-1.5 pointer-events-none opacity-50" />}
+    </div>
+  )
+}
+
+// Per-KOL content-format toggles (manually set). feed/reel auto-verify;
+// story/blog are manual-only. Shared by the board and table views.
+function FormatChips({ kol, onSetFormats, showInfo = true }) {
+  const [busy, setBusy] = useState(false)
+  const formats = kol.content_formats || []
+  const toggle = async (id) => {
+    const next = formats.includes(id) ? formats.filter((x) => x !== id) : [...formats, id]
+    setBusy(true)
+    try { await onSetFormats(kol, next) } finally { setBusy(false) }
+  }
+  return (
+    <div className="flex items-center flex-wrap gap-1.5">
+      {CONTENT_FORMATS.map((f) => {
+        const active = formats.includes(f.id)
+        return (
+          <button key={f.id} onClick={() => toggle(f.id)} disabled={busy}
+            className={`text-[10px] font-mono px-2 py-0.5 rounded-full border transition-colors disabled:opacity-50 ${
+              active ? `${FORMAT_BADGE_CLS[f.id]} border-transparent` : 'border-mist text-faint hover:border-ink/30 hover:text-ink'}`}>
+            {f.label}
+          </button>
+        )
+      })}
+      {showInfo && (
+        <span className="relative group inline-flex items-center">
+          <Info size={12} className="text-faint cursor-help" />
+          <span className="pointer-events-none absolute left-0 top-5 z-20 hidden group-hover:block w-[248px] p-2 rounded-[8px] bg-ink text-white text-[10.5px] leading-snug shadow-lg normal-case font-sans tracking-normal">
+            Feed &amp; Reels are auto-verified from the scrape. Stories are only verifiable within 24h of posting — after that they expire and can’t be auto-checked, so mark them posted by hand. Blog is off-platform (manual).
+          </span>
+        </span>
+      )}
+    </div>
+  )
+}
+
+// A worker- or import-detected post. The Confirm toggle is the Phase 2 safety
+// gate: the worker sets state=posted but human_verified stays false until a
+// brand manager confirms the match is genuine here.
+function VerifiedPost({ post, onConfirm }) {
+  const [busy, setBusy] = useState(false)
+  const confirm = async () => {
+    setBusy(true)
+    try { await onConfirm(post, !post.human_verified) } finally { setBusy(false) }
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-[8px] bg-surface border border-card-edge">
+      <div className="min-w-0">
+        <a href={post.post_url} target="_blank" rel="noreferrer"
+          className="text-[12px] font-medium text-ink hover:text-ink/70 flex items-center gap-1 truncate">
+          {post.post_shortcode ? `/${post.post_shortcode}` : 'View post'}
+          <ExternalLink size={10} className="opacity-40 flex-shrink-0" />
+        </a>
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] font-mono text-faint">
+          {post.posted_at && <span>{formatDate(post.posted_at)}</span>}
+          {(post.matched_signals || []).map((s) => <span key={s} className="text-body">{s}</span>)}
+          {post.detection_method && (
+            <span className="uppercase tracking-wide">{post.detection_method.replace('apify_', '')}</span>
+          )}
+        </div>
+      </div>
+      <button onClick={confirm} disabled={busy}
+        className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-[7px] text-[11px] font-medium transition-colors disabled:opacity-50 ${
+          post.human_verified ? 'bg-green-100 text-green-700' : 'border border-mist text-muted hover:border-ink/30 hover:text-ink'}`}
+        title={post.human_verified ? 'Confirmed by a manager — click to un-confirm' : 'Confirm this is a genuine campaign post'}>
+        {busy ? <Loader2 size={11} className="animate-spin" /> : post.human_verified ? <CheckCircle2 size={11} /> : <Circle size={11} />}
+        {post.human_verified ? 'Verified' : 'Confirm'}
+      </button>
+    </div>
+  )
+}
+
+// Overdue-only: generate + store a soft reminder DM draft (copy-paste send;
+// Meta API paused). Language follows the campaign market — never mixed.
+function NudgeBlock({ kol, nudges, onDraft, onMarkSent }) {
+  const [drafting, setDrafting] = useState(false)
+  const [error, setError] = useState(null)
+  const [copiedId, setCopiedId] = useState(null)
+
+  const draft = async () => {
+    setDrafting(true)
+    setError(null)
+    try { await onDraft(kol) } catch (e) { setError(e.message) } finally { setDrafting(false) }
+  }
+  const copy = async (n) => {
+    try {
+      await navigator.clipboard.writeText(n.draft_text)
+      setCopiedId(n.id)
+      setTimeout(() => setCopiedId(null), 1500)
+    } catch { /* clipboard blocked — user can select manually */ }
+  }
+
+  return (
+    <div className="mt-2.5 space-y-2">
+      {(nudges || []).map((n) => (
+        <div key={n.id} className="rounded-[8px] border border-accent/30 bg-accent/5 px-3 py-2.5">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="font-mono text-[10px] tracking-wide text-[#8A6A22] uppercase">Nudge draft · {n.language}</span>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => copy(n)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] text-muted hover:text-ink hover:bg-white transition-colors">
+                {copiedId === n.id ? <Check size={11} className="text-green-600" /> : <Copy size={11} />}
+                {copiedId === n.id ? 'Copied' : 'Copy'}
+              </button>
+              {n.sent_manually_at ? (
+                <span className="text-[10px] font-mono text-sage">sent {formatDate(n.sent_manually_at)}</span>
+              ) : (
+                <button onClick={() => onMarkSent(n)}
+                  className="px-2 py-0.5 rounded-[6px] text-[11px] text-muted hover:text-ink hover:bg-white transition-colors">
+                  Mark sent
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-[12px] text-body whitespace-pre-wrap leading-relaxed">{n.draft_text}</p>
+        </div>
+      ))}
+      {error && <p className="text-[11px] text-rose">{error}</p>}
+      <button onClick={draft} disabled={drafting}
+        className="flex items-center gap-1.5 px-3 py-1.5 border border-accent/40 text-[#8A6A22] rounded-[9px] text-[12px] hover:bg-accent/10 transition-colors disabled:opacity-50">
+        {drafting ? <Loader2 size={12} className="animate-spin" /> : <MessageSquarePlus size={12} />}
+        {(nudges || []).length ? 'Draft another nudge' : 'Draft nudge'}
+      </button>
+    </div>
+  )
+}
+
+// Deadline indicator: shows the effective deadline, an "(custom)" tag when it's
+// a per-KOL override (NOT "overdue" — different concept), and a red "past
+// deadline" note when relevant.
+function DeadlineMeta({ kol, campaign }) {
+  const eff = effectiveDeadline(kol, campaign)
+  const pastDeadline = eff && eff < todayStr() && ['shipped', 'awaiting_post'].includes(kol.state)
+  return (
+    <>
+      <span className="flex items-center gap-1">
+        <CalendarClock size={11} /> {formatDate(eff)}
+        {kol.deadline_override && (
+          <span className="text-accent" title="Deadline manually set for this KOL">(custom)</span>
+        )}
+      </span>
+      {pastDeadline && <span className="text-rose font-medium">past deadline</span>}
+    </>
+  )
+}
+
+function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
+  const formats = kol.content_formats || []
+  // Story/blog-only KOLs can't be auto-verified (see campaigns.js) — flag it so
+  // the manager knows to mark them posted by hand.
+  const manualOnly = formats.length > 0 && !isAutoVerifiable(formats)
 
   return (
     <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
@@ -189,56 +357,114 @@ function KolRow({ kol, campaign, onStateChange, onOverride, onDetach }) {
             @{kol.kol_handle} <ExternalLink size={11} className="opacity-40" />
           </a>
           <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1 text-[11px] font-mono text-faint">
-            <span>Tier {kol.tier}</span>
+            <span>{tierLabel(kol.tier)}</span>
             {kol.shipped_at && <span className="flex items-center gap-1"><Truck size={11} /> {formatDate(kol.shipped_at)}</span>}
-            <span className="flex items-center gap-1">
-              <CalendarClock size={11} /> {formatDate(eff)}
-              {kol.deadline_override && <span className="text-accent">(override)</span>}
-            </span>
-            {pastDeadline && <span className="text-rose font-medium">past deadline</span>}
+            <DeadlineMeta kol={kol} campaign={campaign} />
+            {manualOnly && ['shipped', 'awaiting_post', 'overdue'].includes(kol.state) && (
+              <span className="text-[#8A6A22]">verify manually</span>
+            )}
+          </div>
+
+          {/* Content format — manually set (click to toggle), mirrors the plan sheet. */}
+          <div className="mt-2">
+            <FormatChips kol={kol} onSetFormats={onSetFormats} />
           </div>
         </div>
-        <span className={`flex-shrink-0 text-[10px] font-mono px-2 py-1 rounded-full ${STATE_META[kol.state]?.cls || ''}`}>
-          {STATE_META[kol.state]?.label || kol.state}
-        </span>
+        <StatusSelect kol={kol} onStateChange={onStateChange} />
       </div>
 
       <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-mist/70">
-        <div className="flex items-center gap-1.5">
-          {forward && (
-            <button onClick={() => doTransition(forward)} disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all disabled:opacity-50">
-              {busy ? <Loader2 size={12} className="animate-spin" /> : (forward === 'shipped' ? <Truck size={12} /> : null)}
-              {ACTION_LABEL[forward]}
-            </button>
-          )}
-          {/* Other non-forward, non-opt-out transitions (e.g. awaiting_post → overdue) */}
-          {targets.filter((t) => t !== forward && t !== 'opted_out').map((t) => (
-            <button key={t} onClick={() => doTransition(t)} disabled={busy}
-              className="px-3 py-1.5 border border-mist rounded-[9px] text-[12px] text-muted hover:border-ink/30 hover:text-ink transition-all disabled:opacity-50">
-              {ACTION_LABEL[t]}
-            </button>
-          ))}
-          <label className="flex items-center gap-1.5 ml-1 text-[11px] font-mono text-faint">
-            <span className="hidden sm:inline">Deadline</span>
-            <input type="date" value={kol.deadline_override || ''}
-              onChange={(e) => onOverride(kol, e.target.value || null)}
-              className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
-          </label>
-        </div>
-        <div className="flex items-center gap-1">
-          {targets.includes('opted_out') && (
-            <button onClick={() => doTransition('opted_out')} disabled={busy}
-              className="px-2.5 py-1.5 text-[12px] text-faint hover:text-rose transition-colors disabled:opacity-50">
-              Opt out
-            </button>
-          )}
-          <button onClick={() => onDetach(kol)} title="Remove from campaign"
-            className="flex items-center justify-center w-8 h-8 rounded-[9px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <label className="flex items-center gap-1.5 text-[11px] font-mono text-faint">
+          <span className="hidden sm:inline">Deadline</span>
+          <input type="date" value={kol.deadline_override || ''}
+            onChange={(e) => onOverride(kol, e.target.value || null)}
+            className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
+        </label>
+        <button onClick={() => onDetach(kol)} title="Remove from campaign"
+          className="flex items-center justify-center w-8 h-8 rounded-[9px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
+          <Trash2 size={13} />
+        </button>
       </div>
+
+      {posts.length > 0 && (
+        <div className="mt-2.5 space-y-1.5">
+          {posts.map((p) => <VerifiedPost key={p.id} post={p} onConfirm={onConfirmPost} />)}
+        </div>
+      )}
+
+      {/* Nudges only for overdue KOLs — never against a (possibly mis-tagged)
+          detected post, per the Phase 2 safety rule. */}
+      {kol.state === 'overdue' && (
+        <NudgeBlock kol={kol} nudges={nudges} onDraft={onDraftNudge} onMarkSent={onMarkSent} />
+      )}
+    </div>
+  )
+}
+
+// Spreadsheet-style view: one KOL per row. Same controls as the board (status,
+// format, deadline, post-confirm) in a compact grid. Nudge drafting stays in the
+// board view to keep the table lean.
+function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onDetach, onConfirmPost, onSetFormats }) {
+  return (
+    <div className="overflow-x-auto border border-card-edge rounded-[14px] bg-white">
+      <table className="w-full min-w-[840px] text-[12.5px] border-collapse">
+        <thead>
+          <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint border-b border-mist">
+            <th className="px-4 py-3 font-normal">KOL</th>
+            <th className="px-3 py-3 font-normal">Tier</th>
+            <th className="px-3 py-3 font-normal">Format</th>
+            <th className="px-3 py-3 font-normal">Status</th>
+            <th className="px-3 py-3 font-normal">Shipped</th>
+            <th className="px-3 py-3 font-normal">Deadline</th>
+            <th className="px-3 py-3 font-normal">Post</th>
+            <th className="px-4 py-3 font-normal"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {kols.map((kol) => {
+            const posts = postsByKol[kol.id] || []
+            return (
+              <tr key={kol.id} className="border-b border-mist/60 last:border-0 align-top">
+                <td className="px-4 py-3">
+                  <a href={`https://instagram.com/${kol.kol_handle}`} target="_blank" rel="noreferrer"
+                    className="font-medium text-ink hover:text-ink/70 inline-flex items-center gap-1 whitespace-nowrap">
+                    @{kol.kol_handle} <ExternalLink size={10} className="opacity-40" />
+                  </a>
+                </td>
+                <td className="px-3 py-3 font-mono text-body whitespace-nowrap">{tierLabel(kol.tier)}</td>
+                <td className="px-3 py-3"><FormatChips kol={kol} onSetFormats={onSetFormats} showInfo={false} /></td>
+                <td className="px-3 py-3"><StatusSelect kol={kol} onStateChange={onStateChange} /></td>
+                <td className="px-3 py-3 font-mono text-body whitespace-nowrap">{kol.shipped_at ? formatDate(kol.shipped_at) : '—'}</td>
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <input type="date" value={kol.deadline_override || ''}
+                    onChange={(e) => onOverride(kol, e.target.value || null)}
+                    className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
+                </td>
+                <td className="px-3 py-3">
+                  {posts.length ? posts.map((p) => (
+                    <div key={p.id} className="flex items-center gap-1.5 mb-1 last:mb-0 whitespace-nowrap">
+                      <a href={p.post_url} target="_blank" rel="noreferrer"
+                        className="text-ink hover:text-ink/70 inline-flex items-center gap-1 text-[11px]">
+                        {p.post_shortcode ? `/${p.post_shortcode}` : 'post'} <ExternalLink size={9} className="opacity-40" />
+                      </a>
+                      <button onClick={() => onConfirmPost(p, !p.human_verified)}
+                        title={p.human_verified ? 'Verified — click to un-confirm' : 'Confirm this post'}
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded-[6px] text-[10px] ${
+                          p.human_verified ? 'bg-green-100 text-green-700' : 'border border-mist text-muted hover:text-ink'}`}>
+                        {p.human_verified ? <CheckCircle2 size={10} /> : <Circle size={10} />}
+                      </button>
+                    </div>
+                  )) : <span className="text-faint">—</span>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => onDetach(kol)} title="Remove from campaign"
+                    className="text-faint hover:text-rose transition-colors"><Trash2 size={13} /></button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -248,8 +474,13 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
   const [error, setError] = useState(null)
   const [campaign, setCampaign] = useState(null)
   const [kols, setKols] = useState([])
+  const [postsByKol, setPostsByKol] = useState({})
+  const [nudgesByKol, setNudgesByKol] = useState({})
   const [showAttach, setShowAttach] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [sheetBusy, setSheetBusy] = useState(false)
   const [toast, setToast] = useState(null)
+  const [view, setView] = useState('board') // 'board' | 'table'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -258,6 +489,10 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
       const [c, ks] = await Promise.all([getCampaign(campaignId), getCampaignKols(campaignId)])
       setCampaign(c)
       setKols(ks)
+      const ids = ks.map((k) => k.id)
+      const [posts, nudges] = await Promise.all([getVerifiedPostsByKol(ids), getNudgesByKol(ids)])
+      setPostsByKol(posts)
+      setNudgesByKol(nudges)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -304,6 +539,81 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
     }
   }, [])
 
+  const handleVerify = useCallback(async () => {
+    setVerifying(true)
+    setToast(null)
+    try {
+      const s = await runVerification(campaignId)
+      await load()
+      const bits = [`${s.checked} checked`]
+      if (s.matched) bits.push(`${s.matched} posted`)
+      if (s.overdue) bits.push(`${s.overdue} overdue`)
+      setToast({ type: 'success', message: `Verification done — ${bits.join(', ')}` })
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+    } finally {
+      setVerifying(false)
+    }
+  }, [campaignId, load])
+
+  const handleSyncSheet = useCallback(async () => {
+    setSheetBusy(true)
+    setToast(null)
+    try {
+      const scoreByHandle = await getScoringByHandle(kols)
+      const { title, values } = buildCampaignSheetValues(campaign, kols, postsByKol, scoreByHandle)
+      const { url, created } = await syncCampaignSheet(campaignId, title, values)
+      setCampaign((c) => ({ ...c, sheet_url: url }))
+      setToast({ type: 'success', message: created ? 'Google Sheet created & shared' : 'Sheet synced' })
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+    } finally {
+      setSheetBusy(false)
+    }
+  }, [campaign, kols, postsByKol, campaignId])
+
+  const handleSetFormats = useCallback(async (kol, formats) => {
+    // optimistic
+    setKols((prev) => prev.map((k) => (k.id === kol.id ? { ...k, content_formats: formats } : k)))
+    try {
+      const updated = await setKolFormats(kol.id, formats)
+      setKols((prev) => prev.map((k) => (k.id === kol.id ? updated : k)))
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+      load()
+    }
+  }, [load])
+
+  const handleConfirmPost = useCallback(async (post, verified) => {
+    const updated = await setHumanVerified(post.id, verified)
+    setPostsByKol((prev) => ({
+      ...prev,
+      [post.campaign_kol_id]: (prev[post.campaign_kol_id] || []).map((p) => (p.id === post.id ? updated : p)),
+    }))
+  }, [])
+
+  const handleDraftNudge = useCallback(async (kol) => {
+    const { draft, language } = await draftNudge({
+      handle: kol.kol_handle,
+      brand: campaign?.brand,
+      market: campaign?.market,
+    })
+    const saved = await saveNudge(kol.id, draft, language)
+    setNudgesByKol((prev) => ({ ...prev, [kol.id]: [saved, ...(prev[kol.id] || [])] }))
+  }, [campaign])
+
+  const handleMarkSent = useCallback(async (nudge) => {
+    try {
+      const updated = await markNudgeSent(nudge.id)
+      setNudgesByKol((prev) => ({
+        ...prev,
+        [updated.campaign_kol_id]: (prev[updated.campaign_kol_id] || []).map((n) => (n.id === updated.id ? updated : n)),
+      }))
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+    }
+  }, [])
+
   const existingHandles = useMemo(() => kols.map((k) => k.kol_handle), [kols])
   const grouped = useMemo(() => {
     const g = {}
@@ -330,7 +640,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
   const posted = (grouped.posted || []).length
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
+    <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
         <ArrowLeft size={14} /> Back to campaigns
       </button>
@@ -342,7 +652,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
             <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
               campaign.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{campaign.status}</span>
           </div>
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">{campaign.name}</h1>
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{campaign.name}</h1>
           <p className="text-[13px] text-muted font-mono">
             {campaign.brand} · {campaign.market} · {campaign.campaign_type} · deadline {formatDate(campaign.posting_deadline)}
           </p>
@@ -354,6 +664,38 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {total > 0 && (
+            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5 mr-1">
+              <button onClick={() => setView('board')} title="Board view"
+                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
+                  view === 'board' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
+                <LayoutList size={14} />
+              </button>
+              <button onClick={() => setView('table')} title="Table view"
+                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
+                  view === 'table' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
+                <Table2 size={14} />
+              </button>
+            </div>
+          )}
+          <button onClick={handleVerify} disabled={verifying || total === 0}
+            title="Scrape awaiting/overdue KOLs and auto-detect campaign posts"
+            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
+            {verifying ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
+            {verifying ? 'Verifying…' : 'Verify posts'}
+          </button>
+          <button onClick={handleSyncSheet} disabled={sheetBusy || total === 0}
+            title={campaign.sheet_url ? 'Push the latest campaign data to its Google Sheet' : 'Create a Google Sheet for this campaign and share it with the team'}
+            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
+            {sheetBusy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+            {sheetBusy ? 'Syncing…' : campaign.sheet_url ? 'Sync sheet' : 'Create sheet'}
+          </button>
+          {campaign.sheet_url && (
+            <a href={campaign.sheet_url} target="_blank" rel="noreferrer" title="Open Google Sheet"
+              className="flex items-center justify-center w-9 h-9 border border-mist rounded-[10px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
+              <ExternalLink size={14} />
+            </a>
+          )}
           <button onClick={() => setShowAttach(true)}
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
             <UserPlus size={14} /> Attach KOLs
@@ -393,26 +735,35 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
         </div>
       )}
 
-      <div className="space-y-6">
-        {BOARD_ORDER.map((state) => {
-          const rows = grouped[state]
-          if (!rows || rows.length === 0) return null
-          return (
-            <div key={state}>
-              <div className="flex items-center gap-2 mb-2.5">
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${STATE_META[state].cls}`}>{STATE_META[state].label}</span>
-                <span className="text-[11px] font-mono text-faint">{rows.length}</span>
+      {total > 0 && view === 'table' ? (
+        <KolTable kols={kols} campaign={campaign} postsByKol={postsByKol}
+          onStateChange={handleStateChange} onOverride={handleOverride} onDetach={handleDetach}
+          onConfirmPost={handleConfirmPost} onSetFormats={handleSetFormats} />
+      ) : (
+        <div className="space-y-6">
+          {BOARD_ORDER.map((state) => {
+            const rows = grouped[state]
+            if (!rows || rows.length === 0) return null
+            return (
+              <div key={state}>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${STATE_META[state].cls}`}>{STATE_META[state].label}</span>
+                  <span className="text-[11px] font-mono text-faint">{rows.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {rows.map((kol) => (
+                    <KolRow key={kol.id} kol={kol} campaign={campaign}
+                      posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
+                      onStateChange={handleStateChange} onOverride={handleOverride} onDetach={handleDetach}
+                      onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
+                      onSetFormats={handleSetFormats} />
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                {rows.map((kol) => (
-                  <KolRow key={kol.id} kol={kol} campaign={campaign}
-                    onStateChange={handleStateChange} onOverride={handleOverride} onDetach={handleDetach} />
-                ))}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {showAttach && (
         <AttachModal

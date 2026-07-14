@@ -63,7 +63,9 @@ create table if not exists public.verified_posts (
   detection_method text not null,                   -- apify_mention | apify_hashtag | manual
   matched_signals  text[] default '{}',             -- which tags/hashtags hit
   human_verified   boolean not null default false,  -- brand-manager confirm toggle
-  unique (post_shortcode)
+  -- Dedupe is PER campaign_kol, not global: the same shortcode can legitimately
+  -- belong to one KOL enrolled in two different campaigns.
+  unique (campaign_kol_id, post_shortcode)
 );
 
 -- ── nudges: overdue reminder drafts (copy-paste send; Meta API paused) ────────

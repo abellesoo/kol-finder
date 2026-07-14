@@ -1,4 +1,19 @@
-# Copy this file to .dev.vars and fill in the value.
+# Copy this file to .dev.vars and fill in the values.
 # .dev.vars is gitignored — never commit it.
 # This file is only needed if you run `wrangler dev` locally.
+
+# Apify token — Instagram scraper (post detection).
 APIFY_API_KEY=your_apify_key_here
+
+# DeepSeek key — DM drafts + Phase 2 overdue nudge drafts.
+DEEPSEEK_API_KEY=your_deepseek_key_here
+
+# Phase 2: Supabase service_role key. The cron/verify engine reads & writes the
+# campaign tables with no logged-in user, so it needs service_role to bypass RLS.
+# Find it in Supabase → Project Settings → API → service_role. SERVER-SIDE ONLY.
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+
+# Phase 4: Google service-account JSON key (whole file, as a single line) — used
+# to create/update campaign Google Sheets. See PHASE4_GOOGLE_SHEETS_SETUP.md.
+# SERVER-SIDE ONLY. For wrangler dev, wrap the JSON in single quotes.
+GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account","project_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n","client_email":"...@...iam.gserviceaccount.com","token_uri":"https://oauth2.googleapis.com/token"}

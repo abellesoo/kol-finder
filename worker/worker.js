@@ -2,6 +2,251 @@ const BASE = 'https://api.apify.com/v2'
 const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions'
 const DEEPSEEK_MODEL = 'deepseek-chat'
 
+// ════════════════════════════════════════════════════════════════════════════
+// Campaign Ops — Phase 2 verification engine
+// ----------------------------------------------------------------------------
+// Runs on a cron (scheduled handler, ~2×/day) and on demand (POST
+// /verify-campaign). For each awaiting_post/overdue KOL on an active campaign it
+// scrapes recent Instagram posts, matches captions/hashtags/mentions against the
+// campaign's detection signals, records verified_posts (dedupe on shortcode) and
+// flips the KOL to `posted`. Late posts still count (overdue → posted). Past the
+// deadline with no match → `overdue`. It NEVER sets human_verified — a brand
+// manager confirms in the UI (see campaign-ops-context.md §4 "Key safety rule").
+//
+// The cron has no logged-in user, so all DB access uses the Supabase
+// service_role key (bypasses RLS). Keep that key server-side only.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── Handle/hashtag normalization — MUST mirror src/lib/campaigns.js exactly, or
+// scraped captions won't line up with the signals stored at campaign creation.
+function normalizeHandle(raw) {
+  if (!raw) return ''
+  return String(raw).trim().replace(/^@+/, '').replace(/\\_/g, '_').replace(/\\/g, '').toLowerCase()
+}
+function normalizeHashtag(raw) {
+  if (!raw) return ''
+  return String(raw).trim().replace(/^#+/, '').replace(/\\/g, '').toLowerCase()
+}
+
+// ── Supabase PostgREST helpers (service_role — bypasses RLS) ──────────────────
+function sbHeaders(env, extra = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY
+  return { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', ...extra }
+}
+function sbBase(env) {
+  return `${String(env.SUPABASE_URL).replace(/\/$/, '')}/rest/v1`
+}
+async function sbSelect(env, path) {
+  const res = await fetch(`${sbBase(env)}/${path}`, { headers: sbHeaders(env) })
+  if (!res.ok) throw new Error(`Supabase select ${path} failed (${res.status}): ${await res.text()}`)
+  return res.json()
+}
+// Insert rows, ignoring rows that collide on `onConflict` (PostgREST upsert).
+async function sbInsertIgnore(env, table, rows, onConflict) {
+  if (!rows.length) return []
+  const q = onConflict ? `?on_conflict=${onConflict}` : ''
+  const res = await fetch(`${sbBase(env)}/${table}${q}`, {
+    method: 'POST',
+    headers: sbHeaders(env, {
+      Prefer: `resolution=ignore-duplicates,return=representation`,
+    }),
+    body: JSON.stringify(rows),
+  })
+  if (!res.ok) throw new Error(`Supabase insert ${table} failed (${res.status}): ${await res.text()}`)
+  return res.json()
+}
+async function sbUpdate(env, table, filter, patch) {
+  const res = await fetch(`${sbBase(env)}/${table}?${filter}`, {
+    method: 'PATCH',
+    headers: sbHeaders(env, { Prefer: 'return=minimal' }),
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(`Supabase update ${table} failed (${res.status}): ${await res.text()}`)
+}
+
+// ── Apify: start a scrape and poll it to completion (worker-side; the cron has
+// no client to drive polling). Bounded so a stuck run can't burn the whole
+// invocation's subrequest budget.
+async function apifyStartScrape(usernames, KEY, resultsLimit = 24) {
+  const directUrls = usernames.map((u) => `https://www.instagram.com/${u}/`)
+  const res = await fetch(`${BASE}/acts/apify~instagram-scraper/runs?token=${KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directUrls, resultsType: 'posts', resultsLimit }),
+  })
+  if (!res.ok) throw new Error(`Apify start failed (${res.status}): ${await res.text()}`)
+  const { data } = await res.json()
+  return data
+}
+async function apifyPollDone(runId, KEY, { maxMs = 180000 } = {}) {
+  const delays = [4000, 6000, 8000, 10000]
+  const deadline = Date.now() + maxMs
+  let i = 0
+  while (true) {
+    const res = await fetch(`${BASE}/actor-runs/${runId}?token=${KEY}`)
+    if (!res.ok) throw new Error(`Apify status failed (${res.status})`)
+    const { data } = await res.json()
+    if (data.status === 'SUCCEEDED') return data
+    if (data.status !== 'READY' && data.status !== 'RUNNING') {
+      // Non-terminal-success: recover whatever landed in the dataset anyway.
+      return data
+    }
+    if (Date.now() >= deadline) throw new Error('Apify run timed out')
+    await new Promise((r) => setTimeout(r, delays[Math.min(i++, delays.length - 1)]))
+  }
+}
+async function apifyDataset(datasetId, KEY) {
+  const res = await fetch(`${BASE}/datasets/${datasetId}/items?token=${KEY}&clean=true&limit=1000`)
+  if (!res.ok) throw new Error(`Apify dataset fetch failed (${res.status})`)
+  const items = await res.json()
+  return Array.isArray(items) ? items : []
+}
+
+// ── Matching ──────────────────────────────────────────────────────────────────
+// A post matches if its caption / hashtags / mentions carry ANY of the
+// campaign's mention_handles or hashtags. Returns the list of matched signals
+// (e.g. ['@lilyeve_tw', '#lilyeve']) or [] for no match.
+function matchPost(post, mentionHandles, hashtags) {
+  const caption = String(post.caption || '').toLowerCase()
+
+  // Every place a handle can hide: the mentions[] / taggedUsers[] arrays Apify
+  // returns, plus @tokens parsed straight out of the caption text.
+  const mentionSet = new Set()
+  for (const m of post.mentions || []) mentionSet.add(normalizeHandle(m))
+  for (const t of post.taggedUsers || []) if (t?.username) mentionSet.add(normalizeHandle(t.username))
+  for (const m of caption.match(/@([\w.]+)/g) || []) mentionSet.add(normalizeHandle(m))
+
+  const tagSet = new Set()
+  for (const h of post.hashtags || []) tagSet.add(normalizeHashtag(h))
+  for (const h of caption.match(/#([\w.]+)/g) || []) tagSet.add(normalizeHashtag(h))
+
+  const matched = []
+  for (const mh of mentionHandles) {
+    if (mentionSet.has(mh) || caption.includes(`@${mh}`)) matched.push(`@${mh}`)
+  }
+  for (const ht of hashtags) {
+    if (tagSet.has(ht) || caption.includes(`#${ht}`)) matched.push(`#${ht}`)
+  }
+  return matched
+}
+
+function postShortcode(post) {
+  return post.shortCode || post.shortcode || (post.url ? (post.url.match(/\/(?:p|reel|tv)\/([^/]+)/) || [])[1] : null) || null
+}
+function postUrl(post) {
+  return post.url || (postShortcode(post) ? `https://www.instagram.com/p/${postShortcode(post)}/` : null)
+}
+
+// ── Core: verify a set of campaigns in ONE Apify scrape ───────────────────────
+// Gathers every distinct handle across the campaigns' awaiting_post/overdue KOLs,
+// scrapes once, then matches each KOL against ITS campaign's signals. Returns a
+// summary { checked, matched, overdue, posts }.
+async function verifyCampaigns(env, campaigns) {
+  const KEY = env.APIFY_API_KEY
+  const today = new Date().toISOString().slice(0, 10)
+  const summary = { checked: 0, matched: 0, overdue: 0, posts: 0 }
+  const checkedIds = []
+  if (!campaigns.length) return summary
+
+  // Pull the KOLs needing a check for each campaign.
+  const perCampaign = []
+  const handles = new Set()
+  for (const c of campaigns) {
+    const kols = await sbSelect(
+      env,
+      `campaign_kols?campaign_id=eq.${c.id}&state=in.(awaiting_post,overdue)&select=*`,
+    )
+    if (!kols.length) continue
+    perCampaign.push({ campaign: c, kols })
+    for (const k of kols) handles.add(k.kol_handle)
+  }
+  if (!handles.size) return summary
+
+  // One scrape for all of them.
+  const run = await apifyStartScrape([...handles], KEY)
+  const done = await apifyPollDone(run.id, KEY)
+  const items = done.defaultDatasetId ? await apifyDataset(done.defaultDatasetId, KEY) : []
+
+  // Bucket posts by owner handle.
+  const byOwner = {}
+  for (const item of items) {
+    const owner = normalizeHandle(item.ownerUsername)
+    if (!owner) continue
+    ;(byOwner[owner] = byOwner[owner] || []).push(item)
+  }
+
+  for (const { campaign, kols } of perCampaign) {
+    const mentionHandles = (campaign.mention_handles || []).map(normalizeHandle).filter(Boolean)
+    const hashtags = (campaign.hashtags || []).map(normalizeHashtag).filter(Boolean)
+
+    for (const kol of kols) {
+      summary.checked++
+      checkedIds.push(kol.id)
+      const posts = byOwner[kol.kol_handle] || []
+      const since = kol.shipped_at || campaign.start_date || null
+
+      const hits = []
+      for (const post of posts) {
+        // Only posts on/after the ship date count as campaign posts.
+        if (since && post.timestamp && new Date(post.timestamp) < new Date(`${since}T00:00:00Z`)) continue
+        const signals = matchPost(post, mentionHandles, hashtags)
+        if (signals.length) hits.push({ post, signals })
+      }
+
+      if (hits.length) {
+        const rows = hits.map(({ post, signals }) => ({
+          campaign_kol_id: kol.id,
+          post_url: postUrl(post),
+          post_shortcode: postShortcode(post),
+          posted_at: post.timestamp || null,
+          detection_method: signals.some((s) => s.startsWith('@')) ? 'apify_mention' : 'apify_hashtag',
+          matched_signals: signals,
+          human_verified: false, // SAFETY: manager confirms in the UI
+        })).filter((r) => r.post_shortcode) // need a shortcode to dedupe safely
+        const inserted = await sbInsertIgnore(env, 'verified_posts', rows, 'campaign_kol_id,post_shortcode')
+        summary.posts += inserted.length
+        if (kol.state !== 'posted') {
+          await sbUpdate(env, 'campaign_kols', `id=eq.${kol.id}`, {
+            state: 'posted',
+            updated_at: new Date().toISOString(),
+          })
+        }
+        summary.matched++
+      } else {
+        // No matching post. Flip to overdue if the deadline has passed — BUT only
+        // for auto-verifiable formats (feed/reel, or none set). Story/blog-only
+        // KOLs can't be auto-checked (stories aren't in the posts scrape and
+        // expire after 24h), so never false-flag them overdue — a manager
+        // verifies those by hand. Mirrors isAutoVerifiable() in campaigns.js.
+        const deadline = kol.deadline_override || campaign.posting_deadline
+        const formats = kol.content_formats || []
+        const autoVerifiable = !formats.length || formats.some((f) => f === 'feed' || f === 'reel')
+        if (kol.state === 'awaiting_post' && deadline && deadline < today && autoVerifiable) {
+          await sbUpdate(env, 'campaign_kols', `id=eq.${kol.id}`, {
+            state: 'overdue',
+            updated_at: new Date().toISOString(),
+          })
+          summary.overdue++
+        }
+      }
+    }
+  }
+
+  // Best-effort observability stamp — one PATCH for everything we looked at.
+  // Wrapped so a project without the (optional) last_checked_at column still
+  // verifies fine; see db/campaign_ops_phase2.sql.
+  if (checkedIds.length) {
+    try {
+      await sbUpdate(env, 'campaign_kols', `id=in.(${checkedIds.join(',')})`, {
+        last_checked_at: new Date().toISOString(),
+      })
+    } catch (e) {
+      console.warn('last_checked_at stamp skipped:', e.message || e)
+    }
+  }
+  return summary
+}
+
 function corsHeaders(origin) {
   const isAllowed = origin === 'https://abellesoo.github.io' || origin.startsWith('http://localhost:')
   const allowed = isAllowed ? origin : 'https://abellesoo.github.io'
@@ -134,6 +379,170 @@ async function verifyAuth(request, env) {
   return null
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// Campaign Ops — Phase 4: Google Sheets (one-way push, one sheet per campaign)
+// ----------------------------------------------------------------------------
+// Auth is a Google service account (JSON key in GOOGLE_SERVICE_ACCOUNT_KEY): we
+// sign a JWT with its private key (RS256), swap it for an OAuth access token,
+// then create/update the campaign's spreadsheet and share it with the Markato
+// Workspace domain. The client assembles the rows and POSTs them; the worker
+// only writes them out — see campaign-ops-context.md and PHASE4 setup doc.
+// ════════════════════════════════════════════════════════════════════════════
+
+function pemToDer(pem) {
+  const body = String(pem)
+    .replace(/-----BEGIN [^-]+-----/, '')
+    .replace(/-----END [^-]+-----/, '')
+    .replace(/\s+/g, '')
+  return base64UrlToBytes(body.replace(/\+/g, '-').replace(/\//g, '_')) // reuse url-safe decoder
+}
+
+function b64url(bytes) {
+  let bin = ''
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i])
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+let googleTokenCache = { token: null, exp: 0 }
+
+async function getGoogleAccessToken(env) {
+  const now = Math.floor(Date.now() / 1000)
+  if (googleTokenCache.token && now < googleTokenCache.exp - 60) return googleTokenCache.token
+
+  let sa
+  try {
+    sa = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY)
+  } catch {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is missing or not valid JSON')
+  }
+  const scope = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive'
+  const aud = sa.token_uri || 'https://oauth2.googleapis.com/token'
+  const header = { alg: 'RS256', typ: 'JWT' }
+  const claim = { iss: sa.client_email, scope, aud, iat: now, exp: now + 3600 }
+  const enc = (o) => b64url(new TextEncoder().encode(JSON.stringify(o)))
+  const signingInput = `${enc(header)}.${enc(claim)}`
+
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToDer(sa.private_key),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signingInput))
+  const assertion = `${signingInput}.${b64url(sig)}`
+
+  const res = await fetch(aud, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${assertion}`,
+  })
+  if (!res.ok) throw new Error(`Google token exchange failed (${res.status}): ${await res.text()}`)
+  const { access_token, expires_in } = await res.json()
+  googleTokenCache = { token: access_token, exp: now + (expires_in || 3600) }
+  return access_token
+}
+
+function sheetIdFromUrl(url) {
+  return url ? (String(url).match(/\/spreadsheets\/d\/([^/]+)/) || [])[1] || null : null
+}
+
+// Create a new spreadsheet, share it with the Workspace domain, return {id,url}.
+async function createCampaignSpreadsheet(token, title, env) {
+  const driveId = env.GOOGLE_SHARED_DRIVE_ID
+  let doc
+  if (driveId) {
+    // Service accounts have no My Drive storage quota, so the sheet must be born
+    // inside a Shared Drive (org-owned storage). spreadsheets.create can't target
+    // a parent folder, so we create the file via the Drive API instead.
+    const res = await fetch(
+      'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,webViewLink',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: title,
+          mimeType: 'application/vnd.google-apps.spreadsheet',
+          parents: [driveId],
+        }),
+      },
+    )
+    if (!res.ok) throw new Error(`Drive create failed (${res.status}): ${await res.text()}`)
+    const f = await res.json()
+    doc = { spreadsheetId: f.id, spreadsheetUrl: f.webViewLink }
+    // A Drive-created sheet has one tab named "Sheet1"; rename it so the value
+    // writes (which target "Campaign!A1") line up.
+    await renameFirstTab(token, f.id)
+  } else {
+    const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ properties: { title }, sheets: [{ properties: { title: 'Campaign' } }] }),
+    })
+    if (!res.ok) throw new Error(`Sheets create failed (${res.status}): ${await res.text()}`)
+    doc = await res.json()
+  }
+
+  // Share so humans can actually open it (the service account owns it otherwise).
+  const domain = env.GOOGLE_WORKSPACE_DOMAIN
+  if (domain) {
+    const share = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${doc.spreadsheetId}/permissions?supportsAllDrives=true&sendNotificationEmail=false`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'domain', role: 'writer', domain }),
+      },
+    )
+    if (!share.ok) {
+      // Non-fatal: the sheet exists; surface a hint but don't fail the whole sync.
+      console.warn(`Drive domain-share failed (${share.status}): ${await share.text()}`)
+    }
+  }
+  return { id: doc.spreadsheetId, url: doc.spreadsheetUrl }
+}
+
+// Rename the auto-created first tab ("Sheet1") to "Campaign" so value writes align.
+async function renameFirstTab(token, sheetId) {
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(sheetId,title)`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!res.ok) throw new Error(`Sheets read failed (${res.status}): ${await res.text()}`)
+  const { sheets } = await res.json()
+  const first = sheets && sheets[0] && sheets[0].properties
+  if (!first || first.title === 'Campaign') return
+  const upd = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: [
+        { updateSheetProperties: { properties: { sheetId: first.sheetId, title: 'Campaign' }, fields: 'title' } },
+      ],
+    }),
+  })
+  if (!upd.ok) throw new Error(`Sheets rename failed (${upd.status}): ${await upd.text()}`)
+}
+
+// Overwrite the sheet with a fresh values grid (one-way push: app → sheet).
+async function writeSheetValues(token, sheetId, values) {
+  const clear = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1:ZZ10000:clear`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' },
+  )
+  if (!clear.ok) throw new Error(`Sheets clear failed (${clear.status}): ${await clear.text()}`)
+  const upd = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1?valueInputOption=RAW`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    },
+  )
+  if (!upd.ok) throw new Error(`Sheets update failed (${upd.status}): ${await upd.text()}`)
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || ''
@@ -150,7 +559,16 @@ export default {
     const { pathname } = new URL(request.url)
     const KEY = env.APIFY_API_KEY
 
-    if (!KEY) return json({ error: 'APIFY_API_KEY not configured in Worker secrets' }, 500, origin)
+    // Guard the APIFY key only on the routes that actually spend it — the
+    // DeepSeek-only routes (/draft-dm, /ai-score, /draft-nudge) and the Sheets
+    // route must stay reachable when APIFY_API_KEY is unset.
+    const needsApify =
+      pathname === '/start-run/instagram-scraper' ||
+      pathname === '/start-run/reel-scraper' ||
+      pathname.startsWith('/run-status/') ||
+      pathname.startsWith('/dataset/') ||
+      pathname === '/verify-campaign'
+    if (needsApify && !KEY) return json({ error: 'APIFY_API_KEY not configured in Worker secrets' }, 500, origin)
 
     // POST /start-run/instagram-scraper
     if (pathname === '/start-run/instagram-scraper' && request.method === 'POST') {
@@ -325,7 +743,7 @@ Hi dear,
       }
 
       const clean = (s) => String(s || '')
-        .replace(/[ --]/g, ' ')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
         .replace(/[\uD800-\uDFFF]/g, '')
         .trim()
       const tags = (arr) => (Array.isArray(arr) ? arr.slice(0, 8).map(clean).filter(Boolean).join(', ') : '')
@@ -408,6 +826,150 @@ Include every candidate exactly once.`
       return json({ results }, 200, origin)
     }
 
+    // POST /verify-campaign
+    // Body: { campaignId } — on-demand run of the Phase 2 verification engine for
+    // one campaign (the cron does all active campaigns unattended). Auth already
+    // checked above (real @markato user), but the writes go through service_role.
+    // Returns: { summary: { checked, matched, overdue, posts } }
+    if (pathname === '/verify-campaign' && request.method === 'POST') {
+      if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+        return json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured in Worker secrets' }, 500, origin)
+      }
+      const { campaignId } = await request.json()
+      if (!campaignId) return json({ error: 'campaignId required' }, 400, origin)
+      try {
+        const rows = await sbSelect(env, `campaigns?id=eq.${campaignId}&select=*`)
+        if (!rows.length) return json({ error: 'Campaign not found' }, 404, origin)
+        const summary = await verifyCampaigns(env, rows)
+        return json({ summary }, 200, origin)
+      } catch (e) {
+        return json({ error: String(e.message || e) }, 502, origin)
+      }
+    }
+
+    // POST /draft-nudge
+    // Body: { handle, brand, market } — a soft overdue
+    // reminder DM. Language follows the MARKET, never mixed: HK → Cantonese,
+    // TW → zh-TW ("feature 一下" tone), else English. Copy-paste send only.
+    // Returns: { draft, language }
+    if (pathname === '/draft-nudge' && request.method === 'POST') {
+      const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
+      if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
+
+      const { handle = '', brand = '', market = '' } = await request.json()
+      const clean = (s) => String(s || '')
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+        .replace(/[\uD800-\uDFFF]/g, '')
+        .trim()
+      const mkt = clean(market).toUpperCase()
+      const language = mkt === 'HK' ? 'zh-HK' : mkt === 'TW' ? 'zh-TW' : 'en'
+      const brandTxt = clean(brand) || '我哋品牌'
+      const kolTxt = clean(handle)
+
+      let prompt
+      if (language === 'zh-HK') {
+        prompt = `# 角色
+你係一位香港美妝品牌「${brandTxt}」嘅 Marketing，之前寄咗產品畀 KOL @${kolTxt} 做 seeding，但過咗約定嘅 post 死線都仲未見到帖文。而家要寫一個「溫柔提醒」嘅 Instagram DM follow-up。
+
+# 要求
+- 香港口語繁體中文（Cantonese）：我哋、嘅、收到未、方唔方便、啦、㗎。用「你」唔用「您」。English 只夾單字（feature、Feed、Reels、DM）。
+- 語氣輕鬆、貼心、絕不施壓：先關心佢收到產品未、用得順唔順，再輕輕問幾時方便 feature 一下，畀足彈性。
+- 唔好催、唔好提「死線」「逾期」呢類字眼；營造朋友之間 follow-up 嘅感覺。
+- 全篇約 80–140 字，1–2 個暖 emoji（☺️／💕／🙏）。
+
+# 只輸出 DM 內文，唔好任何解釋、標題或 markdown 符號。`
+      } else if (language === 'zh-TW') {
+        prompt = `# 角色
+你是台灣美妝品牌「${brandTxt}」的行銷，先前寄了產品給 KOL @${kolTxt} 做 seeding，但過了約定的貼文時間還沒看到分享。現在要寫一則「溫柔提醒」的 Instagram DM follow-up。
+
+# 要求
+- 台灣繁體中文（zh-TW）自然口吻：我們、的、收到了嗎、方便的話、喔、呢。English 只夾單字（feature、Feed、Reels、DM）。
+- 語氣輕鬆、貼心、完全不施壓：先關心有沒有收到產品、用起來如何，再輕輕問方便的話幫我們 feature 一下，給足彈性。
+- 不要催促、不要提「死線」「逾期」等字眼；營造朋友之間 follow-up 的感覺。
+- 全篇約 80–140 字，1–2 個溫暖 emoji（☺️／💕／🙏）。
+
+# 只輸出 DM 內文，不要任何解釋、標題或 markdown 符號。`
+      } else {
+        prompt = `# Role
+You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted product to the KOL @${kolTxt} for a seeding collaboration, but the agreed posting date has passed and no post has appeared yet. Write a warm, low-pressure Instagram DM follow-up.
+
+# Requirements
+- Friendly, caring, zero pressure: first check the product arrived and they're enjoying it, then gently ask whether they'd have a chance to feature it whenever convenient. Give them full flexibility.
+- Do NOT mention "deadline", "overdue", or chase them; make it feel like a friendly check-in.
+- 60–100 words, 1–2 warm emoji.
+
+# Output ONLY the DM body — no explanation, heading, or markdown.`
+      }
+
+      const res = await fetch(DEEPSEEK_API, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: DEEPSEEK_MODEL, max_tokens: 512, messages: [{ role: 'user', content: prompt }] }),
+      })
+      if (!res.ok) {
+        return json({ error: `DeepSeek error ${res.status}: ${await res.text()}` }, 502, origin)
+      }
+      const aiRes = await res.json()
+      const draft = aiRes.choices?.[0]?.message?.content?.trim() || ''
+      return json({ draft, language }, 200, origin)
+    }
+
+    // POST /campaign-sheet
+    // Body: { campaignId, title, values } — create the campaign's Google Sheet on
+    // first call (then reuse it) and overwrite it with `values` (2D array, first
+    // row = headers). One-way push. Returns { url, created }.
+    if (pathname === '/campaign-sheet' && request.method === 'POST') {
+      if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+        return json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured in Worker secrets' }, 500, origin)
+      }
+      if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+        return json({ error: 'GOOGLE_SERVICE_ACCOUNT_KEY not configured — see PHASE4 setup doc' }, 500, origin)
+      }
+      const { campaignId, title, values } = await request.json()
+      if (!campaignId || !Array.isArray(values)) {
+        return json({ error: 'campaignId and values[] required' }, 400, origin)
+      }
+      try {
+        const rows = await sbSelect(env, `campaigns?id=eq.${campaignId}&select=id,name,sheet_url`)
+        if (!rows.length) return json({ error: 'Campaign not found' }, 404, origin)
+        const campaign = rows[0]
+
+        const token = await getGoogleAccessToken(env)
+        let sheetId = sheetIdFromUrl(campaign.sheet_url)
+        let url = campaign.sheet_url
+        let created = false
+        if (!sheetId) {
+          const made = await createCampaignSpreadsheet(token, title || campaign.name || 'Campaign', env)
+          sheetId = made.id
+          url = made.url
+          created = true
+          await sbUpdate(env, 'campaigns', `id=eq.${campaignId}`, { sheet_url: url })
+        }
+        await writeSheetValues(token, sheetId, values)
+        return json({ url, created }, 200, origin)
+      } catch (e) {
+        return json({ error: String(e.message || e) }, 502, origin)
+      }
+    }
+
     return new Response('Not found', { status: 404, headers: corsHeaders(origin) })
+  },
+
+  // ── Cron: verify every active campaign, unattended (~2×/day per wrangler.toml).
+  // No user JWT here — verifyCampaigns writes via the service_role key.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.error('scheduled: SUPABASE_SERVICE_ROLE_KEY not set — skipping verification')
+        return
+      }
+      try {
+        const campaigns = await sbSelect(env, `campaigns?status=eq.active&select=*`)
+        const summary = await verifyCampaigns(env, campaigns)
+        console.log(`scheduled verify: ${JSON.stringify(summary)} across ${campaigns.length} active campaigns`)
+      } catch (e) {
+        console.error('scheduled verify failed:', e.message || e)
+      }
+    })())
   },
 }

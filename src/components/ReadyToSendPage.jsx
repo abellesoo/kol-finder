@@ -173,7 +173,7 @@ export default function ReadyToSendPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Ready to Send</p>
-          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-1">
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">
             {items.length} {items.length === 1 ? 'account' : 'accounts'} approved
           </h1>
           <p className="text-[14px] text-muted">Copy each DM draft and open the Instagram profile to send.</p>

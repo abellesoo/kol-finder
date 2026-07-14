@@ -42,6 +42,52 @@ export function parseTokens(text, kind = 'handle') {
   return out
 }
 
+// ── Tier labels (display layer only) ─────────────────────────────────────────
+// Stored values stay 'A'/'B' (importSheet.js sets B when budget>0, else A —
+// i.e. A = gifted, B = paid). The UI shows PR/Paid. Map only at render so no
+// stored record or the perftracker feed contract changes.
+export const TIER_LABELS = { A: 'PR', B: 'Paid' }
+export function tierLabel(tier) { return TIER_LABELS[tier] || tier || '—' }
+
+// ── Content format per KOL (manually set; mirrors the marketing-plan sheet) ───
+// feed/reel are auto-verifiable via the Apify posts scrape. story is ephemeral
+// (only verifiable <24h of posting, and our scraper doesn't return stories) and
+// blog is off-platform — both are manual-verify-only, never auto-flagged overdue.
+export const CONTENT_FORMATS = [
+  { id: 'story', label: 'story',       verifiable: false },
+  { id: 'feed',  label: 'Feed (post)', verifiable: true  },
+  { id: 'reel',  label: 'reel',        verifiable: true  },
+  { id: 'blog',  label: 'blog',        verifiable: false },
+]
+// Badge palette matches the reference sheet.
+export const FORMAT_BADGE_CLS = {
+  story: 'bg-rose/10 text-rose',
+  feed:  'bg-blue-100 text-blue-700',
+  reel:  'bg-accent/25 text-[#8A6A22]',
+  blog:  'bg-violet-100 text-violet-700',
+}
+export function formatLabel(id) {
+  return (CONTENT_FORMATS.find((f) => f.id === id) || {}).label || id
+}
+// Auto-verifiable if at least one format is feed/reel, or none is set (default
+// assumption = a feed post). Story/blog-only KOLs must be verified by hand.
+export function isAutoVerifiable(formats) {
+  if (!formats || !formats.length) return true
+  return formats.some((f) => f === 'feed' || f === 'reel')
+}
+
+export async function setKolFormats(kolId, formats) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('campaign_kols')
+    .update({ content_formats: formats, updated_at: new Date().toISOString() })
+    .eq('id', kolId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
 // ── State machine (enforced in app logic, not the DB) ────────────────────────
 // approved → shipped → awaiting_post → posted | overdue | opted_out
 // overdue → posted (late posts still count). Any non-terminal → opted_out.
@@ -56,6 +102,8 @@ const TRANSITIONS = {
   opted_out:     ['approved'],
 }
 
+// The suggested "natural" next step (used to order the status menu). Manual
+// overrides to any state are always allowed — see updateKolState.
 export function canTransition(from, to) {
   return (TRANSITIONS[from] || []).includes(to)
 }
@@ -232,13 +280,14 @@ export async function attachKols(campaignId, kols, existingHandles = []) {
   return data ? data.length : 0
 }
 
-// Transition a KOL's state, guarding the move in app logic. Marking `shipped`
-// stamps shipped_at (if not already set).
+// Set a KOL's state. This is a manual ops tool, so a brand manager can move a
+// KOL to ANY state to correct mistakes (e.g. a false-positive `posted` back to
+// `awaiting_post`) — the only guard is that it's a real state. Marking `shipped`
+// stamps shipped_at if not already set.
 export async function updateKolState(kol, to) {
   if (!supabase) throw new Error('Supabase not configured')
-  if (!canTransition(kol.state, to)) {
-    throw new Error(`Illegal transition: ${kol.state} → ${to}`)
-  }
+  if (!KOL_STATES.includes(to)) throw new Error(`Unknown state: ${to}`)
+  if (to === kol.state) return kol
   const patch = { state: to, updated_at: new Date().toISOString() }
   if (to === 'shipped' && !kol.shipped_at) patch.shipped_at = today()
   const { data, error } = await supabase
@@ -325,6 +374,132 @@ export async function importCampaignKols(campaignId, rows) {
     postsInserted += data ? data.length : 0
   }
   return { kols: kolPayload.length, posts: postsInserted }
+}
+
+// ── Verified posts (Phase 2 — written by the verification worker or import) ───
+// Returns a map: campaign_kol_id → array of its verified_posts (newest first).
+export async function getVerifiedPostsByKol(kolIds) {
+  if (!supabase || !kolIds?.length) return {}
+  const { data, error } = await supabase
+    .from('verified_posts')
+    .select('*')
+    .in('campaign_kol_id', kolIds)
+    .order('posted_at', { ascending: false, nullsFirst: false })
+  if (error) throw new Error(error.message)
+  const byKol = {}
+  for (const p of data || []) (byKol[p.campaign_kol_id] = byKol[p.campaign_kol_id] || []).push(p)
+  return byKol
+}
+
+// The Phase 2 safety toggle: the worker sets state=posted but leaves
+// human_verified=false; a brand manager confirms a match is genuine here.
+export async function setHumanVerified(postId, verified) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('verified_posts')
+    .update({ human_verified: !!verified })
+    .eq('id', postId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// ── Nudges (overdue reminder drafts — copy-paste send only) ───────────────────
+export async function getNudgesByKol(kolIds) {
+  if (!supabase || !kolIds?.length) return {}
+  const { data, error } = await supabase
+    .from('nudges')
+    .select('*')
+    .in('campaign_kol_id', kolIds)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  const byKol = {}
+  for (const n of data || []) (byKol[n.campaign_kol_id] = byKol[n.campaign_kol_id] || []).push(n)
+  return byKol
+}
+
+export async function saveNudge(campaignKolId, draftText, language) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('nudges')
+    .insert({ campaign_kol_id: campaignKolId, draft_text: draftText, language })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function markNudgeSent(nudgeId) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('nudges')
+    .update({ sent_manually_at: new Date().toISOString() })
+    .eq('id', nudgeId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// ── Google Sheet export (Phase 4 — one-way push, one sheet per campaign) ──────
+const SHEET_STATE_LABELS = {
+  approved: 'Approved', shipped: 'Shipped', awaiting_post: 'Awaiting post',
+  posted: 'Posted', overdue: 'Overdue', opted_out: 'Opted out',
+}
+
+// Pull the scoring account object (from shared_results.accounts) for each KOL's
+// approval run, keyed by normalized handle. Empty for imported KOLs with no run.
+export async function getScoringByHandle(kols) {
+  if (!supabase) return {}
+  const runIds = [...new Set((kols || []).map((k) => k.kol_run_id).filter(Boolean))]
+  if (!runIds.length) return {}
+  const { data, error } = await supabase.from('shared_results').select('id, accounts').in('id', runIds)
+  if (error) throw new Error(error.message)
+  const byHandle = {}
+  for (const row of data || []) {
+    for (const acc of row.accounts || []) {
+      const h = normalizeHandle(acc.username)
+      if (h && !byHandle[h]) byHandle[h] = acc
+    }
+  }
+  return byHandle
+}
+
+// Assemble the 2D grid the worker writes to the campaign's Google Sheet: the
+// campaign-ops columns (from campaign_kols + verified_posts) joined with the
+// KOL Finder scoring columns (from shared_results). First row = headers.
+export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreByHandle = {}) {
+  const headers = [
+    'Handle', 'Full name', 'Tier', 'Format', 'Status', 'Shipped', 'Deadline',
+    'Post URL', 'Verified', 'AI Fit', 'Overall', 'Relevancy', 'Eng. Score',
+    'Followers', 'Med. Likes', 'Med. Views', 'Med. Comments', 'Niche Signals',
+  ]
+  const rows = (kols || []).map((k) => {
+    const acc = scoreByHandle[normalizeHandle(k.kol_handle)] || {}
+    const post = (postsByKol[k.id] || [])[0] || null
+    return [
+      k.kol_handle,
+      acc.fullName || '',
+      tierLabel(k.tier),
+      (k.content_formats || []).map(formatLabel).join(', '),
+      SHEET_STATE_LABELS[k.state] || k.state,
+      k.shipped_at || '',
+      effectiveDeadline(k, campaign) || '',
+      post?.post_url || '',
+      post ? (post.human_verified ? 'Yes' : 'Detected') : '',
+      acc.aiScore ?? '',
+      acc.overall ?? '',
+      acc.scores?.relevancy ?? '',
+      acc.scores?.engagement ?? '',
+      acc.followerCount ?? '',
+      acc.medianLikes ?? '',
+      acc.medianViews ?? '',
+      acc.medianComments ?? '',
+      (acc.nicheSignals || []).join(', '),
+    ].map((v) => (v == null ? '' : String(v)))
+  })
+  return { title: `${campaign.name} — Campaign Ops`, values: [headers, ...rows] }
 }
 
 export async function detachKol(kolId) {

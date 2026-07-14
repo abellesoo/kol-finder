@@ -5,7 +5,7 @@ function Section({ label, title, children }) {
   return (
     <section className="mb-10">
       <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">{label}</p>
-      <h2 className="text-[20px] font-bold tracking-[-0.02em] text-ink mb-4">{title}</h2>
+      <h2 className="text-[26px] font-serif font-semibold tracking-[0.02em] text-ink mb-4">{title}</h2>
       {children}
     </section>
   )
@@ -84,9 +84,9 @@ export default function InstructionsPage() {
       {/* Tool Overview */}
       <div className="mb-10">
         <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">About this tool</p>
-        <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mb-4">KOL Finder — Seeding Studio</h1>
+        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-4">KOL Finder — Seeding Studio</h1>
         <p className="text-body leading-relaxed mb-3">
-          A full end-to-end Instagram KOL seeding workflow — from account discovery to tracked outreach. Source KOL candidates, score and rank them automatically, review and approve as a team, then manage DM outreach in one place.
+          A full end-to-end Instagram KOL seeding workflow — from account discovery to tracked outreach. Source KOL candidates, score and rank them automatically, review and approve as a team, manage DM outreach, then track every seeded KOL through to their published post — all in one place. That last stage lives in the <strong>Campaigns</strong> tab; see <em>Campaign Ops</em> below.
         </p>
         <p className="text-body leading-relaxed mb-3">
           Bring in accounts two ways: upload an Apify <strong>.xlsx</strong> export, or paste competitor post URLs and hashtags directly and let the tool trigger the scrape. Either way, accounts are deduplicated, scored across Engagement and Relevancy, and surfaced in a ranked table ready to filter and shortlist.
@@ -352,6 +352,79 @@ export default function InstructionsPage() {
 
         <p className="text-[11px] text-faint font-mono">
           All scores are computed locally in your browser. Data is only sent externally for opt-in Apify features (Fetch Live Stats, direct scrape intake). The Apify API key never reaches the browser — it goes through the Cloudflare Worker proxy.
+        </p>
+      </Section>
+
+      <div className="border-t border-mist mb-10" />
+
+      {/* Campaign Ops */}
+      <Section label="Campaign Ops" title="Tracking your seeded KOLs">
+
+        <p className="text-body leading-relaxed mb-3">
+          Once accounts are approved and your DMs are out, the <strong>Campaigns</strong> tab takes over: it tracks every seeded KOL from parcel to published post, and <strong>detects the post for you</strong> instead of you scrolling feeds. Approved KOLs carry over by their Instagram handle — the same handle used everywhere else in the tool.
+        </p>
+
+        {/* Pipeline states */}
+        <div className="bg-surface border border-card-edge rounded-[12px] px-5 py-4 mb-6">
+          <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">The KOL pipeline</p>
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-2 text-[11px] font-mono">
+            {['approved', 'shipped', 'awaiting post', 'posted'].map((s, i, arr) => (
+              <span key={s} className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full bg-ink/5 text-body">{s}</span>
+                {i < arr.length - 1 && <span className="text-faint">→</span>}
+              </span>
+            ))}
+            <span className="text-faint mx-1">·</span>
+            <span className="px-2 py-0.5 rounded-full bg-[#F4E2E6] text-[#A8485E]">overdue</span>
+            <span className="px-2 py-0.5 rounded-full bg-ink/5 text-faint">opted out</span>
+          </div>
+          <p className="text-[12px] text-body leading-relaxed mt-3">
+            A late post still counts — <strong>overdue → posted</strong> is allowed. Any non-terminal KOL can be marked <strong>opted out</strong> if they drop.
+          </p>
+        </div>
+
+        <ol className="space-y-6">
+          {[
+            {
+              n: 1,
+              title: 'Create or import a campaign',
+              text: <>In the <strong>Campaigns</strong> tab, click <strong>New</strong> and set the brand, market, and posting deadline — plus the <strong>#hashtags</strong> and <strong>@mentions</strong> that count as "posted" (these are the detection signals the tracker matches against). Already have a marketing-plan sheet? Click <strong>Import</strong> to pull handles, budgets, and formats from an .xlsx. Toggle between <strong>card</strong> and <strong>table</strong> views — the table shows KOLs, Posted, Overdue, and a <strong>Fulfilled %</strong> per campaign.</>,
+            },
+            {
+              n: 2,
+              title: 'Attach KOLs & set their content format',
+              text: <>Open a campaign and <strong>Attach KOLs</strong> straight from your approved Review Queue. Tag each with the content they owe — <strong>Feed</strong>, <strong>Reel</strong>, <strong>Story</strong>, or <strong>Blog</strong>. Feed and Reels are <strong>auto-verified</strong> from the scrape; Stories expire within 24h and Blogs are off-platform, so those are flagged <strong>"verify manually"</strong> and never auto-marked overdue.</>,
+            },
+            {
+              n: 3,
+              title: 'Verify posts',
+              text: <>Click <strong>Verify posts</strong> to scrape each awaiting / overdue KOL and match their recent posts against the campaign's hashtags and mentions. It also runs on its own <strong>~twice a day</strong>, so most posts are caught without you lifting a finger. A match records the post — with its link and which signals hit — and moves the KOL to <strong>Posted</strong>. Past the deadline with no match → <strong>Overdue</strong>.</>,
+            },
+            {
+              n: 4,
+              title: 'Confirm the match',
+              text: <>Auto-detection is deliberately cautious: it sets <strong>Posted</strong> but leaves the post <em>unconfirmed</em>. Eyeball the detected post, then click <strong>Confirm</strong> — nothing is treated as fully verified until a person signs off. This is the safety gate against a mis-tagged or coincidental post being counted.</>,
+            },
+            {
+              n: 5,
+              title: 'Nudge overdue KOLs',
+              text: <>On an overdue KOL, click <strong>Draft nudge</strong> for a warm, no-pressure reminder DM — written in the campaign's market language (<strong>Cantonese for HK, zh-TW for Taiwan</strong>, never mixed). Copy it, send it from Instagram, then hit <strong>Mark sent</strong> to log it. Sending stays copy-paste for now (the Meta API is paused).</>,
+            },
+          ].map(({ n, title, text }) => (
+            <li key={n} className="flex gap-4">
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">
+                {n}
+              </span>
+              <div>
+                <p className="text-[16px] font-bold text-ink mb-1">{title}</p>
+                <p className="text-[13px] text-body leading-relaxed">{text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <p className="text-[11px] text-faint font-mono mt-6">
+          Verification uses the same Apify scrape as Live Stats (~$0.01 per KOL checked) and nudge drafts use DeepSeek (a fraction of a cent each) — the same two paid APIs described in the cost note above. Everything else in Campaign Ops is free.
         </p>
       </Section>
 

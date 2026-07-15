@@ -85,11 +85,16 @@ Managers can also override any state manually (the dropdown), for false positive
 | **Studio** | Tier rename (A→PR/B→Paid), per-KOL content formats, table views, spreadsheet importer | Code-complete | `campaign_ops_seeding_studio.sql` |
 | **4** | One Google Sheet per campaign ("`<name>` Seeding": one-way app→sheet push, Status/Tier dropdowns, date columns, post-engagement snapshot) | Code-complete; needs GCP setup | `campaign_ops_engagement.sql` |
 | **3** | **perftracker feed + wrap summary + handoff docs** | Code-complete | `campaign_ops_phase3.sql` |
-| **SF** | SF Express tracking: per-KOL waybill # + one-click "Track" link to SF's public tracking page | Code-complete | `campaign_ops_sf_tracking.sql` |
+| **SF** | SF Express shipping: per-KOL recipient address + one-click bulk-shipment Excel for SF's 批量寄件 upload; waybill # field + "Track" link | Code-complete | `campaign_ops_sf_tracking.sql`, `campaign_ops_shipping.sql` |
 
-SF tracking is deliberately the **manual** version: a full SF Open Platform API
-integration needs a Markato SF business account + developer credentials (none
-exist today). The waybill column is forward-compatible if that lands later.
+SF shipping is deliberately **file-based, not API-based**: a full SF Open
+Platform integration needs a Markato SF business account + developer credentials
+(none exist today), and automating their website with a stored login is brittle.
+Instead, each KOL gets a shipping address in the app, and **SF bulk file**
+downloads an Excel to upload on SF's online bulk-order (批量寄件) page — SF then
+creates every order at once and generates the waybills to print. The column
+mapping lives in one place (`src/lib/sfBulk.js`, `SF_BULK_COLUMNS`) and must be
+matched to the blank template downloaded from SF's bulk page before first use.
 
 ## The perftracker data contract (Phase 3)
 
@@ -133,9 +138,12 @@ deeper lives here by design — performance analysis is perftracker's job.
 
 1. In the Review Queue, approve KOLs, then **Start campaign** to auto-attach them
    (or import a wave from a spreadsheet with the importer).
-2. Open the campaign, **mark KOLs shipped** as products go out. Paste each
-   parcel's **SF waybill number** into the tracking field (saves on Enter/blur);
-   the **Track** button opens SF Express's public tracking page for it.
+2. Open the campaign and add each KOL's **shipping address** (the 📍 line on the
+   card). **SF bulk file** downloads the bulk-shipment Excel — upload it on SF
+   Express's 批量寄件 page to create all the orders at once, print the waybills,
+   stick them on. **Mark KOLs shipped** as products go out; optionally paste each
+   waybill # into the tracking field (the **Track** button opens SF's tracking
+   page).
 3. The worker auto-verifies twice a day; or hit **Verify posts** on demand. A
    detected post moves the KOL to **Posted** with the matched signals.
 4. **Confirm** each detected post (green) — the worker never auto-confirms.

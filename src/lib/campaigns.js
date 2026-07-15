@@ -322,6 +322,26 @@ export async function setTrackingNumber(kolId, numberOrNull) {
   return data
 }
 
+// Recipient shipping details (db/campaign_ops_shipping.sql) — typed once here,
+// exported to the SF bulk-shipment Excel (see sfBulk.js).
+export async function setKolShipping(kolId, fields) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const patch = {
+    recipient_name: fields.recipient_name || null,
+    recipient_phone: fields.recipient_phone || null,
+    recipient_address: fields.recipient_address || null,
+    updated_at: new Date().toISOString(),
+  }
+  const { data, error } = await supabase
+    .from('campaign_kols')
+    .update(patch)
+    .eq('id', kolId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
 export async function setDeadlineOverride(kolId, dateOrNull) {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase

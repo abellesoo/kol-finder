@@ -3,10 +3,11 @@ import {
   Loader2, ArrowLeft, ExternalLink, UserPlus, X, RefreshCw, Trash2,
   Truck, CalendarClock, Search, ScanLine, CheckCircle2, Circle, Copy, Check,
   MessageSquarePlus, Info, LayoutList, Table2, ChevronDown, FileSpreadsheet,
+  MapPin,
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
-  updateKolState, setDeadlineOverride, setTrackingNumber, sfTrackingUrl, detachKol,
+  updateKolState, setDeadlineOverride, setTrackingNumber, sfTrackingUrl, setKolShipping, detachKol,
   effectiveDeadline, KOL_STATES,
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
@@ -14,6 +15,7 @@ import {
   getScoringByHandle, buildCampaignSheetValues,
 } from '../lib/campaigns'
 import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
+import { exportSfBulkXlsx } from '../lib/sfBulk'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -259,6 +261,70 @@ function TrackingField({ kol, campaign, onSave }) {
   )
 }
 
+// Recipient shipping address — typed once here, exported to the SF Express
+// bulk-shipment Excel (the "SF bulk file" button). Collapsed: one summary line.
+function AddressEditor({ kol, onSave }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [name, setName] = useState(kol.recipient_name || '')
+  const [phone, setPhone] = useState(kol.recipient_phone || '')
+  const [address, setAddress] = useState(kol.recipient_address || '')
+  useEffect(() => {
+    setName(kol.recipient_name || '')
+    setPhone(kol.recipient_phone || '')
+    setAddress(kol.recipient_address || '')
+  }, [kol.recipient_name, kol.recipient_phone, kol.recipient_address])
+
+  const has = !!(kol.recipient_name || kol.recipient_phone || kol.recipient_address)
+  const save = async () => {
+    setBusy(true)
+    try {
+      await onSave(kol, {
+        recipient_name: name.trim(),
+        recipient_phone: phone.trim(),
+        recipient_address: address.trim(),
+      })
+      setOpen(false)
+    } catch { /* parent toasts the error; keep the editor open */ } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} title={has ? 'Edit shipping address' : 'Add shipping address'}
+        className="mt-2 flex items-center gap-1.5 max-w-full text-[11px] font-mono text-faint hover:text-ink transition-colors">
+        <MapPin size={11} className={`flex-shrink-0 ${has ? 'text-green-600' : ''}`} />
+        {has
+          ? <span className="truncate">{[kol.recipient_name, kol.recipient_phone, kol.recipient_address].filter(Boolean).join(' · ')}</span>
+          : <span>Add shipping address</span>}
+      </button>
+    )
+  }
+  return (
+    <div className="mt-2.5 p-3 rounded-[10px] border border-mist bg-surface/60 space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipient name"
+          className="px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
+        <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone"
+          className="px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
+      </div>
+      <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" rows={2}
+        className="w-full px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40 resize-y" />
+      <div className="flex items-center justify-end gap-2">
+        <button onClick={() => setOpen(false)} disabled={busy}
+          className="px-3 py-1.5 rounded-[8px] text-[12px] text-muted hover:text-ink transition-colors disabled:opacity-50">
+          Cancel
+        </button>
+        <button onClick={save} disabled={busy}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-ink text-white text-[12px] font-medium hover:bg-ink/80 transition-colors disabled:opacity-40">
+          {busy && <Loader2 size={11} className="animate-spin" />} Save
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // A worker- or import-detected post. The Confirm toggle is the Phase 2 safety
 // gate: the worker sets state=posted but human_verified stays false until a
 // brand manager confirms the match is genuine here.
@@ -369,7 +435,7 @@ function DeadlineMeta({ kol, campaign }) {
   )
 }
 
-function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
+function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onTracking, onShipping, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
   const formats = kol.content_formats || []
   // Story/blog-only KOLs can't be auto-verified (see campaigns.js) — flag it so
   // the manager knows to mark them posted by hand.
@@ -415,6 +481,8 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
           <Trash2 size={13} />
         </button>
       </div>
+
+      <AddressEditor kol={kol} onSave={onShipping} />
 
       {posts.length > 0 && (
         <div className="mt-2.5 space-y-1.5">
@@ -513,6 +581,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
   const [showAttach, setShowAttach] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [sheetBusy, setSheetBusy] = useState(false)
+  const [sfBusy, setSfBusy] = useState(false)
   const [toast, setToast] = useState(null)
   const [view, setView] = useState('board') // 'board' | 'table'
 
@@ -574,6 +643,37 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
       load()
     }
   }, [load])
+
+  const handleShipping = useCallback(async (kol, fields) => {
+    try {
+      const updated = await setKolShipping(kol.id, fields)
+      setKols((prev) => prev.map((k) => (k.id === kol.id ? updated : k)))
+      setToast({ type: 'success', message: `Address saved for @${kol.kol_handle}` })
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+      throw e // keep the editor open
+    }
+  }, [])
+
+  const handleSfExport = useCallback(async () => {
+    setSfBusy(true)
+    setToast(null)
+    try {
+      const { exported, skipped } = await exportSfBulkXlsx(campaign, kols)
+      if (!exported) {
+        setToast({ type: 'error', message: 'No KOLs with a shipping address to export — add addresses first' })
+      } else {
+        setToast({
+          type: 'success',
+          message: `SF bulk file: ${exported} recipient${exported === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped — no address)` : ''}`,
+        })
+      }
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+    } finally {
+      setSfBusy(false)
+    }
+  }, [campaign, kols])
 
   const handleDetach = useCallback(async (kol) => {
     try {
@@ -740,6 +840,12 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
             {verifying ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
             {verifying ? 'Verifying…' : 'Verify posts'}
           </button>
+          <button onClick={handleSfExport} disabled={sfBusy || total === 0}
+            title="Download the SF Express bulk-shipment Excel (upload it on SF's 批量寄件 page to create all orders at once)"
+            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
+            {sfBusy ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
+            SF bulk file
+          </button>
           <button onClick={handleSyncSheet} disabled={sheetBusy || total === 0}
             title={campaign.sheet_url ? 'Push the latest campaign data to its Google Sheet' : 'Create a Google Sheet for this campaign and share it with the team'}
             className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
@@ -818,7 +924,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
                   {rows.map((kol) => (
                     <KolRow key={kol.id} kol={kol} campaign={campaign}
                       posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
-                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onDetach={handleDetach}
+                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onShipping={handleShipping} onDetach={handleDetach}
                       onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
                       onSetFormats={handleSetFormats} />
                   ))}

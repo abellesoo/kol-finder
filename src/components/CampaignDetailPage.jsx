@@ -637,8 +637,17 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
     )
   }
 
+  // ── Wrap summary (Phase 3) ──────────────────────────────────────────────
+  // Fulfillment rate excludes opted-out KOLs: they were pulled from the wave by
+  // agreement, so counting them against posting would understate the outcome.
   const total = kols.length
   const posted = (grouped.posted || []).length
+  const shipped = (grouped.shipped || []).length
+  const awaiting = (grouped.awaiting_post || []).length
+  const overdue = (grouped.overdue || []).length
+  const optedOut = (grouped.opted_out || []).length
+  const eligible = total - optedOut
+  const fulfillment = eligible > 0 ? Math.round((posted / eligible) * 100) : 0
 
   return (
     <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
@@ -646,8 +655,8 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
         <ArrowLeft size={14} /> Back to campaigns
       </button>
 
-      <div className="flex items-start justify-between gap-4 mb-6">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
+        <div className="min-w-0 flex-1 basis-[320px]">
           <div className="flex items-center gap-2 mb-1">
             <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase">Campaign</p>
             <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
@@ -709,13 +718,21 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
       </div>
 
       {total > 0 && (
-        <div className="flex items-center gap-4 mb-6 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mb-6 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
           <p className="text-[12px] font-mono text-muted">{total} {total === 1 ? 'KOL' : 'KOLs'}</p>
           <span className="text-mist">·</span>
           <p className="text-[12px] font-mono text-sage">{posted} posted</p>
+          {shipped > 0 && <><span className="text-mist">·</span>
+            <p className="text-[12px] font-mono text-muted">{shipped} shipped</p></>}
+          {awaiting > 0 && <><span className="text-mist">·</span>
+            <p className="text-[12px] font-mono text-muted">{awaiting} awaiting</p></>}
+          {overdue > 0 && <><span className="text-mist">·</span>
+            <p className="text-[12px] font-mono text-rose">{overdue} overdue</p></>}
+          {optedOut > 0 && <><span className="text-mist">·</span>
+            <p className="text-[12px] font-mono text-faint">{optedOut} opted out</p></>}
           <span className="text-mist">·</span>
-          <p className="text-[12px] font-mono text-muted">
-            {total > 0 ? Math.round((posted / total) * 100) : 0}% fulfilled
+          <p className="text-[12px] font-mono text-ink font-medium" title="posted ÷ (attached − opted out)">
+            {fulfillment}% fulfilled
           </p>
         </div>
       )}

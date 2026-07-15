@@ -15,7 +15,7 @@ import {
   getScoringByHandle, buildCampaignSheetValues,
 } from '../lib/campaigns'
 import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
-import { exportSfBulkXlsx } from '../lib/sfBulk'
+import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -258,6 +258,51 @@ function TrackingField({ kol, campaign, onSave }) {
         </a>
       )}
     </span>
+  )
+}
+
+// Markato sender details for the SF bulk file — SF requires them on every row.
+// Entered once, stored in THIS browser's localStorage only (they're personal
+// data — name + mobile — and the repo is public, so they never go in code).
+function SfSenderModal({ onClose, onSaved }) {
+  const [s, setS] = useState(() => getSfSender())
+  const upd = (key) => (e) => setS((prev) => ({ ...prev, [key]: e.target.value }))
+  const canSave = !!(s.name.trim() && s.mobile.trim() && s.district.trim() && s.area.trim() && s.address.trim())
+  const save = () => onSaved(saveSfSender({
+    name: s.name.trim(), mobile: s.mobile.trim(), company: s.company.trim(),
+    district: s.district.trim(), area: s.area.trim(), address: s.address.trim(),
+  }))
+  const cls = 'w-full px-2 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40'
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4" onClick={onClose}>
+      <div className="w-full max-w-[440px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+        <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">SF bulk file</p>
+        <h2 className="text-[17px] font-semibold text-ink mb-1">Sender details</h2>
+        <p className="text-[12px] text-muted mb-4">
+          SF needs the sender on every row. Saved in this browser only — copy them from your
+          SF 月結平台 sender profile. Asked once.
+        </p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <input type="text" value={s.name} onChange={upd('name')} placeholder="Name 姓名 *" className={cls} />
+            <input type="text" value={s.mobile} onChange={upd('mobile')} placeholder="Mobile 手機號碼 *" className={cls} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="text" value={s.company} onChange={upd('company')} placeholder="Company 公司名稱" className={cls} />
+            <input type="text" value={s.district} onChange={upd('district')} placeholder="District 地區 (e.g. 南區) *" className={cls} />
+          </div>
+          <input type="text" value={s.area} onChange={upd('area')} placeholder="Area 區域 (e.g. 黃竹坑) *" className={cls} />
+          <textarea value={s.address} onChange={upd('address')} placeholder="Detail address 詳細地址 *" rows={2} className={`${cls} resize-y`} />
+        </div>
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onClose} className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-ink hover:bg-surface transition-colors">Cancel</button>
+          <button onClick={save} disabled={!canSave}
+            className="px-4 py-2 rounded-[10px] bg-ink text-white text-[13px] font-medium hover:bg-ink/80 transition-colors disabled:opacity-40">
+            Save & export
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -594,6 +639,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
   const [verifying, setVerifying] = useState(false)
   const [sheetBusy, setSheetBusy] = useState(false)
   const [sfBusy, setSfBusy] = useState(false)
+  const [showSfSender, setShowSfSender] = useState(false)
   const [toast, setToast] = useState(null)
   const [view, setView] = useState('board') // 'board' | 'table'
 
@@ -667,11 +713,16 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
     }
   }, [])
 
-  const handleSfExport = useCallback(async () => {
+  const handleSfExport = useCallback(async (senderOverride) => {
+    const sender = senderOverride || getSfSender()
+    if (!sfSenderComplete(sender)) {
+      setShowSfSender(true) // first run: collect the sender profile, then export
+      return
+    }
     setSfBusy(true)
     setToast(null)
     try {
-      const { exported, skipped } = await exportSfBulkXlsx(campaign, kols)
+      const { exported, skipped } = await exportSfBulkXlsx(campaign, kols, sender)
       if (!exported) {
         setToast({ type: 'error', message: 'No KOLs with a shipping address to export — add addresses first' })
       } else {
@@ -852,7 +903,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
             {verifying ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
             {verifying ? 'Verifying…' : 'Verify posts'}
           </button>
-          <button onClick={handleSfExport} disabled={sfBusy || total === 0}
+          <button onClick={() => handleSfExport()} disabled={sfBusy || total === 0}
             title="Download the SF Express bulk-shipment Excel (upload it on SF's 批量寄件 page to create all orders at once)"
             className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
             {sfBusy ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
@@ -956,6 +1007,16 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
             setShowAttach(false)
             setToast({ type: 'success', message: n > 0 ? `${n} KOL${n === 1 ? '' : 's'} attached` : 'No new KOLs to attach' })
             load()
+          }}
+        />
+      )}
+
+      {showSfSender && (
+        <SfSenderModal
+          onClose={() => setShowSfSender(false)}
+          onSaved={(sender) => {
+            setShowSfSender(false)
+            handleSfExport(sender)
           }}
         />
       )}

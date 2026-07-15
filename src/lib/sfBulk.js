@@ -59,23 +59,46 @@ function colIdx(letters) {
 }
 
 // ── Markato sender details — SF requires these on EVERY row (the * sender
-// columns). Fill in once; ask Annabelle for the office values.
-export const SF_SENDER = {
-  name: '',                    // * 姓名 — who parcels ship from
+// columns). The values are personal data (a name + mobile number) and this
+// repo is PUBLIC, so they are deliberately NOT hardcoded: each manager enters
+// them once (the small sender form behind the "SF bulk file" button) and they
+// persist in that browser's localStorage only.
+const SENDER_KEY = 'sf_bulk_sender'
+const EMPTY_SENDER = {
+  name: '',                    // * 姓名
   areaCode: '852',             // * 電話區號 (852 / 853 / 86)
   mobile: '',                  // 手機號碼
   company: 'Markato',
   city: '香港/Hong Kong',      // * 城市 — dropdown value: 香港/Hong Kong or 澳門/Macau
-  district: '',                // * 地區 — e.g. 觀塘區
-  area: '',                    // * 區域 — e.g. 觀塘
+  district: '',                // * 地區 — e.g. 南區
+  area: '',                    // * 區域 — e.g. 黃竹坑
   address: '',                 // * 詳細地址
 }
+export function getSfSender() {
+  try {
+    return { ...EMPTY_SENDER, ...(JSON.parse(localStorage.getItem(SENDER_KEY) || 'null') || {}) }
+  } catch {
+    return { ...EMPTY_SENDER }
+  }
+}
+export function saveSfSender(profile) {
+  const merged = { ...getSfSender(), ...profile }
+  localStorage.setItem(SENDER_KEY, JSON.stringify(merged))
+  return merged
+}
+export function sfSenderComplete(s = getSfSender()) {
+  return !!(s.name && s.mobile && s.district && s.area && s.address)
+}
 
+// The team's standard shipment (from their usual 寄快遞 flow): 護膚品, 1 kg,
+// 1 item, 順豐特快, paid on the Markato monthly account. productType/payment
+// must be SF dropdown options (元素 Info sheet).
 export const SF_DEFAULTS = {
-  // Both values must be one of SF's dropdown options (元素 Info sheet):
+  itemName: '護膚品',
   productType: '順豐特快/SF Speedy Express',
-  payment: '寄付現結/Pay by Sender', // monthly account: '寄付月結/Pay by Sender (Credit Account)'
-  weightKg: 0.5,                     // per-parcel estimate; tweak in the file if needed
+  payment: '寄付月結/Pay by Sender (Credit Account)',
+  weightKg: 1,
+  quantity: 1,
 }
 
 // Receiver locale by campaign market. (Cross-border TW shipments may also need
@@ -83,21 +106,21 @@ export const SF_DEFAULTS = {
 const RECEIVER_AREA_CODE = { HK: '852', TW: '886', MO: '853', CN: '86' }
 const RECEIVER_CITY = { HK: '香港', TW: '台灣', MO: '澳門' }
 
-function buildSfRow(k, campaign) {
+function buildSfRow(k, campaign, sender) {
   const market = String(campaign?.market || 'HK').toUpperCase()
   const row = new Array(SF_HEADER_ROW.length).fill('')
   const set = (letters, v) => { row[colIdx(letters)] = v == null ? '' : v }
 
   set('A', `@${k.kol_handle}`) // customer order id → maps the waybill back to the KOL
   // Sender (Markato)
-  set('B', SF_SENDER.name)
-  set('C', SF_SENDER.areaCode)
-  set('D', SF_SENDER.mobile)
-  set('F', SF_SENDER.company)
-  set('G', SF_SENDER.city)
-  set('H', SF_SENDER.district)
-  set('I', SF_SENDER.area)
-  set('J', SF_SENDER.address)
+  set('B', sender.name)
+  set('C', sender.areaCode)
+  set('D', sender.mobile)
+  set('F', sender.company)
+  set('G', sender.city)
+  set('H', sender.district)
+  set('I', sender.area)
+  set('J', sender.address)
   // Receiver (the KOL)
   set('K', k.recipient_name || '')
   set('L', RECEIVER_AREA_CODE[market] || '852')
@@ -107,8 +130,9 @@ function buildSfRow(k, campaign) {
   set('S', k.recipient_area || '')
   set('T', k.recipient_address || '')
   // Consignment + parcel
-  set('W', `${campaign?.brand || ''} product sample`.trim())
+  set('W', SF_DEFAULTS.itemName)
   set('X', SF_DEFAULTS.weightKg)
+  set('Y', SF_DEFAULTS.quantity)
   set('AD', SF_DEFAULTS.weightKg)
   set('AE', 1)
   set('AF', [campaign?.name, `@${k.kol_handle}`].filter(Boolean).join(' · '))
@@ -133,7 +157,7 @@ export function splitShippable(kols) {
 }
 
 // Download the bulk file for a campaign. Returns { exported, skipped } counts.
-export async function exportSfBulkXlsx(campaign, kols) {
+export async function exportSfBulkXlsx(campaign, kols, sender = getSfSender()) {
   const { ready, noAddress } = splitShippable(kols)
   if (!ready.length) return { exported: 0, skipped: noAddress.length }
 
@@ -151,7 +175,7 @@ export async function exportSfBulkXlsx(campaign, kols) {
   ws.getRow(2).font = { bold: true }
   ws.getRow(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
   ws.getRow(2).alignment = { vertical: 'middle', wrapText: true }
-  for (const k of ready) ws.addRow(buildSfRow(k, campaign))
+  for (const k of ready) ws.addRow(buildSfRow(k, campaign, sender))
   // Give the text-heavy columns room; phone columns stay text-safe as strings.
   for (const letters of ['B', 'J', 'K', 'T', 'W', 'AF']) ws.getColumn(colIdx(letters) + 1).width = 34
   for (const letters of ['A', 'G', 'H', 'I', 'Q', 'R', 'S', 'AG', 'AH']) ws.getColumn(colIdx(letters) + 1).width = 18

@@ -137,10 +137,23 @@ function postUrl(post) {
   return post.url || (postShortcode(post) ? `https://www.instagram.com/p/${postShortcode(post)}/` : null)
 }
 
+// Engagement snapshot from an Apify post item (null-safe — old items or images
+// may lack any of these). views: reels report videoViewCount or videoPlayCount.
+function postEngagement(post) {
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null)
+  return {
+    likes_count: num(post.likesCount),
+    comments_count: num(post.commentsCount),
+    views_count: num(post.videoViewCount ?? post.videoPlayCount),
+    engagement_updated_at: new Date().toISOString(),
+  }
+}
+
 // ── Core: verify a set of campaigns in ONE Apify scrape ───────────────────────
-// Gathers every distinct handle across the campaigns' awaiting_post/overdue KOLs,
-// scrapes once, then matches each KOL against ITS campaign's signals. Returns a
-// summary { checked, matched, overdue, posts, beforeShip }.
+// Gathers every distinct handle across the campaigns' awaiting_post/overdue KOLs
+// (plus posted ones, to refresh their posts' engagement snapshot), scrapes once,
+// then matches each KOL against ITS campaign's signals. Returns a summary
+// { checked, matched, overdue, posts, beforeShip }.
 async function verifyCampaigns(env, campaigns) {
   const KEY = env.APIFY_API_KEY
   const today = new Date().toISOString().slice(0, 10)
@@ -148,13 +161,15 @@ async function verifyCampaigns(env, campaigns) {
   const checkedIds = []
   if (!campaigns.length) return summary
 
-  // Pull the KOLs needing a check for each campaign.
+  // Pull the KOLs needing a check for each campaign. Posted KOLs are included
+  // so each run refreshes the likes/comments/views snapshot on their posts —
+  // the same scrape items carry the engagement counts for free.
   const perCampaign = []
   const handles = new Set()
   for (const c of campaigns) {
     const kols = await sbSelect(
       env,
-      `campaign_kols?campaign_id=eq.${c.id}&state=in.(awaiting_post,overdue)&select=*`,
+      `campaign_kols?campaign_id=eq.${c.id}&state=in.(awaiting_post,overdue,posted)&select=*`,
     )
     if (!kols.length) continue
     perCampaign.push({ campaign: c, kols })
@@ -214,6 +229,25 @@ async function verifyCampaigns(env, campaigns) {
         })).filter((r) => r.post_shortcode) // need a shortcode to dedupe safely
         const inserted = await sbInsertIgnore(env, 'verified_posts', rows, 'campaign_kol_id,post_shortcode')
         summary.posts += inserted.length
+        // Engagement snapshot — a separate best-effort PATCH so it (a) also
+        // refreshes rows that already existed (insert-ignore skips them) and
+        // (b) never breaks verification on a project without the (optional)
+        // engagement columns; see db/campaign_ops_engagement.sql. It only
+        // touches the snapshot fields — human_verified is never overwritten.
+        for (const { post } of hits) {
+          const code = postShortcode(post)
+          if (!code) continue
+          try {
+            await sbUpdate(
+              env,
+              'verified_posts',
+              `campaign_kol_id=eq.${kol.id}&post_shortcode=eq.${encodeURIComponent(code)}`,
+              postEngagement(post),
+            )
+          } catch (e) {
+            console.warn('engagement snapshot skipped:', e.message || e)
+          }
+        }
         if (kol.state !== 'posted') {
           await sbUpdate(env, 'campaign_kols', `id=eq.${kol.id}`, {
             state: 'posted',
@@ -536,6 +570,8 @@ async function renameFirstTab(token, sheetId) {
 }
 
 // Overwrite the sheet with a fresh values grid (one-way push: app → sheet).
+// USER_ENTERED so date strings ("2026-07-20") land as real dates and counts as
+// numbers, instead of raw text.
 async function writeSheetValues(token, sheetId, values) {
   const clear = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1:ZZ10000:clear`,
@@ -543,7 +579,7 @@ async function writeSheetValues(token, sheetId, values) {
   )
   if (!clear.ok) throw new Error(`Sheets clear failed (${clear.status}): ${await clear.text()}`)
   const upd = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1?valueInputOption=RAW`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1?valueInputOption=USER_ENTERED`,
     {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -551,6 +587,83 @@ async function writeSheetValues(token, sheetId, values) {
     },
   )
   if (!upd.ok) throw new Error(`Sheets update failed (${upd.status}): ${await upd.text()}`)
+}
+
+// Presentation pass after the value write: spreadsheet title, frozen/bold header,
+// Status + Tier dropdowns (data validation), and date formats. Columns are found
+// by header name so reordering buildCampaignSheetValues can't silently mis-format.
+// Idempotent — re-applied on every sync (a value :clear doesn't remove validation,
+// but re-asserting keeps everything true to the current grid).
+const SHEET_DROPDOWNS = {
+  Status: ['Approved', 'Shipped', 'Awaiting post', 'Posted', 'Overdue', 'Opted out'],
+  Tier: ['PR', 'Paid'],
+}
+const SHEET_DATE_COLUMNS = ['Shipped', 'Deadline', 'Posted at', 'Eng. updated']
+
+async function formatCampaignSheet(token, sheetId, values, title) {
+  const meta = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=properties.title,sheets.properties(sheetId,title)`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  if (!meta.ok) throw new Error(`Sheets read failed (${meta.status}): ${await meta.text()}`)
+  const doc = await meta.json()
+  const tab = (doc.sheets || []).find((s) => s.properties?.title === 'Campaign') || (doc.sheets || [])[0]
+  if (!tab) return
+  const gid = tab.properties.sheetId
+  const headers = values[0] || []
+  const col = (name) => headers.indexOf(name)
+  // Ranges leave endRowIndex open (to the sheet's end) so manually added rows
+  // below the pushed grid inherit the dropdowns/formats too.
+  const colRange = (c) => ({ sheetId: gid, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 })
+
+  const requests = []
+  if (title && doc.properties?.title !== title) {
+    requests.push({ updateSpreadsheetProperties: { properties: { title }, fields: 'title' } })
+  }
+  requests.push({
+    updateSheetProperties: {
+      properties: { sheetId: gid, gridProperties: { frozenRowCount: 1 } },
+      fields: 'gridProperties.frozenRowCount',
+    },
+  })
+  requests.push({
+    repeatCell: {
+      range: { sheetId: gid, startRowIndex: 0, endRowIndex: 1 },
+      cell: { userEnteredFormat: { textFormat: { bold: true } } },
+      fields: 'userEnteredFormat.textFormat.bold',
+    },
+  })
+  for (const [name, list] of Object.entries(SHEET_DROPDOWNS)) {
+    const c = col(name)
+    if (c < 0) continue
+    requests.push({
+      setDataValidation: {
+        range: colRange(c),
+        rule: {
+          condition: { type: 'ONE_OF_LIST', values: list.map((v) => ({ userEnteredValue: v })) },
+          showCustomUi: true,
+          strict: false, // dropdown UI, but blanks/legacy values don't error the cell
+        },
+      },
+    })
+  }
+  for (const name of SHEET_DATE_COLUMNS) {
+    const c = col(name)
+    if (c < 0) continue
+    requests.push({
+      repeatCell: {
+        range: colRange(c),
+        cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } },
+        fields: 'userEnteredFormat.numberFormat',
+      },
+    })
+  }
+  const upd = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests }),
+  })
+  if (!upd.ok) throw new Error(`Sheets format failed (${upd.status}): ${await upd.text()}`)
 }
 
 export default {
@@ -956,6 +1069,8 @@ You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted
           await sbUpdate(env, 'campaigns', `id=eq.${campaignId}`, { sheet_url: url })
         }
         await writeSheetValues(token, sheetId, values)
+        // Also renames a pre-existing spreadsheet if the title convention changed.
+        await formatCampaignSheet(token, sheetId, values, title || campaign.name || 'Campaign')
         return json({ url, created }, 200, origin)
       } catch (e) {
         return json({ error: String(e.message || e) }, 502, origin)

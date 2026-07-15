@@ -20,8 +20,11 @@ collectors have something to measure.
 | Overdue determination + nudge drafts | **Campaign Ops** |
 | Engagement snapshots, spend/sales attribution, A/B, quality judging, scorecards | perftracker |
 
-**Campaign Ops collects no engagement metrics** — that boundary is deliberate.
-perftracker pulls those from the platform on its own decay schedule.
+**Campaign Ops never sends engagement metrics to perftracker** — that boundary
+is deliberate; perftracker pulls those from the platform on its own decay
+schedule. Campaign Ops does keep a lightweight likes/comments/views **snapshot**
+per verified post (captured by the verify scrape, shown in the campaign's Google
+Sheet), but it stays out of the `perftracker_feed` contract.
 
 ## Architecture
 
@@ -52,7 +55,10 @@ approved in via `kol_run_id → shared_results(id)`.
 - **`campaign_kols`** — per-KOL pipeline row: `state`, `shipped_at`, tier
   (A = PR/gifted, B = Paid), fees, `deadline_override`, `content_formats[]`.
 - **`verified_posts`** — worker output: `post_url`, `post_shortcode` (dedupe key),
-  `posted_at`, `matched_signals[]`, and `human_verified` (manager confirm toggle).
+  `posted_at`, `matched_signals[]`, `human_verified` (manager confirm toggle),
+  plus an engagement snapshot (`likes_count`, `comments_count`, `views_count`,
+  `engagement_updated_at` — `campaign_ops_engagement.sql`) refreshed on each
+  verify run; sheet-only, never fed to perftracker.
 - **`nudges`** — overdue reminder drafts (copy-paste; Meta send API is paused).
 
 ### State machine (enforced in app logic, not the DB)
@@ -77,7 +83,7 @@ Managers can also override any state manually (the dropdown), for false positive
 | **1** | Data model + Campaigns tab (create, attach approved KOLs, board/table views, mark shipped, deadlines) | Deployed | `campaign_ops_schema.sql` |
 | **2** | Verification worker (cron ~2×/day + on-demand), tag matching, human-verify toggle, overdue nudges (DeepSeek, Cantonese HK / zh-TW TW, never mixed) | Code-complete; deploy pending creds | `campaign_ops_phase2.sql` |
 | **Studio** | Tier rename (A→PR/B→Paid), per-KOL content formats, table views, spreadsheet importer | Code-complete | `campaign_ops_seeding_studio.sql` |
-| **4** | One Google Sheet per campaign (one-way app→sheet push) | Code-complete; needs GCP setup | — |
+| **4** | One Google Sheet per campaign ("`<name>` Seeding": one-way app→sheet push, Status/Tier dropdowns, date columns, post-engagement snapshot) | Code-complete; needs GCP setup | `campaign_ops_engagement.sql` |
 | **3** | **perftracker feed + wrap summary + handoff docs** | **This deliverable** | `campaign_ops_phase3.sql` |
 
 Deferred to last: **SF Express shipment tracking** (needs a Markato SF business
@@ -131,7 +137,12 @@ deeper lives here by design — performance analysis is perftracker's job.
 4. **Confirm** each detected post (green) — the worker never auto-confirms.
 5. Past-deadline KOLs surface as **overdue**; **Draft nudge** writes a
    market-correct reminder to copy-paste. Mark it sent after you send it.
-6. **Create / Sync sheet** pushes the current campaign to a shared Google Sheet.
+6. **Create / Sync sheet** pushes the current campaign to a shared Google Sheet
+   ("`<campaign name>` Seeding") — Status/Tier as dropdowns, dates as dates, and
+   each verified post's likes/comments/views. The push is **one-way**: edits made
+   in the sheet are overwritten on the next sync, so treat the app as the source
+   of truth. Engagement numbers refresh whenever the verifier runs (cron 2×/day
+   or the Verify posts button) — hit Verify before Sync for the freshest counts.
 
 ## Open threads (from KOL Finder, unchanged)
 

@@ -467,39 +467,39 @@ export async function getScoringByHandle(kols) {
 }
 
 // Assemble the 2D grid the worker writes to the campaign's Google Sheet: the
-// campaign-ops columns (from campaign_kols + verified_posts) joined with the
-// KOL Finder scoring columns (from shared_results). First row = headers.
+// campaign-ops columns (from campaign_kols + verified_posts) plus the post's
+// engagement snapshot. scoreByHandle (from shared_results) supplies only the
+// full name — no scoring columns in the sheet by design. First row = headers.
+// Header names matter: the worker locates the Status/Tier dropdown columns and
+// the date columns by these exact strings (SHEET_DROPDOWNS/SHEET_DATE_COLUMNS
+// in worker.js).
 export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreByHandle = {}) {
   const headers = [
     'Handle', 'Full name', 'Tier', 'Format', 'Status', 'Shipped', 'Deadline',
-    'Post URL', 'Verified', 'AI Fit', 'Overall', 'Relevancy', 'Eng. Score',
-    'Followers', 'Med. Likes', 'Med. Views', 'Med. Comments', 'Niche Signals',
+    'Post URL', 'Posted at', 'Verified', 'Likes', 'Comments', 'Views', 'Eng. updated',
   ]
+  const day = (v) => (v ? String(v).slice(0, 10) : '')
   const rows = (kols || []).map((k) => {
     const acc = scoreByHandle[normalizeHandle(k.kol_handle)] || {}
     const post = (postsByKol[k.id] || [])[0] || null
     return [
       k.kol_handle,
       acc.fullName || '',
-      tierLabel(k.tier),
+      k.tier ? tierLabel(k.tier) : '', // blank (not '—') so the dropdown stays clean
       (k.content_formats || []).map(formatLabel).join(', '),
       SHEET_STATE_LABELS[k.state] || k.state,
-      k.shipped_at || '',
-      effectiveDeadline(k, campaign) || '',
+      day(k.shipped_at),
+      day(effectiveDeadline(k, campaign)),
       post?.post_url || '',
+      day(post?.posted_at),
       post ? (post.human_verified ? 'Yes' : 'Detected') : '',
-      acc.aiScore ?? '',
-      acc.overall ?? '',
-      acc.scores?.relevancy ?? '',
-      acc.scores?.engagement ?? '',
-      acc.followerCount ?? '',
-      acc.medianLikes ?? '',
-      acc.medianViews ?? '',
-      acc.medianComments ?? '',
-      (acc.nicheSignals || []).join(', '),
+      post?.likes_count ?? '',
+      post?.comments_count ?? '',
+      post?.views_count ?? '',
+      day(post?.engagement_updated_at),
     ].map((v) => (v == null ? '' : String(v)))
   })
-  return { title: `${campaign.name} — Campaign Ops`, values: [headers, ...rows] }
+  return { title: `${campaign.name} Seeding`, values: [headers, ...rows] }
 }
 
 export async function detachKol(kolId) {

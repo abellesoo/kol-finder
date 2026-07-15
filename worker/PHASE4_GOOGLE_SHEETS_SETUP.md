@@ -5,13 +5,15 @@ and add its key as a worker secret. This is the only thing blocking Phase 4.
 
 ## What it does
 Each campaign gets a **"Create sheet"** button. First click creates a Google
-Sheet named after the campaign, **shares it with everyone on the markato.com
-Workspace domain (edit access)**, and fills it with one row per KOL (handle,
-tier PR/Paid, format, status, shipped, deadline, post link + verified, plus the
-scoring columns: AI Fit, Overall, Relevancy, Eng. Score, Followers, medians,
-niche signals). After that the button says **"Sync sheet"** and re-pushes the
-latest data to the same sheet. **One-way** (app → sheet); edits in the sheet are
-not read back.
+Sheet named **"`<campaign name>` Seeding"**, **shares it with everyone on the
+markato.com Workspace domain (edit access)**, and fills it with one row per KOL:
+handle, full name, tier (PR/Paid dropdown), format, status (dropdown), shipped +
+deadline (real date columns), post link + posted date + verified, and the post's
+engagement snapshot (likes / comments / views + when it was last refreshed —
+requires the `db/campaign_ops_engagement.sql` migration; the verifier fills it).
+After that the button says **"Sync sheet"** and re-pushes the latest data to the
+same sheet. **One-way** (app → sheet); edits in the sheet are not read back and
+get overwritten on the next sync.
 
 ## 1. Create a Google Cloud project + service account (~10 min)
 1. Go to <https://console.cloud.google.com> (sign in with your markato.com account).

@@ -102,6 +102,12 @@ async function apifyDataset(datasetId, KEY) {
   return Array.isArray(items) ? items : []
 }
 
+// shipped_at is stamped the day a manager clicks "mark shipped", not the real
+// courier handoff — so a KOL can genuinely post a day or two before that date.
+// Count posts from this many days before shipped_at, else a real campaign post
+// gets dropped and the KOL false-flags overdue (2026-07-14 open issue).
+const SHIP_DATE_GRACE_DAYS = 3
+
 // ── Matching ──────────────────────────────────────────────────────────────────
 // A post matches if its caption / hashtags / mentions carry ANY of the
 // campaign's mention_handles or hashtags. Returns the list of matched signals
@@ -140,11 +146,11 @@ function postUrl(post) {
 // ── Core: verify a set of campaigns in ONE Apify scrape ───────────────────────
 // Gathers every distinct handle across the campaigns' awaiting_post/overdue KOLs,
 // scrapes once, then matches each KOL against ITS campaign's signals. Returns a
-// summary { checked, matched, overdue, posts }.
+// summary { checked, matched, overdue, posts, beforeShip }.
 async function verifyCampaigns(env, campaigns) {
   const KEY = env.APIFY_API_KEY
   const today = new Date().toISOString().slice(0, 10)
-  const summary = { checked: 0, matched: 0, overdue: 0, posts: 0 }
+  const summary = { checked: 0, matched: 0, overdue: 0, posts: 0, beforeShip: 0 }
   const checkedIds = []
   if (!campaigns.length) return summary
 
@@ -184,12 +190,21 @@ async function verifyCampaigns(env, campaigns) {
       checkedIds.push(kol.id)
       const posts = byOwner[kol.kol_handle] || []
       const since = kol.shipped_at || campaign.start_date || null
+      // Ship date minus a grace window (see SHIP_DATE_GRACE_DAYS).
+      const cutoff = since ? new Date(`${since}T00:00:00Z`) : null
+      if (cutoff) cutoff.setUTCDate(cutoff.getUTCDate() - SHIP_DATE_GRACE_DAYS)
 
       const hits = []
+      let beforeShip = 0 // matched signals but dated before the ship window
       for (const post of posts) {
-        // Only posts on/after the ship date count as campaign posts.
-        if (since && post.timestamp && new Date(post.timestamp) < new Date(`${since}T00:00:00Z`)) continue
         const signals = matchPost(post, mentionHandles, hashtags)
+        // Only posts on/after (ship date − grace) count as campaign posts. A post
+        // that matches signals but predates the window is tracked separately so a
+        // manager sees "before ship date" rather than a bare overdue.
+        if (cutoff && post.timestamp && new Date(post.timestamp) < cutoff) {
+          if (signals.length) beforeShip++
+          continue
+        }
         if (signals.length) hits.push({ post, signals })
       }
 
@@ -213,6 +228,7 @@ async function verifyCampaigns(env, campaigns) {
         }
         summary.matched++
       } else {
+        if (beforeShip) summary.beforeShip++
         // No matching post. Flip to overdue if the deadline has passed — BUT only
         // for auto-verifiable formats (feed/reel, or none set). Story/blog-only
         // KOLs can't be auto-checked (stories aren't in the posts scrape and
@@ -830,7 +846,7 @@ Include every candidate exactly once.`
     // Body: { campaignId } — on-demand run of the Phase 2 verification engine for
     // one campaign (the cron does all active campaigns unattended). Auth already
     // checked above (real @markato user), but the writes go through service_role.
-    // Returns: { summary: { checked, matched, overdue, posts } }
+    // Returns: { summary: { checked, matched, overdue, posts, beforeShip } }
     if (pathname === '/verify-campaign' && request.method === 'POST') {
       if (!env.SUPABASE_SERVICE_ROLE_KEY) {
         return json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured in Worker secrets' }, 500, origin)

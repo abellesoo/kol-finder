@@ -548,6 +548,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
       const bits = [`${s.checked} checked`]
       if (s.matched) bits.push(`${s.matched} posted`)
       if (s.overdue) bits.push(`${s.overdue} overdue`)
+      if (s.beforeShip) bits.push(`${s.beforeShip} found but before ship date`)
       setToast({ type: 'success', message: `Verification done — ${bits.join(', ')}` })
     } catch (e) {
       setToast({ type: 'error', message: e.message })

@@ -92,9 +92,12 @@ Platform integration needs a Markato SF business account + developer credentials
 (none exist today), and automating their website with a stored login is brittle.
 Instead, each KOL gets a shipping address in the app, and **SF bulk file**
 downloads an Excel to upload on SF's online bulk-order (批量寄件) page — SF then
-creates every order at once and generates the waybills to print. The column
-mapping lives in one place (`src/lib/sfBulk.js`, `SF_BULK_COLUMNS`) and must be
-matched to the blank template downloaded from SF's bulk page before first use.
+creates every order at once and generates the waybills to print. The export
+reproduces SF's real template (「寄快遞批量下單模板」: two header rows, columns
+A–BA, data from row 3) — headers were extracted from the template file itself.
+Before first use, fill in `SF_SENDER` in `src/lib/sfBulk.js` (Markato's sender
+name/phone/district/address — SF requires them on every row) and check
+`SF_DEFAULTS` (product type, payment method, parcel weight).
 
 ## The perftracker data contract (Phase 3)
 

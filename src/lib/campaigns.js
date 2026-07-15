@@ -329,6 +329,8 @@ export async function setKolShipping(kolId, fields) {
   const patch = {
     recipient_name: fields.recipient_name || null,
     recipient_phone: fields.recipient_phone || null,
+    recipient_district: fields.recipient_district || null,
+    recipient_area: fields.recipient_area || null,
     recipient_address: fields.recipient_address || null,
     updated_at: new Date().toISOString(),
   }

@@ -268,12 +268,16 @@ function AddressEditor({ kol, onSave }) {
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState(kol.recipient_name || '')
   const [phone, setPhone] = useState(kol.recipient_phone || '')
+  const [district, setDistrict] = useState(kol.recipient_district || '')
+  const [area, setArea] = useState(kol.recipient_area || '')
   const [address, setAddress] = useState(kol.recipient_address || '')
   useEffect(() => {
     setName(kol.recipient_name || '')
     setPhone(kol.recipient_phone || '')
+    setDistrict(kol.recipient_district || '')
+    setArea(kol.recipient_area || '')
     setAddress(kol.recipient_address || '')
-  }, [kol.recipient_name, kol.recipient_phone, kol.recipient_address])
+  }, [kol.recipient_name, kol.recipient_phone, kol.recipient_district, kol.recipient_area, kol.recipient_address])
 
   const has = !!(kol.recipient_name || kol.recipient_phone || kol.recipient_address)
   const save = async () => {
@@ -282,6 +286,8 @@ function AddressEditor({ kol, onSave }) {
       await onSave(kol, {
         recipient_name: name.trim(),
         recipient_phone: phone.trim(),
+        recipient_district: district.trim(),
+        recipient_area: area.trim(),
         recipient_address: address.trim(),
       })
       setOpen(false)
@@ -296,7 +302,7 @@ function AddressEditor({ kol, onSave }) {
         className="mt-2 flex items-center gap-1.5 max-w-full text-[11px] font-mono text-faint hover:text-ink transition-colors">
         <MapPin size={11} className={`flex-shrink-0 ${has ? 'text-green-600' : ''}`} />
         {has
-          ? <span className="truncate">{[kol.recipient_name, kol.recipient_phone, kol.recipient_address].filter(Boolean).join(' · ')}</span>
+          ? <span className="truncate">{[kol.recipient_name, kol.recipient_phone, kol.recipient_district, kol.recipient_address].filter(Boolean).join(' · ')}</span>
           : <span>Add shipping address</span>}
       </button>
     )
@@ -309,7 +315,13 @@ function AddressEditor({ kol, onSave }) {
         <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone"
           className="px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
       </div>
-      <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Delivery address" rows={2}
+      <div className="grid grid-cols-2 gap-2">
+        <input type="text" value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="District 地區 (e.g. 大埔區)"
+          className="px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
+        <input type="text" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Area 區域 (e.g. 大埔)"
+          className="px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
+      </div>
+      <textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Detail address 詳細地址 (street, building, floor/flat)" rows={2}
         className="w-full px-2 py-1.5 border border-mist rounded-[8px] text-[12px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40 resize-y" />
       <div className="flex items-center justify-end gap-2">
         <button onClick={() => setOpen(false)} disabled={busy}

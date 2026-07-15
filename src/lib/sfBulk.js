@@ -6,20 +6,117 @@
 // account (doesn't exist), and automating their website is brittle. A file
 // upload is a feature SF supports natively.
 //
-// ⚠️ COLUMN MAPPING IS A PLACEHOLDER until it's matched against the real blank
-// template downloaded from SF's bulk-order page (their upload validates the
-// exact header text/order). To lock it in: download SF's template, then edit
-// SF_BULK_COLUMNS below — headers must match SF's byte-for-byte; everything
-// else in this file stays as is.
+// Layout matches SF's real template 「寄快遞批量下單模板.xlsx」 exactly:
+// row 1 = merged group headers, row 2 = column headers (A–BA, 53 columns,
+// required ones marked *), data from row 3. Header strings below were extracted
+// from the template file itself — don't retype them by hand.
 
-export const SF_BULK_COLUMNS = [
-  { header: '收件人姓名 (Recipient Name)',    value: (k) => k.recipient_name || '' },
-  { header: '收件人電話 (Recipient Phone)',   value: (k) => k.recipient_phone || '' },
-  { header: '收件地址 (Recipient Address)',   value: (k) => k.recipient_address || '' },
-  { header: '托寄物 (Contents)',              value: (k, c) => `${c?.brand || ''} product sample`.trim() },
-  { header: '件數 (Pieces)',                  value: () => 1 },
-  { header: '備註 (Remarks)',                 value: (k, c) => [c?.name, `@${k.kol_handle}`].filter(Boolean).join(' · ') },
+// Row 1: group headers sitting over merged ranges (see SF_ROW1_MERGES).
+const SF_GROUP_HEADER_ROW = [
+  '',
+  '寄件方信息\nSender Information', '', '', '', '', '', '', '', '',
+  '收件方信息\nReceiver Information', '', '', '', '', '', '', '', '', '', '', '',
+  '托寄物信息\nConsignment Information', '', '', '', '', '', '',
+  '包裹信息\nParcel Information', '', '',
+  '產品信息\nProduct Information',
+  '付款方式\nPayment Method', '', '',
+  '預約上門收件\nExpected Parcel Pick-up', '', '',
+  '增值服務\nV.A.S.', '', '', '', '', '', '', '', '', '', '', '', '', '',
 ]
+const SF_ROW1_MERGES = ['B1:J1', 'K1:V1', 'W1:AC1', 'AD1:AF1', 'AH1:AJ1', 'AK1:AL1', 'AN1:AZ1']
+
+// Row 2: the 53 column headers, A → BA. (AJ's trailing space is in SF's file.)
+const SF_HEADER_ROW = [
+  '客戶訂單編號\nCustomer Order I.D.',
+  '* 姓名\nFull Name', '* 電話區號\nArea Code', '手機號碼\nMobile No.', '固網號碼\nFixed No.',
+  '公司名稱\nCompany', '* 城市\nCity', '* 地區\nDistrict', '* 區域\nArea', '* 詳細地址\nDetail Address',
+  '* 姓名\nFull Name', '* 電話區號\nArea Code', '手機號碼\nMobile No.', '固網號碼\nFixed No.',
+  '公司名稱\nCompany', '自取點編號\nSelf Pick-up Point', '省份 / 城市\nProvince / City',
+  '市 / 縣 / 地區\nCity / County / District', '區 / 區域\nDistrict / Area', '詳細地址\nDetail Address',
+  '證件類型\nI.D. Type', '證件號碼\nI.D. No.',
+  '* 物品名稱 / 類型\nItem Name', '* 重量（KG）\nWeight (KG)', '數量\nQuantity', '單位\nUnit',
+  '物品單價\nValue', '幣種\nCurrency', '原產地\nOrigin',
+  '* 包裹總重量（KG）\nTotal Weight (KG)', '* 包裹數量（子母件數量）\nParcel Quantity (num. of multi-piece shipments)',
+  '包裹備註\nParcel Notes',
+  '* 產品類型\nProduct Type',
+  '* 付款方式\nPayment Method', '稅金付款方式\nDuties and Taxes', '稅金付款帳號\nBill Account for Duties and Taxes ',
+  '日期（年-月-日）\nDate (YYYY-MM-DD)', '時間（時:分）\nTime (HH:MM)', '備註\nRemark',
+  '保價-物品價值（HKD）\nInsurance（HKD）', 'PoD 簽單返還\nPoD', 'PoD 備註\nPoD - Remark',
+  '密碼認證\nSecret Key', 'CoD 代收貨款\nCoD - Amount', 'CoD 代收貨款 - 月結號\nCoD - Credit A/C No.',
+  '送貨方式\nDelivery method', '送貨上樓 - 行樓梯層數\nUpstairs Delivery - Floor level',
+  '心意送 - 賀卡\nSurprise Delivery - Greeting e-cards', '心意送 - 賀卡祝福語\nSurprise Delivery - Greeting message',
+  '心意送 - 賀卡署名\nSurprise Delivery - Signature',
+  '定時派送 - 日期（年-月-日）\nFixed Time Delivery - Date (YYYY-MM-DD)',
+  '定時派送 - 時間（時:分）\nFixed Time Delivery - Time (HH:MM)',
+  '收件校驗碼\nRecipient Verification Code',
+]
+
+// A..BA column letters → 0-based index into the 53-wide row.
+function colIdx(letters) {
+  let n = 0
+  for (const ch of letters) n = n * 26 + ch.charCodeAt(0) - 64
+  return n - 1
+}
+
+// ── Markato sender details — SF requires these on EVERY row (the * sender
+// columns). Fill in once; ask Annabelle for the office values.
+export const SF_SENDER = {
+  name: '',                    // * 姓名 — who parcels ship from
+  areaCode: '852',             // * 電話區號 (852 / 853 / 86)
+  mobile: '',                  // 手機號碼
+  company: 'Markato',
+  city: '香港/Hong Kong',      // * 城市 — dropdown value: 香港/Hong Kong or 澳門/Macau
+  district: '',                // * 地區 — e.g. 觀塘區
+  area: '',                    // * 區域 — e.g. 觀塘
+  address: '',                 // * 詳細地址
+}
+
+export const SF_DEFAULTS = {
+  // Both values must be one of SF's dropdown options (元素 Info sheet):
+  productType: '順豐特快/SF Speedy Express',
+  payment: '寄付現結/Pay by Sender', // monthly account: '寄付月結/Pay by Sender (Credit Account)'
+  weightKg: 0.5,                     // per-parcel estimate; tweak in the file if needed
+}
+
+// Receiver locale by campaign market. (Cross-border TW shipments may also need
+// I.D. type/number — columns U/V — which the app doesn't collect; HK needs none.)
+const RECEIVER_AREA_CODE = { HK: '852', TW: '886', MO: '853', CN: '86' }
+const RECEIVER_CITY = { HK: '香港', TW: '台灣', MO: '澳門' }
+
+function buildSfRow(k, campaign) {
+  const market = String(campaign?.market || 'HK').toUpperCase()
+  const row = new Array(SF_HEADER_ROW.length).fill('')
+  const set = (letters, v) => { row[colIdx(letters)] = v == null ? '' : v }
+
+  set('A', `@${k.kol_handle}`) // customer order id → maps the waybill back to the KOL
+  // Sender (Markato)
+  set('B', SF_SENDER.name)
+  set('C', SF_SENDER.areaCode)
+  set('D', SF_SENDER.mobile)
+  set('F', SF_SENDER.company)
+  set('G', SF_SENDER.city)
+  set('H', SF_SENDER.district)
+  set('I', SF_SENDER.area)
+  set('J', SF_SENDER.address)
+  // Receiver (the KOL)
+  set('K', k.recipient_name || '')
+  set('L', RECEIVER_AREA_CODE[market] || '852')
+  set('M', String(k.recipient_phone || '').replace(/\D/g, ''))
+  set('Q', RECEIVER_CITY[market] || '香港')
+  set('R', k.recipient_district || '')
+  set('S', k.recipient_area || '')
+  set('T', k.recipient_address || '')
+  // Consignment + parcel
+  set('W', `${campaign?.brand || ''} product sample`.trim())
+  set('X', SF_DEFAULTS.weightKg)
+  set('AD', SF_DEFAULTS.weightKg)
+  set('AE', 1)
+  set('AF', [campaign?.name, `@${k.kol_handle}`].filter(Boolean).join(' · '))
+  // Product + payment
+  set('AG', SF_DEFAULTS.productType)
+  set('AH', SF_DEFAULTS.payment)
+  return row
+}
 
 // A KOL belongs in the shipping file if it has an address and hasn't already
 // completed the pipeline (posted) or dropped out.
@@ -45,16 +142,19 @@ export async function exportSfBulkXlsx(campaign, kols) {
     import('file-saver'),
   ])
   const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet('SF Bulk')
-  ws.addRow(SF_BULK_COLUMNS.map((c) => c.header))
+  // Same sheet name as SF's template.
+  const ws = wb.addWorksheet('運單訊息內容 Order Content')
+  ws.addRow(SF_GROUP_HEADER_ROW)
+  ws.addRow(SF_HEADER_ROW)
+  for (const ref of SF_ROW1_MERGES) ws.mergeCells(ref)
   ws.getRow(1).font = { bold: true }
-  for (const k of ready) {
-    ws.addRow(SF_BULK_COLUMNS.map((c) => c.value(k, campaign)))
-  }
-  // Widths: address gets room, the rest fit their headers.
-  SF_BULK_COLUMNS.forEach((c, i) => {
-    ws.getColumn(i + 1).width = /Address/.test(c.header) ? 46 : Math.max(c.header.length + 4, 14)
-  })
+  ws.getRow(2).font = { bold: true }
+  ws.getRow(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  ws.getRow(2).alignment = { vertical: 'middle', wrapText: true }
+  for (const k of ready) ws.addRow(buildSfRow(k, campaign))
+  // Give the text-heavy columns room; phone columns stay text-safe as strings.
+  for (const letters of ['B', 'J', 'K', 'T', 'W', 'AF']) ws.getColumn(colIdx(letters) + 1).width = 34
+  for (const letters of ['A', 'G', 'H', 'I', 'Q', 'R', 'S', 'AG', 'AH']) ws.getColumn(colIdx(letters) + 1).width = 18
 
   const buffer = await wb.xlsx.writeBuffer()
   saveAs(

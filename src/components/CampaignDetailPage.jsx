@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
-  updateKolState, setDeadlineOverride, detachKol,
+  updateKolState, setDeadlineOverride, setTrackingNumber, sfTrackingUrl, detachKol,
   effectiveDeadline, KOL_STATES,
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
@@ -232,6 +232,33 @@ function FormatChips({ kol, onSetFormats, showInfo = true }) {
   )
 }
 
+// SF Express waybill number — typed/pasted by hand, saved on blur or Enter, with
+// a one-click link to SF's public tracking page (no SF API creds involved).
+// Shared by the board and table views.
+function TrackingField({ kol, campaign, onSave }) {
+  const [val, setVal] = useState(kol.tracking_number || '')
+  useEffect(() => { setVal(kol.tracking_number || '') }, [kol.tracking_number])
+  const save = () => {
+    const v = val.trim()
+    if (v !== (kol.tracking_number || '')) onSave(kol, v || null)
+  }
+  const url = sfTrackingUrl(kol.tracking_number, campaign?.market)
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input type="text" value={val} placeholder="SF waybill #" spellCheck={false}
+        onChange={(e) => setVal(e.target.value)} onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        className="w-[118px] px-2 py-1 border border-mist rounded-[8px] text-[11px] font-mono text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40" />
+      {url && (
+        <a href={url} target="_blank" rel="noreferrer" title="Track on SF Express"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-[8px] border border-card-edge text-[11px] text-muted hover:text-ink hover:border-ink/30 transition-colors whitespace-nowrap">
+          <Truck size={11} /> Track
+        </a>
+      )}
+    </span>
+  )
+}
+
 // A worker- or import-detected post. The Confirm toggle is the Phase 2 safety
 // gate: the worker sets state=posted but human_verified stays false until a
 // brand manager confirms the match is genuine here.
@@ -342,7 +369,7 @@ function DeadlineMeta({ kol, campaign }) {
   )
 }
 
-function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
+function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
   const formats = kol.content_formats || []
   // Story/blog-only KOLs can't be auto-verified (see campaigns.js) — flag it so
   // the manager knows to mark them posted by hand.
@@ -374,12 +401,15 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
       </div>
 
       <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-mist/70">
-        <label className="flex items-center gap-1.5 text-[11px] font-mono text-faint">
-          <span className="hidden sm:inline">Deadline</span>
-          <input type="date" value={kol.deadline_override || ''}
-            onChange={(e) => onOverride(kol, e.target.value || null)}
-            className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
-        </label>
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-2">
+          <label className="flex items-center gap-1.5 text-[11px] font-mono text-faint">
+            <span className="hidden sm:inline">Deadline</span>
+            <input type="date" value={kol.deadline_override || ''}
+              onChange={(e) => onOverride(kol, e.target.value || null)}
+              className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
+          </label>
+          <TrackingField kol={kol} campaign={campaign} onSave={onTracking} />
+        </div>
         <button onClick={() => onDetach(kol)} title="Remove from campaign"
           className="flex items-center justify-center w-8 h-8 rounded-[9px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
           <Trash2 size={13} />
@@ -404,10 +434,10 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
 // Spreadsheet-style view: one KOL per row. Same controls as the board (status,
 // format, deadline, post-confirm) in a compact grid. Nudge drafting stays in the
 // board view to keep the table lean.
-function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onDetach, onConfirmPost, onSetFormats }) {
+function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onSetFormats }) {
   return (
     <div className="overflow-x-auto border border-card-edge rounded-[14px] bg-white">
-      <table className="w-full min-w-[840px] text-[12.5px] border-collapse">
+      <table className="w-full min-w-[980px] text-[12.5px] border-collapse">
         <thead>
           <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint border-b border-mist">
             <th className="px-4 py-3 font-normal">KOL</th>
@@ -415,6 +445,7 @@ function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onDet
             <th className="px-3 py-3 font-normal">Format</th>
             <th className="px-3 py-3 font-normal">Status</th>
             <th className="px-3 py-3 font-normal">Shipped</th>
+            <th className="px-3 py-3 font-normal">Tracking</th>
             <th className="px-3 py-3 font-normal">Deadline</th>
             <th className="px-3 py-3 font-normal">Post</th>
             <th className="px-4 py-3 font-normal"></th>
@@ -435,6 +466,9 @@ function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onDet
                 <td className="px-3 py-3"><FormatChips kol={kol} onSetFormats={onSetFormats} showInfo={false} /></td>
                 <td className="px-3 py-3"><StatusSelect kol={kol} onStateChange={onStateChange} /></td>
                 <td className="px-3 py-3 font-mono text-body whitespace-nowrap">{kol.shipped_at ? formatDate(kol.shipped_at) : '—'}</td>
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <TrackingField kol={kol} campaign={campaign} onSave={onTracking} />
+                </td>
                 <td className="px-3 py-3 whitespace-nowrap">
                   <input type="date" value={kol.deadline_override || ''}
                     onChange={(e) => onOverride(kol, e.target.value || null)}
@@ -522,6 +556,18 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
     setKols((prev) => prev.map((k) => (k.id === kol.id ? { ...k, deadline_override: date } : k)))
     try {
       const updated = await setDeadlineOverride(kol.id, date)
+      setKols((prev) => prev.map((k) => (k.id === kol.id ? updated : k)))
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+      load()
+    }
+  }, [load])
+
+  const handleTracking = useCallback(async (kol, number) => {
+    // optimistic
+    setKols((prev) => prev.map((k) => (k.id === kol.id ? { ...k, tracking_number: number } : k)))
+    try {
+      const updated = await setTrackingNumber(kol.id, number)
       setKols((prev) => prev.map((k) => (k.id === kol.id ? updated : k)))
     } catch (e) {
       setToast({ type: 'error', message: e.message })
@@ -755,7 +801,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
 
       {total > 0 && view === 'table' ? (
         <KolTable kols={kols} campaign={campaign} postsByKol={postsByKol}
-          onStateChange={handleStateChange} onOverride={handleOverride} onDetach={handleDetach}
+          onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onDetach={handleDetach}
           onConfirmPost={handleConfirmPost} onSetFormats={handleSetFormats} />
       ) : (
         <div className="space-y-6">
@@ -772,7 +818,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
                   {rows.map((kol) => (
                     <KolRow key={kol.id} kol={kol} campaign={campaign}
                       posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
-                      onStateChange={handleStateChange} onOverride={handleOverride} onDetach={handleDetach}
+                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onDetach={handleDetach}
                       onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
                       onSetFormats={handleSetFormats} />
                   ))}

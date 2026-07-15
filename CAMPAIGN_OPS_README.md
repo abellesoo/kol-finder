@@ -84,10 +84,12 @@ Managers can also override any state manually (the dropdown), for false positive
 | **2** | Verification worker (cron ~2×/day + on-demand), tag matching, human-verify toggle, overdue nudges (DeepSeek, Cantonese HK / zh-TW TW, never mixed) | Code-complete; deploy pending creds | `campaign_ops_phase2.sql` |
 | **Studio** | Tier rename (A→PR/B→Paid), per-KOL content formats, table views, spreadsheet importer | Code-complete | `campaign_ops_seeding_studio.sql` |
 | **4** | One Google Sheet per campaign ("`<name>` Seeding": one-way app→sheet push, Status/Tier dropdowns, date columns, post-engagement snapshot) | Code-complete; needs GCP setup | `campaign_ops_engagement.sql` |
-| **3** | **perftracker feed + wrap summary + handoff docs** | **This deliverable** | `campaign_ops_phase3.sql` |
+| **3** | **perftracker feed + wrap summary + handoff docs** | Code-complete | `campaign_ops_phase3.sql` |
+| **SF** | SF Express tracking: per-KOL waybill # + one-click "Track" link to SF's public tracking page | Code-complete | `campaign_ops_sf_tracking.sql` |
 
-Deferred to last: **SF Express shipment tracking** (needs a Markato SF business
-account + per-KOL waybills — none exist today; ship stays a manual toggle).
+SF tracking is deliberately the **manual** version: a full SF Open Platform API
+integration needs a Markato SF business account + developer credentials (none
+exist today). The waybill column is forward-compatible if that lands later.
 
 ## The perftracker data contract (Phase 3)
 
@@ -131,7 +133,9 @@ deeper lives here by design — performance analysis is perftracker's job.
 
 1. In the Review Queue, approve KOLs, then **Start campaign** to auto-attach them
    (or import a wave from a spreadsheet with the importer).
-2. Open the campaign, **mark KOLs shipped** as products go out.
+2. Open the campaign, **mark KOLs shipped** as products go out. Paste each
+   parcel's **SF waybill number** into the tracking field (saves on Enter/blur);
+   the **Track** button opens SF Express's public tracking page for it.
 3. The worker auto-verifies twice a day; or hit **Verify posts** on demand. A
    detected post moves the KOL to **Posted** with the matched signals.
 4. **Confirm** each detected post (green) — the worker never auto-confirms.

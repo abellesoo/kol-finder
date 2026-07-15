@@ -300,6 +300,28 @@ export async function updateKolState(kol, to) {
   return data
 }
 
+// ── SF Express tracking (manual — no API creds needed) ───────────────────────
+// Public waybill page, localized by campaign market. The number is entered by
+// hand (db/campaign_ops_sf_tracking.sql); SF's page does the actual tracking.
+export function sfTrackingUrl(trackingNumber, market) {
+  const num = String(trackingNumber || '').trim().replace(/\s+/g, '')
+  if (!num) return null
+  const locale = { HK: 'hk/tc', TW: 'tw/tc' }[String(market || '').toUpperCase()] || 'hk/en'
+  return `https://htm.sf-express.com/${locale}/dynamic_function/waybill/#search/bill-number/${encodeURIComponent(num)}`
+}
+
+export async function setTrackingNumber(kolId, numberOrNull) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('campaign_kols')
+    .update({ tracking_number: numberOrNull || null, updated_at: new Date().toISOString() })
+    .eq('id', kolId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
 export async function setDeadlineOverride(kolId, dateOrNull) {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase
@@ -475,8 +497,9 @@ export async function getScoringByHandle(kols) {
 // in worker.js).
 export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreByHandle = {}) {
   const headers = [
-    'Handle', 'Full name', 'Tier', 'Format', 'Status', 'Shipped', 'Deadline',
-    'Post URL', 'Posted at', 'Verified', 'Likes', 'Comments', 'Views', 'Eng. updated',
+    'Handle', 'Full name', 'Tier', 'Format', 'Status', 'Shipped', 'Tracking #',
+    'Deadline', 'Post URL', 'Posted at', 'Verified', 'Likes', 'Comments', 'Views',
+    'Eng. updated',
   ]
   const day = (v) => (v ? String(v).slice(0, 10) : '')
   const rows = (kols || []).map((k) => {
@@ -489,6 +512,9 @@ export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreB
       (k.content_formats || []).map(formatLabel).join(', '),
       SHEET_STATE_LABELS[k.state] || k.state,
       day(k.shipped_at),
+      // Leading ' keeps an all-digit waybill number as text under USER_ENTERED
+      // (otherwise Sheets renders it 1.23E+11).
+      k.tracking_number ? (/^\d+$/.test(k.tracking_number) ? `'${k.tracking_number}` : k.tracking_number) : '',
       day(effectiveDeadline(k, campaign)),
       post?.post_url || '',
       day(post?.posted_at),

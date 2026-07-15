@@ -102,12 +102,6 @@ async function apifyDataset(datasetId, KEY) {
   return Array.isArray(items) ? items : []
 }
 
-// shipped_at is stamped the day a manager clicks "mark shipped", not the real
-// courier handoff — so a KOL can genuinely post a day or two before that date.
-// Count posts from this many days before shipped_at, else a real campaign post
-// gets dropped and the KOL false-flags overdue (2026-07-14 open issue).
-const SHIP_DATE_GRACE_DAYS = 3
-
 // ── Matching ──────────────────────────────────────────────────────────────────
 // A post matches if its caption / hashtags / mentions carry ANY of the
 // campaign's mention_handles or hashtags. Returns the list of matched signals
@@ -189,18 +183,18 @@ async function verifyCampaigns(env, campaigns) {
       summary.checked++
       checkedIds.push(kol.id)
       const posts = byOwner[kol.kol_handle] || []
+      // shipped_at is the day we SEND the product, so a genuine campaign post is
+      // always on/after it (the KOL has to receive it first). A matching post
+      // dated before shipped_at therefore can't be the campaign post — it's an
+      // old/coincidental post reusing the same hashtag — so we don't count it,
+      // but we do surface it (beforeShip) so a manager can eyeball it.
       const since = kol.shipped_at || campaign.start_date || null
-      // Ship date minus a grace window (see SHIP_DATE_GRACE_DAYS).
       const cutoff = since ? new Date(`${since}T00:00:00Z`) : null
-      if (cutoff) cutoff.setUTCDate(cutoff.getUTCDate() - SHIP_DATE_GRACE_DAYS)
 
       const hits = []
-      let beforeShip = 0 // matched signals but dated before the ship window
+      let beforeShip = 0 // matched signals but dated before the ship date
       for (const post of posts) {
         const signals = matchPost(post, mentionHandles, hashtags)
-        // Only posts on/after (ship date − grace) count as campaign posts. A post
-        // that matches signals but predates the window is tracked separately so a
-        // manager sees "before ship date" rather than a bare overdue.
         if (cutoff && post.timestamp && new Date(post.timestamp) < cutoff) {
           if (signals.length) beforeShip++
           continue

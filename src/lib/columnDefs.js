@@ -21,7 +21,7 @@ export const TABLE_COLUMNS = [
 
 export const DEFAULT_SELECTED_COLUMNS = [
   'brand', 'overall', 'relevancy_score', 'engagement_score', 'ai_fit',
-  'live_median_likes', 'live_median_views', 'live_median_comments',
+  'follower_count', 'live_median_likes', 'live_median_views', 'live_median_comments',
   'sample_post_url', 'scraped_post_likes', 'scraped_post_comments', 'niche_signals',
 ]
 

@@ -16,7 +16,8 @@ import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
 import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
-import { saveSession } from './lib/sessionHistory'
+import { saveSession, loadSessionFull } from './lib/sessionHistory'
+import { readUrlState, popStashedDeepLink, syncUrl } from './lib/urlState'
 
 const NAV_GROUPS = [
   {
@@ -63,6 +64,16 @@ function navGroupsForRole(role) {
       return true
     }),
   })).filter((group) => group.items.length > 0)
+}
+
+// Validate an incoming URL state against the user's role — a shared link must
+// not route someone into a view their nav doesn't offer.
+function resolveUrlState(state, role) {
+  if (!state) return { mode: 'help' }
+  const allowed = new Set(navGroupsForRole(role).flatMap((g) => g.items.map((i) => i.id)))
+  if (state.mode === 'review_detail') return allowed.has('review_queue') ? state : { mode: 'help' }
+  if (state.mode === 'campaign_detail') return allowed.has('campaigns') ? state : { mode: 'help' }
+  return allowed.has(state.mode) ? state : { mode: 'help' }
 }
 
 function NavButton({ id, label, Icon, isActive, onClick }) {
@@ -162,9 +173,11 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
 }
 
 function MainApp({ user, role, onSignOut }) {
-  const [mode, setMode] = useState('help')
-  const [openReviewId, setOpenReviewId] = useState(null)
-  const [openCampaignId, setOpenCampaignId] = useState(null)
+  // Deep link: the current URL wins; otherwise a link stashed before the OAuth redirect.
+  const [initialUrlState] = useState(() => resolveUrlState(readUrlState() || popStashedDeepLink(), role))
+  const [mode, setMode] = useState(initialUrlState.mode)
+  const [openReviewId, setOpenReviewId] = useState(initialUrlState.reviewId || null)
+  const [openCampaignId, setOpenCampaignId] = useState(initialUrlState.campaignId || null)
   const [campaignSeed, setCampaignSeed] = useState(null) // { runId, name, count } from "Start campaign"
   const [step, setStep] = useState('upload')
   const [fileNames, setFileNames] = useState([])
@@ -172,8 +185,56 @@ function MainApp({ user, role, onSignOut }) {
   const [results, setResults] = useState([])
   const [config, setConfig] = useState(null)
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
-  const [currentSessionId, setCurrentSessionId] = useState(null)
+  const [currentSessionId, setCurrentSessionId] = useState(initialUrlState.sessionId || null)
   const startingRef = useRef(false)
+  const prevPageKeyRef = useRef(null)
+
+  // Keep the URL in sync with the current view. Push a history entry when the
+  // page identity changes (so back/forward walk between views); replace when
+  // only secondary state changes (e.g. a scoring run finishing gains a session id).
+  useEffect(() => {
+    const pageKey = `${mode}:${openReviewId || ''}:${openCampaignId || ''}`
+    const replace = prevPageKeyRef.current === null || prevPageKeyRef.current === pageKey
+    prevPageKeyRef.current = pageKey
+    syncUrl(
+      {
+        mode,
+        reviewId: openReviewId,
+        campaignId: openCampaignId,
+        sessionId: mode === 'seeder' ? currentSessionId : null,
+      },
+      { replace }
+    )
+  }, [mode, openReviewId, openCampaignId, currentSessionId])
+
+  // Browser back/forward: re-read the URL into view state.
+  useEffect(() => {
+    const onPop = () => {
+      const s = resolveUrlState(readUrlState(), role)
+      // Mark this page as already current so the sync effect replaces instead
+      // of pushing a duplicate history entry on top of the one we navigated to.
+      prevPageKeyRef.current = `${s.mode}:${s.reviewId || ''}:${s.campaignId || ''}`
+      setMode(s.mode)
+      setOpenReviewId(s.reviewId || null)
+      setOpenCampaignId(s.campaignId || null)
+      if (s.sessionId && s.sessionId !== currentSessionId) {
+        loadSessionFull(s.sessionId)
+          .then((session) => session && handleLoadSeederSession(session))
+          .catch(console.error)
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [role, currentSessionId])
+
+  // Deep-linked seeder session (?page=seeder&session=<id>): load its results once on mount.
+  useEffect(() => {
+    if (!initialUrlState.sessionId) return
+    loadSessionFull(initialUrlState.sessionId)
+      .then((session) => session && handleLoadSeederSession(session))
+      .catch(console.error)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleLoadSeederSession = (session) => {
     setFileNames(session.fileNames)
@@ -213,6 +274,7 @@ function MainApp({ user, role, onSignOut }) {
     try {
       const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
       setInfluencers(deduplicateInfluencers(allParsed))
+      setCurrentSessionId(null) // new data — the session param in the URL no longer applies
       setStep('config')
     } catch (err) {
       alert('Failed to parse file(s): ' + err.message)
@@ -239,6 +301,7 @@ function MainApp({ user, role, onSignOut }) {
     }
     setFileNames(brandedResults.map(({ brand }) => brand))
     setInfluencers(merged)
+    setCurrentSessionId(null) // new data — the session param in the URL no longer applies
     setStep('config')
   }
 

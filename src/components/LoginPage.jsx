@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, stagger, useAnimate } from 'motion/react'
 import { supabase } from '../lib/supabase'
+import { stashDeepLink } from '../lib/urlState'
 import Floating, { FloatingElement } from './ui/parallax-floating'
 import { TextEffect } from './core/text-effect'
 
@@ -25,6 +26,7 @@ export default function LoginPage({ error }) {
 
   const handleGoogleSignIn = async () => {
     setLoading(true)
+    stashDeepLink() // survive the OAuth round-trip, which lands on the bare app URL
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin + '/kol-finder/' },

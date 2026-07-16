@@ -146,17 +146,27 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       // preserves per-term/track provenance.
       const threadsItems = []
       const failedTerms = []
+      // Threads heavily anti-bots the actor's SEARCH endpoint (profile/user mode
+      // is reliable, but discovery needs keyword search). Blocks are per-request
+      // and proxy-IP-dependent, so a fresh retry run — which draws a new IP —
+      // recovers most transient failures. Two attempts per term with a short
+      // backoff; a sustained Threads-side block still fails, but that's rare.
+      const THREADS_ATTEMPTS = 2
       for (const term of threadsTerms) {
-        try {
-          const run = await startThreadsSeederScrape(term, Math.min(resultsLimit, 50))
-          const completed = await pollUntilDone(run, { allowPartial: true })
-          const items = await getDatasetItems(completed.defaultDatasetId)
-          if (items.length > 0) threadsItems.push(...items)
-          else failedTerms.push(term)
-        } catch (err) {
-          failedTerms.push(term)
-          console.error(`Threads scrape failed for "${term}":`, err)
+        let got = null
+        for (let attempt = 0; attempt < THREADS_ATTEMPTS && !got; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
+          try {
+            const run = await startThreadsSeederScrape(term, Math.min(resultsLimit, 50))
+            const completed = await pollUntilDone(run, { allowPartial: true })
+            const items = await getDatasetItems(completed.defaultDatasetId)
+            if (items.length > 0) got = items
+          } catch (err) {
+            console.error(`Threads scrape failed for "${term}" (attempt ${attempt + 1}/${THREADS_ATTEMPTS}):`, err)
+          }
         }
+        if (got) threadsItems.push(...got)
+        else failedTerms.push(term)
       }
       if (threadsItems.length > 0) {
         brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, brand: 'threads' })

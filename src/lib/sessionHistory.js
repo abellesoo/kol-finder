@@ -26,16 +26,26 @@ export async function saveSession({ fileNames, config, results, influencers }) {
   return session.id
 }
 
-export async function updateSessionLiveStats(id, statsMap) {
+// platform scopes which rows a stats map may touch — the same handle can exist
+// as separate Instagram and Threads rows, and IG live stats must never land on
+// a Threads row (or vice versa). null = legacy behavior, all rows.
+export async function updateSessionLiveStats(id, statsMap, platform = null) {
   if (!supabase || !id) return
   const { data } = await supabase.from('sessions').select('results').eq('id', id).single()
   if (!data) return
-  const results = (data.results || []).map((r) => ({
-    ...r,
-    medianLikes: statsMap[r.username]?.medianLikes ?? r.medianLikes ?? null,
-    medianViews: statsMap[r.username]?.medianViews ?? r.medianViews ?? null,
-    medianComments: statsMap[r.username]?.medianComments ?? r.medianComments ?? null,
-  }))
+  const matchesPlatform = (r) =>
+    platform == null || (platform === 'threads' ? r.platform === 'threads' : r.platform !== 'threads')
+  const results = (data.results || []).map((r) => {
+    if (!matchesPlatform(r)) return r
+    const s = statsMap[r.username]
+    return {
+      ...r,
+      medianLikes: s?.medianLikes ?? r.medianLikes ?? null,
+      medianViews: s?.medianViews ?? r.medianViews ?? null,
+      medianComments: s?.medianComments ?? r.medianComments ?? null,
+      followerCount: s?.followerCount ?? r.followerCount ?? null,
+    }
+  })
   await supabase.from('sessions').update({ results }).eq('id', id)
 }
 

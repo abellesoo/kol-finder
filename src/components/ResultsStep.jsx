@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Send, Check, X, Sparkles } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
-import { fetchBatchStats } from '../lib/apifyApi'
+import { fetchBatchStats, fetchThreadsProfileItems } from '../lib/apifyApi'
+import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
@@ -222,7 +223,9 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 
   const renderCell = (col, r) => {
     try {
-      const s = liveStats[r.username]
+      // liveStats is IG-only; a Threads row's stats are already merged onto r
+      // (followerCount, liveMedian*) — never read a same-handle IG entry here.
+      const s = r.platform === 'threads' ? undefined : liveStats[r.username]
       const rs = reviewState[r.username]
       switch (col.id) {
         case 'brand':
@@ -473,6 +476,31 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     }
     return valid
   })
+  // Threads profile-enrichment stats, keyed by username. Kept separate from
+  // liveStats (IG) — the same handle can exist on both platforms, and the two
+  // caches use different actors. Cache entries are namespaced "threads:<user>".
+  const [threadsStats, setThreadsStats] = useState(() => {
+    const cache = readCache()
+    const now = Date.now()
+    const valid = {}
+    for (const r of results) {
+      if (r.platform !== 'threads') continue
+      const entry = cache[`threads:${r.username}`]
+      if (entry && now - entry.ts < CACHE_TTL_MS && hasRealData(entry.stats)) {
+        valid[r.username] = entry.stats
+      } else if (r.followerCount != null || r.medianLikes != null || r.medianViews != null || r.medianComments != null) {
+        // Seed from stats persisted on the session (scrape-time enrichment or
+        // a prior Refresh) so they survive reloads.
+        valid[r.username] = {
+          followerCount: r.followerCount ?? null,
+          medianLikes: r.medianLikes ?? null,
+          medianViews: r.medianViews ?? null,
+          medianComments: r.medianComments ?? null,
+        }
+      }
+    }
+    return valid
+  })
   const [liveStatus, setLiveStatus] = useState(() => {
     const cache = readCache()
     const hasCached = results.some(
@@ -520,17 +548,21 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       // Live stats come from an Instagram re-scrape — never attach them to a
       // Threads row (a same-handle IG account may be a different person).
       const live = isThreads ? null : liveStats[r.username]
-      // Threads has no on-demand re-scrape; its profile-enrichment medians (on
-      // inf, computed in buildThreadsEnrichment) ARE its freshest same-session
-      // data, so treat them as "live" for scoring, display, and sorting. IG
-      // keeps live-only semantics (medians blank until the user fetches live).
-      const medLikes = live?.medianLikes ?? (isThreads ? (inf?.xlsxMedianLikes ?? null) : null)
-      const medViews = live?.medianViews ?? (isThreads ? (inf?.xlsxMedianViews ?? null) : null)
-      const medComments = live?.medianComments ?? (isThreads ? (inf?.xlsxMedianComments ?? null) : null)
+      // Threads "live" data = profile enrichment (scrape-time, a Refresh in
+      // this session, or persisted from a prior one — threadsStats holds all
+      // three). IG keeps live-only semantics (medians blank until the user
+      // fetches live).
+      const tstats = isThreads ? threadsStats[r.username] : null
+      const medLikes = isThreads ? (tstats?.medianLikes ?? inf?.xlsxMedianLikes ?? null) : (live?.medianLikes ?? null)
+      const medViews = isThreads ? (tstats?.medianViews ?? inf?.xlsxMedianViews ?? null) : (live?.medianViews ?? null)
+      const medComments = isThreads ? (tstats?.medianComments ?? inf?.xlsxMedianComments ?? null) : (live?.medianComments ?? null)
+      const followerCount = isThreads
+        ? (tstats?.followerCount ?? r.followerCount ?? inf?.followerCount ?? null)
+        : (r.followerCount ?? inf?.followerCount ?? null)
       const ai = aiStats[r.username]
       const hasLive = medLikes != null || medViews != null
       const engScore = hasLive
-        ? computeLiveEngagementScore(medLikes, medViews, medComments, r.followerCount)
+        ? computeLiveEngagementScore(medLikes, medViews, medComments, followerCount)
         : (r.scores?.engagement ?? 0)
       const relScore = r.scores?.relevancy ?? 0
       // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,
@@ -541,6 +573,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         : Math.round(engScore * 8 + relScore * 2)
       return {
         ...r, ...inf,
+        // Explicit: `...inf` would otherwise clobber a persisted r.followerCount
+        // with the influencer record's scrape-time null.
+        followerCount,
         scores: { ...r.scores, engagement: engScore },
         overall,
         aiScore: ai?.score ?? null,
@@ -556,7 +591,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         liveMedianComments: medComments,
       }
     })
-  }, [results, infMap, liveStats, aiStats, blendAi])
+  }, [results, infMap, liveStats, threadsStats, aiStats, blendAi])
 
   const filtered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
@@ -591,21 +626,40 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
 
+  // One handler for both platforms: IG rows re-scrape via fetchBatchStats,
+  // Threads rows re-run profile enrichment (chunked ≤20 handles per actor run).
+  // Both persist onto the session so the stats survive reloads.
   const handleFetchLive = useCallback(async (usernames, { force = false } = {}) => {
+    const threadsSet = new Set(results.filter((r) => r.platform === 'threads').map((r) => r.username))
     const cache = readCache()
     const now = Date.now()
-    const toFetch = force
-      ? usernames
-      : usernames.filter((u) => !cache[u] || now - cache[u].ts >= CACHE_TTL_MS || !hasRealData(cache[u].stats))
-    if (toFetch.length === 0) { setLiveStatus('done'); return }
+    const isFresh = (key) => cache[key] && now - cache[key].ts < CACHE_TTL_MS && hasRealData(cache[key].stats)
+    const igToFetch = usernames.filter((u) => !threadsSet.has(u) && (force || !isFresh(u)))
+    const thToFetch = usernames.filter((u) => threadsSet.has(u) && (force || !isFresh(`threads:${u}`)))
+    const total = igToFetch.length + thToFetch.length
+    if (total === 0) { setLiveStatus('done'); return }
     setLiveStatus('loading')
-    setLiveProgress({ done: 0, total: toFetch.length })
+    setLiveProgress({ done: 0, total })
     setLiveError(null)
     try {
-      const statsMap = await fetchBatchStats(toFetch, (done, total) => setLiveProgress({ done, total }))
+      let igDone = 0
+      let thDone = 0
+      const report = () => setLiveProgress({ done: Math.min(igDone + thDone, total), total })
+      const [statsMap, threadsMap] = await Promise.all([
+        igToFetch.length
+          ? fetchBatchStats(igToFetch, (done) => { igDone = done; report() })
+          : Promise.resolve({}),
+        thToFetch.length
+          ? fetchThreadsProfileItems(thToFetch, 10, (done) => { thDone = done; report() }).then(buildThreadsEnrichment)
+          : Promise.resolve({}),
+      ])
       const updated = { ...readCache() }
       for (const [u, stats] of Object.entries(statsMap)) {
         if (hasRealData(stats) || !hasRealData(updated[u]?.stats)) updated[u] = { stats, ts: Date.now() }
+      }
+      for (const [u, stats] of Object.entries(threadsMap)) {
+        const key = `threads:${u}`
+        if (hasRealData(stats) || !hasRealData(updated[key]?.stats)) updated[key] = { stats, ts: Date.now() }
       }
       writeCache(updated)
       // Merge with the same guard as the cache: never let an empty/failed
@@ -617,17 +671,33 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         }
         return next
       })
+      setThreadsStats((prev) => {
+        const next = { ...prev }
+        for (const [u, stats] of Object.entries(threadsMap)) {
+          if (hasRealData(stats) || !hasRealData(next[u])) next[u] = stats
+        }
+        return next
+      })
       setFetchedThisSession(true)
       // fetchBatchStats attaches failed usernames as a non-enumerable _failed.
       const failed = statsMap._failed || []
-      setLiveError(failed.length ? `${failed.length} account(s) couldn't be fetched — others updated. Click Refresh to retry just those.` : null)
+      const thMissing = thToFetch.filter((u) => !hasRealData(threadsMap[u]))
+      const errParts = []
+      if (failed.length) errParts.push(`${failed.length} Instagram account(s) couldn't be fetched`)
+      if (thMissing.length) errParts.push(`${thMissing.length} Threads profile(s) returned no data (Meta may have blocked the lookup)`)
+      setLiveError(errParts.length ? `${errParts.join(' · ')} — others updated. Click Refresh to retry.` : null)
       setLiveStatus('done')
-      updateSessionLiveStats(sessionIdRef.current, statsMap).catch(console.error)
+      // Sequential on purpose: both persist via read-modify-write on the same
+      // session row, so concurrent calls would clobber each other.
+      ;(async () => {
+        if (Object.keys(statsMap).length > 0) await updateSessionLiveStats(sessionIdRef.current, statsMap, 'instagram')
+        if (Object.keys(threadsMap).length > 0) await updateSessionLiveStats(sessionIdRef.current, threadsMap, 'threads')
+      })().catch(console.error)
     } catch (err) {
       setLiveError(err.message)
       setLiveStatus('error')
     }
-  }, [])
+  }, [results])
 
   const handleScoreAi = useCallback(async () => {
     setAiStatus('loading')
@@ -810,7 +880,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           ) : liveStatus === 'error' ? (
             // Retry does NOT force — accounts already fetched (cached with real
             // data) are skipped so we don't re-pay for them.
-            <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username))}
+            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-[10px] text-[13px] hover:bg-rose/5 transition-all">
               <RefreshCw size={14} /> Retry
             </button>
@@ -819,13 +889,13 @@ export default function ResultsStep({ results, influencers, config, sessionId })
               {!fetchedThisSession && (
                 <span className="text-[11px] font-mono text-faint" title="Shown from local cache — click Refresh to fetch fresh data">cached</span>
               )}
-              <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username), { force: true })}
+              <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
                 className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
                 <RefreshCw size={14} /> Refresh
               </button>
             </div>
           ) : (
-            <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username))}
+            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
               <RefreshCw size={14} /> Fetch Live Stats
             </button>

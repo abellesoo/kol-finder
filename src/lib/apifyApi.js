@@ -159,7 +159,7 @@ const THREADS_PROFILE_CONCURRENCY = 5
  * dropped — partial results are far better than none, and the caller treats
  * only a fully-empty result as "enrichment blocked".
  */
-export async function fetchThreadsProfileItems(usernames, postsPerUser = 10) {
+export async function fetchThreadsProfileItems(usernames, postsPerUser = 10, onProgress) {
   const list = [...new Set((usernames || []).map((u) => String(u).trim()).filter(Boolean))]
   if (list.length === 0) throw new Error('No usernames to enrich')
   const chunks = []
@@ -186,11 +186,14 @@ export async function fetchThreadsProfileItems(usernames, postsPerUser = 10) {
 
   const queue = [...chunks]
   const collected = []
+  let done = 0
   await Promise.all(
     Array.from({ length: Math.min(THREADS_PROFILE_CONCURRENCY, queue.length) }, async () => {
       while (queue.length > 0) {
         const chunk = queue.shift()
         collected.push(...(await runChunk(chunk)))
+        done += chunk.length
+        if (onProgress) onProgress(Math.min(done, list.length), list.length)
       }
     })
   )

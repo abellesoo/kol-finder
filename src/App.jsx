@@ -220,10 +220,11 @@ function MainApp({ user, role, onSignOut }) {
   }
 
   const handleScrapedItems = (brandedResults) => {
-    const influencerLists = brandedResults.map(({ items, brand, platform, trackByTerm }) => {
-      // Threads batches carry platform:'threads' + a term→track map; they go
-      // through the Threads-shaped aggregator (different actor field names).
-      if (platform === 'threads') return aggregateThreadsPostItems(items, trackByTerm)
+    const influencerLists = brandedResults.map(({ items, brand, platform, trackByTerm, enrichByUser }) => {
+      // Threads batches carry platform:'threads' + a term→track map + a
+      // username→follower/bio enrichment map; they go through the Threads-shaped
+      // aggregator (different actor field names).
+      if (platform === 'threads') return aggregateThreadsPostItems(items, trackByTerm, enrichByUser)
       const all = aggregatePostItems(items, brand)
       return brand
         ? all.filter((inf) => inf.username.toLowerCase() !== brand.toLowerCase())

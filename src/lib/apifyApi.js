@@ -75,39 +75,63 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
 }
 
 /**
- * Start a Threads keyword-search scrape (futurizerush/meta-threads-scraper).
- * Threads has no public "tagged" page to crawl, so discovery is search-based:
- * each term is a Threads search query (pain-point terms like 掉髮, or
- * content-genre terms like "olive young"). Every returned post carries a
- * `search_keyword` field identifying which term found it, so provenance
- * survives regardless of batching. Items also include the author's follower
- * count / bio / bio links inline — no second profile scrape.
+ * Start a Threads keyword-search scrape via igview-owner/threads-search-scraper
+ * — the actor the manual seeding playbook actually used. Threads has no public
+ * "tagged" page, so discovery is search-based: one term = one Threads search
+ * query (pain-point like 掉髮, or content-genre like "olive young").
  *
- * The caller runs ONE term per call: Threads rate-limits multi-keyword
- * sessions hard (a five-keyword batch reliably got 4/5 blocked in testing and
- * the whole run exited non-zero), so isolating each term keeps one block from
- * discarding the rest. `search_filter` defaults to 'recent' — it is markedly
- * more reliable than 'top' (which frequently returned 0 / got blocked) and
- * newest-first is also the better lens for "what's trending right now".
+ * Why not futurizerush's search: Meta anti-bots the SEARCH endpoint hard and
+ * blocks futurizerush's proxy pool for long windows (its profile/user mode
+ * stays up — that's what enrichment below uses). igview-owner runs on separate
+ * infra that keeps working through those blocks. Its search items carry post +
+ * engagement data but NO follower/bio — those come from startThreadsProfileScrape.
+ *
+ * ONE term per call: search blocks are per-request/per-proxy-IP, so isolating
+ * terms (and retrying with a fresh run) keeps one block from sinking the rest.
+ * `sort` defaults to 'recent' (more reliable than 'top', and newest-first is
+ * the better lens for "trending now"). maxPosts is floored at 20 (actor min).
  */
-export async function startThreadsSeederScrape(terms, resultsLimit = 50, searchFilter = 'recent') {
-  const keywords = (Array.isArray(terms) ? terms : [terms])
-    .map((t) => String(t).trim())
-    .filter(Boolean)
-  if (keywords.length === 0) throw new Error('No search terms provided')
-  const res = await fetch(`${PROXY}/start-run/threads-scraper`, {
+export async function startThreadsSeederScrape(term, resultsLimit = 30, sort = 'recent') {
+  const searchQuery = String(Array.isArray(term) ? term[0] : term).trim()
+  if (!searchQuery) throw new Error('No search term provided')
+  const res = await fetch(`${PROXY}/start-run/threads-search`, {
     method: 'POST',
     headers: await workerHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
-      mode: 'search',
-      keywords,
-      max_posts: resultsLimit,
-      search_filter: searchFilter,
+      searchQuery,
+      sort,
+      maxPosts: Math.max(20, resultsLimit),
     }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Failed to start Threads actor (${res.status}): ${text || 'no response body'}`)
+    throw new Error(`Failed to start Threads search (${res.status}): ${text || 'no response body'}`)
+  }
+  const { data } = await res.json()
+  return data
+}
+
+/**
+ * Enrich discovered Threads handles with follower count + bio, which the search
+ * actor doesn't return. Uses futurizerush/meta-threads-scraper in `user` mode —
+ * its profile scrape is reliable even while its search endpoint is blocked
+ * (confirmed by testing). One batched run covers all handles. Best-effort: the
+ * caller wraps this so a failure just leaves follower/bio blank rather than
+ * sinking the whole scrape.
+ */
+export async function startThreadsProfileScrape(usernames, postsPerUser = 10) {
+  const list = [...new Set((usernames || []).map((u) => String(u).trim()).filter(Boolean))]
+  if (list.length === 0) throw new Error('No usernames to enrich')
+  const res = await fetch(`${PROXY}/start-run/threads-scraper`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    // max_posts floored at 10 (actor minimum); we only need profile-level
+    // follower/bio, so the exact post count doesn't matter.
+    body: JSON.stringify({ mode: 'user', usernames: list, max_posts: Math.max(10, postsPerUser) }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to start Threads profile enrichment (${res.status}): ${text || 'no response body'}`)
   }
   const { data } = await res.json()
   return data

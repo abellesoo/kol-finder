@@ -213,9 +213,10 @@ export function aggregatePostItems(rows, brandName = '') {
 // text matching when it's absent or ambiguous.
 const THREADS_LANGUAGE_LOCATIONS = { zh_TW: 'Taiwan', zh_HK: 'Hong Kong' }
 
-// Pull every URL a Threads item exposes (post links + bio/external links) into
-// a flat string list — buildFlags scans these for affiliate-link patterns.
-// Link entries may be plain strings or {url} objects depending on actor version.
+// Pull every URL a Threads item exposes (post links + bio/external links + link
+// previews) into a flat string list — buildFlags scans these for affiliate-link
+// patterns. Handles both actor shapes: futurizerush (urls/bio_links/
+// external_links, string or {url}) and igview-owner (linkPreviewUrl/…).
 function threadsItemLinks(row) {
   const out = []
   for (const list of [row.urls, row.bio_links, row.external_links]) {
@@ -224,24 +225,43 @@ function threadsItemLinks(row) {
       if (url) out.push(String(url))
     }
   }
+  for (const u of [row.linkPreviewUrl, row.linkPreviewDisplayUrl, row.link_preview_url]) {
+    if (u) out.push(String(u))
+  }
   return out
 }
 
+// Field readers that bridge the two Threads actors' naming conventions:
+// igview-owner uses camelCase (likeCount, captionText, postUrl…), futurizerush
+// uses snake_case (like_count, text_content, post_url…).
+const tLikes   = (p) => Number(p.like_count ?? p.likeCount)
+const tReplies = (p) => Number(p.reply_count ?? p.directReplyCount)
+const tViews   = (p) => Number(p.view_count ?? NaN)
+const tCaption = (p) => p.text_content ?? p.captionText ?? ''
+const tPostUrl = (p) => p.post_url ?? p.postUrl ?? ''
+const tPaid    = (p) => p.is_paid_partnership === true || p.isPaidPartnership === true
+const tName    = (p) => p.display_name ?? p.fullName ?? ''
+const tIsVideo = (p) =>
+  (p.media_type || '').toLowerCase() === 'video' || !!p.videoUrl || (p.allVideos || []).length > 0
+
 /**
- * Aggregate Threads search items (futurizerush/meta-threads-scraper) into
- * influencer objects with the SAME shape aggregatePostItems produces, so the
- * whole scoring/review pipeline works unchanged. Differences from IG:
- *  - engagement: like_count / reply_count (as comments) / view_count (as views)
- *  - follower count + bio arrive inline on every search item (no profile rows)
- *  - `search_keyword` says which query surfaced the post → sourceBrand, and
- *    trackByTerm maps it to 'painpoint' | 'genre' → sourceTrack
- *  - reposts are skipped (the author didn't create that content)
+ * Aggregate Threads search items into influencer objects with the SAME shape
+ * aggregatePostItems produces, so the whole scoring/review pipeline works
+ * unchanged. Handles both actor shapes (see the tXxx field readers above).
+ *  - engagement: likes / replies (as comments) / views (futurizerush only)
+ *  - follower count + bio: igview-owner search doesn't return them, so they
+ *    come from `enrichByUser` (a username→{followerCount,bio} map built from a
+ *    futurizerush user-mode enrichment run). Falls back to inline fields if the
+ *    items are from futurizerush search. Blank if enrichment was skipped/failed.
+ *  - provenance: the orchestrator stamps each item with `search_keyword` (the
+ *    query that surfaced it) → sourceBrand; trackByTerm maps it to the track.
+ *  - reshared content is skipped (the author didn't create it).
  */
-export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
+export function aggregateThreadsPostItems(rows, trackByTerm = {}, enrichByUser = {}) {
   const byOwner = {}
   for (const row of rows) {
     if (row.record_type && row.record_type !== 'post') continue
-    if (row.is_repost) continue
+    if (row.is_repost === true) continue
     const username = row.username
     if (!username) continue
     if (!byOwner[username]) byOwner[username] = { username, posts: [] }
@@ -253,9 +273,9 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
     const n = posts.length
     const first = (pick) => posts.map(pick).find(Boolean) || ''
 
-    const likeValues = posts.map((p) => Number(p.like_count)).filter((v) => !isNaN(v) && v >= 0)
-    const replyValues = posts.map((p) => Number(p.reply_count)).filter((v) => !isNaN(v) && v >= 0)
-    const viewValues = posts.map((p) => Number(p.view_count)).filter((v) => v > 0)
+    const likeValues = posts.map(tLikes).filter((v) => !isNaN(v) && v >= 0)
+    const replyValues = posts.map(tReplies).filter((v) => !isNaN(v) && v >= 0)
+    const viewValues = posts.map(tViews).filter((v) => v > 0)
     const avg = (vals) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0)
     const median = (vals) => {
       if (!vals.length) return null
@@ -266,32 +286,48 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
 
     const avgLikes = avg(likeValues)
     const avgComments = avg(replyValues)
-    const followerCount = posts.map((p) => Number(p.followers_count)).find((f) => f > 0) ?? null
+    // Enrichment (futurizerush user mode) wins; fall back to inline follower
+    // counts if the items came from futurizerush search; else null (blank).
+    const enrich = enrichByUser[inf.username] || {}
+    const followerCount =
+      (enrich.followerCount > 0 ? enrich.followerCount : null) ??
+      (posts.map((p) => Number(p.followers_count)).find((f) => f > 0) ?? null)
     const engagementRate = followerCount
       ? parseFloat((((avgLikes + avgComments) / followerCount) * 100).toFixed(2))
       : null
 
-    const videoPosts = posts.filter((p) => (p.media_type || '').toLowerCase() === 'video')
+    const videoPosts = posts.filter(tIsVideo)
     const videoRatio = n ? videoPosts.length / n : 0
 
-    const captionsList = posts.map((p) => p.text_content || '').filter(Boolean)
-    const hashtags = [...new Set(posts.flatMap((p) => (p.hashtags || []).map((h) => String(h).toLowerCase())))]
-    const bio = first((p) => p.bio)
-    const paidCount = posts.filter((p) => p.is_paid_partnership === true).length
+    const captionsList = posts.map(tCaption).filter(Boolean)
+    // igview-owner search items have no hashtag array — pull them from caption
+    // text (works for CJK tags like #掉髮). futurizerush provides hashtags[].
+    const hashtags = [
+      ...new Set(
+        posts.flatMap((p) =>
+          (p.hashtags || (tCaption(p).match(/#[^\s#]+/g) || [])).map((h) =>
+            String(h).replace(/^#/, '').toLowerCase()
+          )
+        )
+      ),
+    ]
+    const bio = enrich.bio || first((p) => p.bio)
+    const paidCount = posts.filter(tPaid).length
 
     // Which search terms surfaced this account (usually one, can be several).
     const terms = [...new Set(posts.map((p) => p.search_keyword).filter(Boolean))]
     const sourceTrack = trackByTerm[terms[0]] || null
 
-    const accountLocation = first((p) => THREADS_LANGUAGE_LOCATIONS[p.language])
+    const accountLocation =
+      (enrich.accountLocation || '') || first((p) => THREADS_LANGUAGE_LOCATIONS[p.language])
 
     const samplePost = posts[0] || null
-    const sampleLikes = samplePost ? Number(samplePost.like_count) : NaN
-    const sampleViews = samplePost ? Number(samplePost.view_count) : NaN
+    const sampleLikes = samplePost ? tLikes(samplePost) : NaN
+    const sampleViews = samplePost ? tViews(samplePost) : NaN
 
     return {
       username: inf.username,
-      fullName: first((p) => p.display_name),
+      fullName: first(tName),
       bio,
       platform: 'threads',
       sourceBrand: terms.join(', '),
@@ -314,10 +350,10 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
       locationNames: [],
       paidCount,
       linkUrls: [...new Set(posts.flatMap(threadsItemLinks))].slice(0, 20),
-      samplePostUrl: first((p) => p.post_url),
+      samplePostUrl: first(tPostUrl),
       sampleCaption: captionsList[0] || '',
       samplePostLikes: isNaN(sampleLikes) || sampleLikes < 0 ? null : sampleLikes,
-      samplePostComments: samplePost ? Number(samplePost.reply_count) || null : null,
+      samplePostComments: samplePost ? tReplies(samplePost) || null : null,
       samplePostPlays: isNaN(sampleViews) || sampleViews <= 0 ? null : sampleViews,
       sampleCaptions: captionsList.slice(0, 5),
     }
@@ -325,6 +361,29 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
 
   influencers.sort((a, b) => b.totalEngagement - a.totalEngagement)
   return influencers
+}
+
+/**
+ * Build a username→{followerCount,bio,accountLocation} map from the raw items
+ * of a futurizerush user-mode enrichment run. Used to backfill follower/bio
+ * onto igview-owner search candidates (which lack them).
+ */
+export function buildThreadsEnrichment(rows) {
+  const map = {}
+  for (const row of rows || []) {
+    const u = row.username
+    if (!u) continue
+    const followers = Number(row.followers_count)
+    if (!map[u]) map[u] = { followerCount: null, bio: '', accountLocation: '' }
+    if (!isNaN(followers) && followers > 0 && !(map[u].followerCount > 0)) {
+      map[u].followerCount = followers
+    }
+    if (!map[u].bio && row.bio) map[u].bio = row.bio
+    if (!map[u].accountLocation && THREADS_LANGUAGE_LOCATIONS[row.language]) {
+      map[u].accountLocation = THREADS_LANGUAGE_LOCATIONS[row.language]
+    }
+  }
+  return map
 }
 
 /**

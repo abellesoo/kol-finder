@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
-import { startSeederScrape, startThreadsSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { startSeederScrape, startThreadsSeederScrape, startThreadsProfileScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { buildThreadsEnrichment } from '../lib/parseXlsx'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 
@@ -146,33 +147,47 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       // preserves per-term/track provenance.
       const threadsItems = []
       const failedTerms = []
-      // Threads heavily anti-bots the actor's SEARCH endpoint (profile/user mode
-      // is reliable, but discovery needs keyword search). Blocks are per-request
-      // and proxy-IP-dependent, so a fresh retry run — which draws a new IP —
-      // recovers most transient failures. Two attempts per term with a short
-      // backoff; a sustained Threads-side block still fails, but that's rare.
+      // Discovery = keyword search via igview-owner. Meta anti-bots search per
+      // request/proxy-IP, so a fresh retry run (new IP) recovers most transient
+      // blocks. Two attempts per term; each item is stamped with its query so
+      // provenance survives (the search actor doesn't echo the keyword back).
       const THREADS_ATTEMPTS = 2
       for (const term of threadsTerms) {
         let got = null
         for (let attempt = 0; attempt < THREADS_ATTEMPTS && !got; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
           try {
-            const run = await startThreadsSeederScrape(term, Math.min(resultsLimit, 50))
+            const run = await startThreadsSeederScrape(term, resultsLimit)
             const completed = await pollUntilDone(run, { allowPartial: true })
             const items = await getDatasetItems(completed.defaultDatasetId)
-            if (items.length > 0) got = items
+            if (items.length > 0) got = items.map((it) => ({ ...it, search_keyword: term }))
           } catch (err) {
-            console.error(`Threads scrape failed for "${term}" (attempt ${attempt + 1}/${THREADS_ATTEMPTS}):`, err)
+            console.error(`Threads search failed for "${term}" (attempt ${attempt + 1}/${THREADS_ATTEMPTS}):`, err)
           }
         }
         if (got) threadsItems.push(...got)
         else failedTerms.push(term)
       }
+
       if (threadsItems.length > 0) {
-        brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, brand: 'threads' })
+        // Best-effort follower/bio enrichment: the search actor omits them, so
+        // scrape each discovered handle's profile (futurizerush user mode, which
+        // stays up even when search is blocked). One batched run; a failure just
+        // leaves follower/bio blank rather than sinking the discovered results.
+        let enrichByUser = {}
+        const handles = [...new Set(threadsItems.map((it) => it.username).filter(Boolean))]
+        try {
+          const run = await startThreadsProfileScrape(handles)
+          const completed = await pollUntilDone(run, { allowPartial: true })
+          const profileItems = await getDatasetItems(completed.defaultDatasetId)
+          enrichByUser = buildThreadsEnrichment(profileItems)
+        } catch (err) {
+          console.error('Threads profile enrichment failed (follower/bio left blank):', err)
+        }
+        brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, enrichByUser, brand: 'threads' })
       }
       if (failedTerms.length > 0) {
-        failedBrands.push(`Threads terms with no results (Threads may have rate-limited these — retry in a few minutes): ${failedTerms.join(', ')}`)
+        failedBrands.push(`Threads terms with no results (Meta may have rate-limited search — retry in a few minutes): ${failedTerms.join(', ')}`)
       }
     }
 

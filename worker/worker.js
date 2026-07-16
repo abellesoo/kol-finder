@@ -689,6 +689,7 @@ export default {
       pathname === '/start-run/instagram-scraper' ||
       pathname === '/start-run/reel-scraper' ||
       pathname === '/start-run/threads-scraper' ||
+      pathname === '/start-run/threads-search' ||
       pathname.startsWith('/run-status/') ||
       pathname.startsWith('/dataset/') ||
       pathname === '/verify-campaign'
@@ -726,6 +727,23 @@ export default {
     if (pathname === '/start-run/threads-scraper' && request.method === 'POST') {
       const body = await request.json()
       const res = await fetch(`${BASE}/acts/futurizerush~meta-threads-scraper/runs?token=${KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return json(await res.json(), res.status, origin)
+    }
+
+    // POST /start-run/threads-search
+    // Threads keyword DISCOVERY via igview-owner/threads-search-scraper — the
+    // actor the manual playbook actually used. Meta anti-bots the SEARCH
+    // endpoint hard; futurizerush's search gets blocked for long windows while
+    // this provider's proxy infra stays up. It returns post + engagement data
+    // (no follower/bio — those come from a separate profile enrichment run).
+    // Body passes through: { searchQuery, sort: 'top'|'recent', maxPosts>=20 }.
+    if (pathname === '/start-run/threads-search' && request.method === 'POST') {
+      const body = await request.json()
+      const res = await fetch(`${BASE}/acts/igview-owner~threads-search-scraper/runs?token=${KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

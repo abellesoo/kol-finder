@@ -1,9 +1,13 @@
+import { profileUrl } from './platforms'
 
 export const EXPORT_COLUMNS = [
   { id: 'brand',             label: 'Brand',              getValue: (r, inf)       => inf.sourceBrand || '' },
   { id: 'username',          label: 'username',           getValue: (r)            => r.username },
   { id: 'fullName',          label: 'fullName',           getValue: (r, inf)       => inf.fullName || '' },
-  { id: 'instagram_url',     label: 'instagram_url',      getValue: (r)            => `https://instagram.com/${r.username}` },
+  { id: 'platform',          label: 'platform',           getValue: (r, inf)       => r.platform || inf.platform || 'instagram' },
+  // Column label kept as instagram_url for downstream consumers; the value is
+  // the platform-correct profile link (threads.net for Threads candidates).
+  { id: 'instagram_url',     label: 'instagram_url',      getValue: (r, inf)       => profileUrl({ username: r.username, platform: r.platform || inf.platform }) },
   { id: 'account_location',  label: 'location',           getValue: (r, inf)       => inf.accountLocation || '' },
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
   { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
@@ -81,8 +85,11 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
     import('exceljs'),
     import('file-saver'),
   ])
+  // Keyed by platform:username — a handle can exist as both an Instagram and a
+  // Threads candidate, and their rows must not swap data.
+  const infKey = (rec) => `${rec.platform || 'instagram'}:${rec.username}`
   const map = {}
-  for (const inf of influencers) map[inf.username] = inf
+  for (const inf of influencers) map[infKey(inf)] = inf
 
   const cols = (selectedColumnIds
     ? EXPORT_COLUMNS.filter((c) => selectedColumnIds.includes(c.id))
@@ -113,9 +120,11 @@ export async function exportToCsv(results, influencers, selectedColumnIds = null
 
   // Data rows
   results.forEach((r) => {
-    const inf = map[r.username] || {}
-    const live = liveStats[r.username]
-    const rs = reviewState[r.username]
+    const inf = map[infKey(r)] || {}
+    // Live stats are Instagram-only; review_state keys Threads entries as
+    // 'threads:username' (mirrors reviewKey in reviewState.js).
+    const live = r.platform === 'threads' ? undefined : liveStats[r.username]
+    const rs = reviewState[r.platform === 'threads' ? `threads:${r.username}` : r.username]
     ws.addRow(cols.map((c) => sanitizeCell(c.getValue(r, inf, live, rs))))
   })
 

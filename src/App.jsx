@@ -14,7 +14,7 @@ import CampaignDetailPage from './components/CampaignDetailPage'
 import LoginPage from './components/LoginPage'
 import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
-import { parseApifyXlsx, aggregatePostItems } from './lib/parseXlsx'
+import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession } from './lib/sessionHistory'
 
@@ -189,7 +189,11 @@ function MainApp({ user, role, onSignOut }) {
     const merged = {}
     for (const batch of batches) {
       for (const inf of batch) {
-        const existing = merged[inf.username]
+        // Key by platform + username: the same handle on Instagram and Threads
+        // is two distinct candidates (often the same person, but different
+        // content/engagement) — they must not overwrite each other.
+        const key = `${inf.platform || 'instagram'}:${inf.username}`
+        const existing = merged[key]
         // Prefer the record built from more posts (richer data) rather than the
         // one with higher engagement, so we don't drop the batch that actually
         // saw more of this account. NOTE: aggregates can't be losslessly merged
@@ -198,7 +202,7 @@ function MainApp({ user, role, onSignOut }) {
           !existing ||
           inf.postCount > existing.postCount ||
           (inf.postCount === existing.postCount && inf.totalEngagement > existing.totalEngagement)
-        if (better) merged[inf.username] = inf
+        if (better) merged[key] = inf
       }
     }
     return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
@@ -216,7 +220,10 @@ function MainApp({ user, role, onSignOut }) {
   }
 
   const handleScrapedItems = (brandedResults) => {
-    const influencerLists = brandedResults.map(({ items, brand }) => {
+    const influencerLists = brandedResults.map(({ items, brand, platform, trackByTerm }) => {
+      // Threads batches carry platform:'threads' + a term→track map; they go
+      // through the Threads-shaped aggregator (different actor field names).
+      if (platform === 'threads') return aggregateThreadsPostItems(items, trackByTerm)
       const all = aggregatePostItems(items, brand)
       return brand
         ? all.filter((inf) => inf.username.toLowerCase() !== brand.toLowerCase())

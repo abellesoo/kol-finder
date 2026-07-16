@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey } from '../lib/reviewState'
+import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
@@ -97,7 +98,11 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
 }
 
 const TABLE_ROW_COLS = {
-  brand:                 { label: 'Brand',      min: '80px',  render: (a) => <span className="font-mono text-xs text-body">{a.sourceBrand || '—'}</span> },
+  brand:                 { label: 'Brand',      min: '80px',  render: (a) => (
+    <span className="font-mono text-xs text-body">
+      {a.platform === 'threads' ? '🧵 ' : ''}{a.sourceBrand || '—'}{a.sourceTrack ? ` · ${a.sourceTrack === 'painpoint' ? 'pain-point' : 'genre'}` : ''}
+    </span>
+  ) },
   overall:               { label: 'Score',      min: '72px',  center: true, render: (a) => <div className="flex justify-center"><ScoreBadge score={a.overall} /></div> },
   relevancy_score:       { label: 'Relevancy',  min: '100px', render: (a) => <MiniBar value={a.scores?.relevancy ?? 0} color="bg-rose/70" /> },
   engagement_score:      { label: 'Eng. Score', min: '100px', render: (a) => <MiniBar value={a.scores?.engagement ?? 0} color="bg-ink/50" /> },
@@ -217,7 +222,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
     setNotesSaving(true)
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => {
-      onUpdate(account.username, entry({ notes: val }))
+      onUpdate(reviewKey(account), entry({ notes: val }))
       setNotesSaving(false)
     }, 800)
   }
@@ -227,7 +232,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
     localDraftRef.current = val
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
     draftTimerRef.current = setTimeout(() => {
-      onUpdate(account.username, entry({ status: 'approved', dm_draft: val }))
+      onUpdate(reviewKey(account), entry({ status: 'approved', dm_draft: val }))
     }, 800)
   }
 
@@ -244,7 +249,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
       })
       setLocalDraft(draft)
       localDraftRef.current = draft
-      onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
+      onUpdate(reviewKey(account), entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
     } catch (err) {
       setDraftError(err.message)
     } finally {
@@ -253,18 +258,18 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   }
 
   const handleApprove = () => {
-    onUpdate(account.username, entry({ status: 'approved' }))
+    onUpdate(reviewKey(account), entry({ status: 'approved' }))
     generateDraft()
   }
 
   const handleReject = () => {
-    onUpdate(account.username, entry({ status: 'rejected' }))
+    onUpdate(reviewKey(account), entry({ status: 'rejected' }))
   }
 
   // Undo returns to the pending state — it must NOT flip to the opposite
   // decision (which previously also fired a paid DM draft).
   const handleUndo = () => {
-    onUpdate(account.username, entry({ status: 'pending' }))
+    onUpdate(reviewKey(account), entry({ status: 'pending' }))
   }
 
   const isPending = status === 'pending'
@@ -283,12 +288,17 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
       <div className="px-5 py-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <a href={`https://instagram.com/${account.username}`} target="_blank" rel="noreferrer"
+            <a href={profileUrl(account)} target="_blank" rel="noreferrer"
               className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1">
               @{account.username} <ExternalLink size={11} className="opacity-40" />
             </a>
+            {account.platform === 'threads' && (
+              <span className="font-mono text-[10px] bg-ink/10 text-ink/70 px-2 py-0.5 rounded-[5px]">Threads</span>
+            )}
             {account.sourceBrand && (
-              <span className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{account.sourceBrand}</span>
+              <span className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">
+                {account.sourceTrack ? `via ${account.sourceBrand} · ${account.sourceTrack === 'painpoint' ? 'pain-point' : 'genre'}` : account.sourceBrand}
+              </span>
             )}
           </div>
           {account.fullName && <p className="text-[12px] text-faint">{account.fullName}</p>}
@@ -325,7 +335,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                 <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
                 <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
               </div>
-              <FitRating value={fitRating} onChange={(r) => onUpdate(account.username, entry({ fit_rating: r }))} />
+              <FitRating value={fitRating} onChange={(r) => onUpdate(reviewKey(account), entry({ fit_rating: r }))} />
             </div>
           )}
           {isRejected && (
@@ -334,7 +344,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                 <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
                 <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
               </div>
-              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(account.username, entry({ reject_reason: r }))} />
+              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(reviewKey(account), entry({ reject_reason: r }))} />
             </div>
           )}
         </div>
@@ -464,7 +474,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
     setNotesSaving(true)
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => {
-      onUpdate(account.username, entry({ notes: val }))
+      onUpdate(reviewKey(account), entry({ notes: val }))
       setNotesSaving(false)
     }, 800)
   }
@@ -474,7 +484,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
     localDraftRef.current = val
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
     draftTimerRef.current = setTimeout(() => {
-      onUpdate(account.username, entry({ status: 'approved', dm_draft: val }))
+      onUpdate(reviewKey(account), entry({ status: 'approved', dm_draft: val }))
     }, 800)
   }
 
@@ -491,7 +501,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
       })
       setLocalDraft(draft)
       localDraftRef.current = draft
-      onUpdate(account.username, entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
+      onUpdate(reviewKey(account), entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
     } catch (err) {
       setDraftError(err.message)
     } finally {
@@ -502,19 +512,19 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
   const handleApprove = (e) => {
     e.stopPropagation()
     setExpanded(true)
-    onUpdate(account.username, entry({ status: 'approved' }))
+    onUpdate(reviewKey(account), entry({ status: 'approved' }))
     generateDraft()
   }
 
 
   const handleReject = (e) => {
     e.stopPropagation()
-    onUpdate(account.username, entry({ status: 'rejected' }))
+    onUpdate(reviewKey(account), entry({ status: 'rejected' }))
   }
 
   const handleUndo = (e) => {
     e.stopPropagation()
-    onUpdate(account.username, entry({ status: 'pending' }))
+    onUpdate(reviewKey(account), entry({ status: 'pending' }))
   }
 
   const isPending = status === 'pending'
@@ -535,7 +545,7 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
       >
         <div className="min-w-0 flex flex-col justify-center">
           <a
-            href={`https://instagram.com/${account.username}`}
+            href={profileUrl(account)}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -571,14 +581,14 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
           )}
           {isApproved && (
             <div className="flex items-center gap-2">
-              <FitRating value={fitRating} onChange={(r) => onUpdate(account.username, entry({ fit_rating: r }))} />
+              <FitRating value={fitRating} onChange={(r) => onUpdate(reviewKey(account), entry({ fit_rating: r }))} />
               <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
               <button onClick={handleUndo} className="text-[11px] text-faint hover:text-rose transition-colors font-mono">(undo)</button>
             </div>
           )}
           {isRejected && (
             <div className="flex items-center gap-2">
-              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(account.username, entry({ reject_reason: r }))} />
+              <RejectReasonSelect value={rejectReason} onChange={(r) => onUpdate(reviewKey(account), entry({ reject_reason: r }))} />
               <span className="text-[11px] text-rose/80 font-mono flex items-center gap-1"><X size={11} /> Rejected</span>
               <button onClick={handleUndo} className="text-[11px] text-faint hover:text-sage transition-colors font-mono">(undo)</button>
             </div>
@@ -993,9 +1003,9 @@ export default function ReviewPage({ reviewId, onBack }) {
           </div>
           {sortedAccounts.map((account) => (
             <AccountTableRow
-              key={account.username}
+              key={reviewKey(account)}
               account={account}
-              reviewEntry={reviewState[account.username]}
+              reviewEntry={reviewState[reviewKey(account)]}
               campaignBrief={campaignBrief}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}
@@ -1008,9 +1018,9 @@ export default function ReviewPage({ reviewId, onBack }) {
         <div className="space-y-4">
           {sortedAccounts.map((account) => (
             <AccountCard
-              key={account.username}
+              key={reviewKey(account)}
               account={account}
-              reviewEntry={reviewState[account.username]}
+              reviewEntry={reviewState[reviewKey(account)]}
               campaignBrief={campaignBrief}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}

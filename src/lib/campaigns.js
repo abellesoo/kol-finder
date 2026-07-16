@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { reviewKey } from './reviewState'
 
 // ── Data layer for the Campaign Ops module ───────────────────────────────────
 // All reads/writes against campaigns / campaign_kols live here (mirrors how
@@ -191,7 +192,11 @@ export async function getApprovedKols() {
   const byHandle = new Map()
   for (const row of data || []) {
     for (const account of row.accounts || []) {
-      const entry = row.review_state?.[account.username]
+      // Campaign Ops is Instagram-only end-to-end (kol_handle = IG handle, the
+      // verification worker scrapes instagram.com) — Threads approvals stay in
+      // the review queue and never flow into campaigns until that's built.
+      if (account.platform === 'threads') continue
+      const entry = row.review_state?.[reviewKey(account)]
       if (entry?.status !== 'approved') continue
       const handle = normalizeHandle(account.username)
       if (!handle || byHandle.has(handle)) continue // newest run wins
@@ -223,7 +228,8 @@ export async function getApprovedKolsForRun(runId) {
   const out = []
   const seen = new Set()
   for (const account of data.accounts || []) {
-    const entry = data.review_state?.[account.username]
+    if (account.platform === 'threads') continue // Campaign Ops is IG-only (see getApprovedKols)
+    const entry = data.review_state?.[reviewKey(account)]
     if (entry?.status !== 'approved') continue
     const handle = normalizeHandle(account.username)
     if (!handle || seen.has(handle)) continue

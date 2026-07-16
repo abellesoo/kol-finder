@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, AlertCircle, Rocket } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { reviewKey } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
 import { listCampaigns } from '../lib/campaigns'
 
@@ -78,7 +79,7 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
     const rs = c.review_state || {}
     const accounts = c.accounts || []
     accounts.forEach((a) => {
-      const entry = rs[a.username]
+      const entry = rs[reviewKey(a)]
       if (!entry?.status || entry.status === 'pending') {
         pendingReview++
       } else if (entry.status === 'approved') {
@@ -268,9 +269,9 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
               const rs = c.review_state || {}
               const accounts = c.accounts || []
               const total = accounts.length
-              const approvedCount = accounts.filter((a) => rs[a.username]?.status === 'approved').length
+              const approvedCount = accounts.filter((a) => rs[reviewKey(a)]?.status === 'approved').length
               const pendingCount = accounts.filter((a) => {
-                const s = rs[a.username]?.status
+                const s = rs[reviewKey(a)]?.status
                 return !s || s === 'pending'
               }).length
               const brief = c.campaign_brief || '—'

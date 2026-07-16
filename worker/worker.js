@@ -688,6 +688,7 @@ export default {
     const needsApify =
       pathname === '/start-run/instagram-scraper' ||
       pathname === '/start-run/reel-scraper' ||
+      pathname === '/start-run/threads-scraper' ||
       pathname.startsWith('/run-status/') ||
       pathname.startsWith('/dataset/') ||
       pathname === '/verify-campaign'
@@ -708,6 +709,23 @@ export default {
     if (pathname === '/start-run/reel-scraper' && request.method === 'POST') {
       const body = await request.json()
       const res = await fetch(`${BASE}/acts/apify~instagram-reel-scraper/runs?token=${KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return json(await res.json(), res.status, origin)
+    }
+
+    // POST /start-run/threads-scraper
+    // Threads keyword discovery (community actor — no official Threads scraper
+    // exists). futurizerush was chosen over the higher-rated automation-lab
+    // because its search items carry follower counts, bios and bio links
+    // inline (no second enrichment run, which automation-lab botched on small
+    // accounts in testing). Body passes through: { mode: 'search',
+    // keywords: [...], max_posts, search_filter: 'top'|'recent' }.
+    if (pathname === '/start-run/threads-scraper' && request.method === 'POST') {
+      const body = await request.json()
+      const res = await fetch(`${BASE}/acts/futurizerush~meta-threads-scraper/runs?token=${KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -885,7 +903,7 @@ Hi dear,
         `@${clean(c.username)}: bio="${clean(c.bio).slice(0, 160)}"; niches=[${tags(c.nicheSignals)}]; hashtags=[${tags(c.hashtags)}]; flags=[${tags(c.flags)}]; ${num(c.followerCount)} followers; ~${num(c.medianLikes)} median likes; rule_score=${c.overall == null ? '?' : c.overall}`
       )).join('\n')
 
-      const prompt = `You are an assistant helping a Hong Kong beauty/skincare brand's marketing team decide which Instagram KOLs fit a seeding campaign. Rate each candidate 0–100 for how well they fit THIS campaign.
+      const prompt = `You are an assistant helping a Hong Kong beauty/skincare brand's marketing team decide which social KOLs (Instagram or Threads creators) fit a seeding campaign. Rate each candidate 0–100 for how well they fit THIS campaign.
 
 # Campaign brief
 ${clean(campaignBrief) || '(none provided)'}

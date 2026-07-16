@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
-import { startSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { startSeederScrape, startThreadsSeederScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 
@@ -60,10 +60,17 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   const [parsing, setParsing] = useState(false)
 
   // Scrape tab state
+  const [platforms, setPlatforms] = useState({ instagram: true, threads: false })
   const [scrapeInput, setScrapeInput] = useState('')
+  // Threads keyword tracks (one term per line). Pain-point = problems the
+  // product solves (掉髮); genre = recurring content habits (olive young).
+  const [painpointInput, setPainpointInput] = useState('')
+  const [genreInput, setGenreInput] = useState('')
   const [resultsLimit, setResultsLimit] = useState(200)
   const [scrapeStatus, setScrapeStatus] = useState('idle') // idle | running | error
   const [scrapeError, setScrapeError] = useState(null)
+
+  const parseTerms = (text) => [...new Set(text.split('\n').map((l) => l.trim()).filter(Boolean))]
 
   // Upload helpers
   const addFiles = (incoming) => {
@@ -100,9 +107,14 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
 
   // Scrape handler — runs one Apify job per brand sequentially to avoid
   // hitting Apify's concurrent-run limit (most plans allow 1 at a time).
+  // Threads is one extra job covering all keyword terms — each returned post
+  // carries `search_keyword`, so per-term/track provenance survives one run.
   const handleScrape = async () => {
-    const groups = parseBrandGroups(scrapeInput)
-    if (groups.length === 0) return
+    const groups = platforms.instagram ? parseBrandGroups(scrapeInput) : []
+    const painTerms = platforms.threads ? parseTerms(painpointInput) : []
+    const genreTerms = platforms.threads ? parseTerms(genreInput) : []
+    const threadsTerms = [...painTerms, ...genreTerms]
+    if (groups.length === 0 && threadsTerms.length === 0) return
     setScrapeStatus('running')
     setScrapeError(null)
 
@@ -119,6 +131,21 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       } catch (err) {
         failedBrands.push(brand || 'scraped')
         console.error(`Scrape failed for ${brand || 'scraped'}:`, err)
+      }
+    }
+
+    if (threadsTerms.length > 0) {
+      const trackByTerm = {}
+      for (const t of painTerms) trackByTerm[t] = 'painpoint'
+      for (const t of genreTerms) trackByTerm[t] = 'genre'
+      try {
+        const run = await startThreadsSeederScrape(threadsTerms, resultsLimit)
+        const completed = await pollUntilDone(run)
+        const items = await getDatasetItems(completed.defaultDatasetId)
+        brandedResults.push({ items, platform: 'threads', trackByTerm, brand: 'threads' })
+      } catch (err) {
+        failedBrands.push('threads search')
+        console.error('Threads scrape failed:', err)
       }
     }
 
@@ -247,19 +274,79 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
             <p className="text-[12px] text-faint mb-4 text-center">
               Use this to kick off a fresh scrape right now — no manual Apify steps needed.
             </p>
-            <div className="mb-4">
-              <p className="text-[13px] text-muted mb-3 leading-relaxed">
-                Paste one entry per line — competitor post URLs, hashtag explore pages, brand tagged pages, or hashtags (e.g. <span className="font-mono text-body">#skincare</span> or <span className="font-mono text-body">skincare</span>).
-              </p>
-              <textarea
-                value={scrapeInput}
-                onChange={(e) => setScrapeInput(e.target.value)}
-                disabled={isLoading}
-                rows={6}
-                placeholder={`https://www.instagram.com/p/ABC123/\nhttps://www.instagram.com/brandname/tagged/\n#skincare\n#beauty`}
-                className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint disabled:opacity-50"
-              />
+
+            {/* Platform selector */}
+            <div className="flex items-center gap-2 mb-5">
+              <span className="text-[10px] font-mono text-faint uppercase tracking-[.14em] whitespace-nowrap">Platforms</span>
+              {[
+                { id: 'instagram', label: 'Instagram' },
+                { id: 'threads', label: 'Threads' },
+              ].map(({ id, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setPlatforms((p) => ({ ...p, [id]: !p[id] }))}
+                  disabled={isLoading}
+                  className={`px-3 py-1 rounded-[8px] text-[12px] font-mono border transition-all ${
+                    platforms[id]
+                      ? 'bg-ink text-white border-ink'
+                      : 'border-mist text-muted hover:border-ink/30'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {platforms.instagram && (
+              <div className="mb-4">
+                <p className="text-[13px] text-muted mb-3 leading-relaxed">
+                  <span className="font-semibold text-body">Instagram</span> — paste one entry per line: competitor post URLs, hashtag explore pages, brand tagged pages, or hashtags (e.g. <span className="font-mono text-body">#skincare</span> or <span className="font-mono text-body">skincare</span>).
+                </p>
+                <textarea
+                  value={scrapeInput}
+                  onChange={(e) => setScrapeInput(e.target.value)}
+                  disabled={isLoading}
+                  rows={6}
+                  placeholder={`https://www.instagram.com/p/ABC123/\nhttps://www.instagram.com/brandname/tagged/\n#skincare\n#beauty`}
+                  className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint disabled:opacity-50"
+                />
+              </div>
+            )}
+
+            {platforms.threads && (
+              <div className="mb-4">
+                <p className="text-[13px] text-muted mb-3 leading-relaxed">
+                  <span className="font-semibold text-body">Threads</span> — searches by keyword (Threads has no tagged pages). One term per line; keep each term simple — compound queries like <span className="font-mono text-body">olive young 好物</span> often return nothing.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-1.5">Pain-point keywords</label>
+                    <textarea
+                      value={painpointInput}
+                      onChange={(e) => setPainpointInput(e.target.value)}
+                      disabled={isLoading}
+                      rows={4}
+                      placeholder={`掉髮\n敏感頭皮\n油性頭皮`}
+                      className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint disabled:opacity-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-1.5">Content-genre keywords</label>
+                    <textarea
+                      value={genreInput}
+                      onChange={(e) => setGenreInput(e.target.value)}
+                      disabled={isLoading}
+                      rows={4}
+                      placeholder={`olive young\n好物分享`}
+                      className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-sm text-ink font-mono bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-faint leading-relaxed">
+                  Pain-point = problems your product solves. Content-genre = posting habits to catch (good-finds roundups, trends you spot on Threads).
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 mb-5">
               <label className="text-[10px] font-mono text-faint uppercase tracking-[.14em] whitespace-nowrap">Max results</label>
@@ -282,18 +369,24 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
               <span className="text-[12px] text-faint">~${(resultsLimit * 0.005).toFixed(2)} per brand</span>
             </div>
 
-            {scrapeInput.trim() && (() => {
-              const groups = parseBrandGroups(scrapeInput)
+            {(() => {
+              const groups = platforms.instagram && scrapeInput.trim() ? parseBrandGroups(scrapeInput) : []
               const brands = groups.map(g => g.brand).filter(Boolean)
+              const terms = platforms.threads ? [...parseTerms(painpointInput), ...parseTerms(genreInput)] : []
+              const jobs = groups.length + (terms.length ? 1 : 0)
+              if (jobs === 0) return null
               return (
                 <div className="mb-4 px-3 py-2 bg-surface border border-card-edge rounded-[10px]">
                   <p className="text-[12px] text-faint mb-1">
-                    {groups.length} scrape job{groups.length > 1 ? 's' : ''} · ~${(groups.length * resultsLimit * 0.005).toFixed(2)} total
+                    {jobs} scrape job{jobs > 1 ? 's' : ''} · ~${(groups.length * resultsLimit * 0.005 + terms.length * resultsLimit * 0.003).toFixed(2)} total
                   </p>
-                  {brands.length > 0 && (
+                  {(brands.length > 0 || terms.length > 0) && (
                     <div className="flex flex-wrap gap-1.5 mt-1">
                       {brands.map(b => (
                         <span key={b} className="font-mono text-[11px] bg-white border border-card-edge px-2 py-0.5 rounded-[6px] text-body">{b}</span>
+                      ))}
+                      {terms.map(t => (
+                        <span key={t} className="font-mono text-[11px] bg-white border border-card-edge px-2 py-0.5 rounded-[6px] text-body">🧵 {t}</span>
                       ))}
                     </div>
                   )}
@@ -310,13 +403,17 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
 
             <button
               onClick={handleScrape}
-              disabled={isLoading || !scrapeInput.trim()}
+              disabled={
+                isLoading ||
+                ((!platforms.instagram || !scrapeInput.trim()) &&
+                  (!platforms.threads || !(painpointInput.trim() || genreInput.trim())))
+              }
               className="w-full flex items-center justify-center gap-2 py-3 rounded-[12px] font-semibold text-[13.5px] bg-ink text-white hover:bg-ink/80 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Scraping Instagram…
+                  Scraping {[platforms.instagram && scrapeInput.trim() && 'Instagram', platforms.threads && (painpointInput.trim() || genreInput.trim()) && 'Threads'].filter(Boolean).join(' + ')}…
                 </>
               ) : (
                 <>
@@ -335,7 +432,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         )}
 
         <p className="mt-6 text-[11px] text-faint font-mono">
-          Scraper: Instagram Scraper by Apify · Post-level export
+          Scrapers via Apify: Instagram Scraper · Threads Scraper (keyword search) · Post-level export
         </p>
       </div>
     </div>

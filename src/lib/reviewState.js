@@ -4,6 +4,16 @@ import { supabase } from './supabase'
 //
 // review_state is a jsonb map on the shared_results row:
 //   { [username]: { status, dm_status, dm_draft, notes }, __notes__: string }
+
+// Key for an account's review_state entry. Instagram accounts keep the bare
+// username (backward compatible with every existing row); Threads accounts are
+// namespaced so a same-handle IG + Threads pair in one run don't share a single
+// approve/reject entry. Use this EVERYWHERE review_state is read or written.
+export function reviewKey(account) {
+  const username = typeof account === 'string' ? account : account?.username || ''
+  const platform = typeof account === 'string' ? 'instagram' : account?.platform || 'instagram'
+  return platform === 'threads' ? `threads:${username}` : username
+}
 //
 // The old code wrote the WHOLE map from a component's local copy, so two
 // reviewers editing different accounts clobbered each other (last-write-wins).

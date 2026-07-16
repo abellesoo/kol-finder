@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey } from '../lib/reviewState'
+import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
@@ -97,11 +98,13 @@ export default function ReadyToSendPage() {
       for (const row of data || []) {
         metaMap[row.id] = { campaignBrief: row.campaign_brief || '', createdAt: row.created_at }
         for (const account of row.accounts || []) {
-          const entry = row.review_state?.[account.username]
+          const entry = row.review_state?.[reviewKey(account)]
           if (entry?.status === 'approved') {
             ready.push({
               rowId: row.id,
               username: account.username,
+              stateKey: reviewKey(account), // review_state key (≠ username for Threads)
+              platform: account.platform || 'instagram',
               fullName: account.fullName || '',
               dm_draft: entry.dm_draft || '',
               dmStatus: entry.dm_status || 'not_sent',
@@ -138,13 +141,13 @@ export default function ReadyToSendPage() {
 
   const persistStatus = useCallback(async (item, newStatus) => {
     setItems((prev) => prev.map((i) =>
-      i.rowId === item.rowId && i.username === item.username
+      i.rowId === item.rowId && i.stateKey === item.stateKey
         ? { ...i, dmStatus: newStatus, reviewEntry: { ...i.reviewEntry, dm_status: newStatus } }
         : i
     ))
     try {
       // Per-account merge so we don't clobber concurrent edits to other accounts.
-      await mergeReviewEntry(item.rowId, item.username, { ...item.reviewEntry, dm_status: newStatus })
+      await mergeReviewEntry(item.rowId, item.stateKey, { ...item.reviewEntry, dm_status: newStatus })
     } catch (e) {
       console.error('Failed to update dm_status', e)
     }
@@ -156,7 +159,7 @@ export default function ReadyToSendPage() {
       setCopiedUser(item.username)
       setTimeout(() => setCopiedUser(null), 2000)
     }
-    window.open(`https://www.instagram.com/${item.username}/`, '_blank', 'noreferrer')
+    window.open(profileUrl(item), '_blank', 'noreferrer')
     if (item.dm_draft) await persistStatus(item, 'sent')
   }, [persistStatus])
 
@@ -184,7 +187,7 @@ export default function ReadyToSendPage() {
             onClick={() => {
               const results = items.map((item) => item.accountData || { username: item.username })
               const influencers = items.map((item) => item.accountData || { username: item.username, fullName: item.fullName })
-              const reviewState = Object.fromEntries(items.map((item) => [item.username, item.reviewEntry]))
+              const reviewState = Object.fromEntries(items.map((item) => [item.stateKey, item.reviewEntry]))
               const exportIds = [
                 ...ALWAYS_EXPORT_IDS,
                 ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
@@ -232,13 +235,13 @@ export default function ReadyToSendPage() {
             <div className="space-y-3">
               {group.items.map((item) => (
                 <div
-                  key={`${item.rowId}-${item.username}`}
+                  key={`${item.rowId}-${item.stateKey}`}
                   className="border border-[#BFD6C4] bg-[#F5F8F4] rounded-[14px] px-5 py-4"
                 >
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="min-w-0">
                       <a
-                        href={`https://instagram.com/${item.username}`}
+                        href={profileUrl(item)}
                         target="_blank"
                         rel="noreferrer"
                         className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1"

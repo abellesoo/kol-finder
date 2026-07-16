@@ -74,6 +74,38 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
   return data
 }
 
+/**
+ * Start a Threads keyword-search scrape (futurizerush/meta-threads-scraper).
+ * Threads has no public "tagged" page to crawl, so discovery is search-based:
+ * each term is a Threads search query (pain-point terms like 掉髮, or
+ * content-genre terms like "olive young"). One run covers all terms; every
+ * returned post carries a `search_keyword` field identifying which term found
+ * it, so per-term provenance survives a combined run. Items also include the
+ * author's follower count / bio / bio links inline — no second profile scrape.
+ * `search_filter: 'top'` mirrors how trends are browsed on Threads (popular
+ * posts first), which is what the seeding process wants.
+ */
+export async function startThreadsSeederScrape(terms, resultsLimit = 30) {
+  const keywords = terms.map((t) => String(t).trim()).filter(Boolean)
+  if (keywords.length === 0) throw new Error('No search terms provided')
+  const res = await fetch(`${PROXY}/start-run/threads-scraper`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      mode: 'search',
+      keywords,
+      max_posts: resultsLimit,
+      search_filter: 'top',
+    }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to start Threads actor (${res.status}): ${text || 'no response body'}`)
+  }
+  const { data } = await res.json()
+  return data
+}
+
 // Used for KolLookup (single-profile mode)
 export async function startReelScraper(usernames, resultsLimit = 30) {
   const list = Array.isArray(usernames) ? usernames : [usernames]

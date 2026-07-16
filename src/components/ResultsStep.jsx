@@ -3,6 +3,7 @@ import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, 
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { fetchBatchStats } from '../lib/apifyApi'
+import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
 import { updateSessionLiveStats } from '../lib/sessionHistory'
@@ -224,7 +225,11 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       const rs = reviewState[r.username]
       switch (col.id) {
         case 'brand':
-          return <p className="font-mono text-xs text-ink/70 truncate">{r.sourceBrand || '—'}</p>
+          return (
+            <p className="font-mono text-xs text-ink/70 truncate">
+              {r.platform === 'threads' ? '🧵 ' : ''}{r.sourceBrand || '—'}{r.sourceTrack ? ` · ${r.sourceTrack === 'painpoint' ? 'pain-point' : 'genre'}` : ''}
+            </p>
+          )
         case 'overall':
           return <ScoreBadge score={r.overall} />
         case 'relevancy_score':
@@ -331,7 +336,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <a href={`https://instagram.com/${r.username}`} target="_blank" rel="noreferrer"
+                <a href={profileUrl(r)} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1">
                   @{r.username} <ExternalLink size={11} className="opacity-40" />
@@ -449,8 +454,10 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     for (const [u, entry] of Object.entries(cache)) {
       if (now - entry.ts < CACHE_TTL_MS && hasRealData(entry.stats)) valid[u] = entry.stats
     }
-    // Seed from saved results (persisted after a prior live fetch)
+    // Seed from saved results (persisted after a prior live fetch). Threads
+    // rows are excluded — this map is Instagram live data, keyed by username.
     for (const r of results) {
+      if (r.platform === 'threads') continue
       if (!valid[r.username] && (r.medianLikes != null || r.medianViews != null || r.medianComments != null)) {
         valid[r.username] = { medianLikes: r.medianLikes ?? null, medianViews: r.medianViews ?? null, medianComments: r.medianComments ?? null }
       }
@@ -488,16 +495,21 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   // eyeballing the AI scores against a few real campaigns.
   const [blendAi, setBlendAi] = useState(false)
 
+  // Keyed by platform:username — the same handle can exist as separate
+  // Instagram and Threads candidates and must not collide.
+  const infKey = (rec) => `${rec.platform || 'instagram'}:${rec.username}`
   const infMap = useMemo(() => {
     const m = {}
-    for (const inf of influencers) m[inf.username] = inf
+    for (const inf of influencers) m[infKey(inf)] = inf
     return m
   }, [influencers])
 
   const enriched = useMemo(() => {
     return results.map((r) => {
-      const inf = infMap[r.username]
-      const live = liveStats[r.username]
+      const inf = infMap[infKey(r)]
+      // Live stats come from an Instagram re-scrape — never attach them to a
+      // Threads row (a same-handle IG account may be a different person).
+      const live = r.platform === 'threads' ? null : liveStats[r.username]
       const ai = aiStats[r.username]
       const hasLive = live && (live.medianLikes != null || live.medianViews != null)
       const engScore = hasLive
@@ -670,7 +682,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         .map((r) => ({
           username: r.username,
           fullName: r.fullName || '',
+          platform: r.platform || 'instagram',
           sourceBrand: r.sourceBrand || '',
+          sourceTrack: r.sourceTrack || null,
           overall: r.overall,
           scores: r.scores,
           accountLocation: r.accountLocation || '',
@@ -779,7 +793,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           ) : liveStatus === 'error' ? (
             // Retry does NOT force — accounts already fetched (cached with real
             // data) are skipped so we don't re-pay for them.
-            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
+            <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-rose/40 text-rose rounded-[10px] text-[13px] hover:bg-rose/5 transition-all">
               <RefreshCw size={14} /> Retry
             </button>
@@ -788,13 +802,13 @@ export default function ResultsStep({ results, influencers, config, sessionId })
               {!fetchedThisSession && (
                 <span className="text-[11px] font-mono text-faint" title="Shown from local cache — click Refresh to fetch fresh data">cached</span>
               )}
-              <button onClick={() => handleFetchLive(results.map((r) => r.username), { force: true })}
+              <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username), { force: true })}
                 className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-faint hover:border-ink/30 hover:text-ink transition-all">
                 <RefreshCw size={14} /> Refresh
               </button>
             </div>
           ) : (
-            <button onClick={() => handleFetchLive(results.map((r) => r.username))}
+            <button onClick={() => handleFetchLive(results.filter((r) => r.platform !== 'threads').map((r) => r.username))}
               className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all">
               <RefreshCw size={14} /> Fetch Live Stats
             </button>

@@ -87,6 +87,23 @@ function scoreBotRisk(inf) {
   return { score: 5 }
 }
 
+// Affiliate-link domains. KOLs who funnel followers to affiliate shops (rather
+// than the brand's own retail channel, e.g. Watsons Taiwan) are usually a
+// no-go for seeding — flagged, not excluded, so a reviewer makes the call.
+// NOTE: on Threads the link often sits in a self-reply under the main post; if
+// the scrape doesn't return replies, absence of this flag is weak evidence.
+const AFFILIATE_LINK_PATTERNS = ['s.shopee.tw', 'shopee.tw', 'shp.ee', 'shopee.com', 'shope.ee']
+
+function hasAffiliateLink(inf) {
+  const haystack = [
+    inf.captions || '',
+    ...(inf.sampleCaptions || []),
+    ...(inf.linkUrls || []), // Threads items expose post/bio links directly
+    inf.bio || '',
+  ].join(' ').toLowerCase()
+  return AFFILIATE_LINK_PATTERNS.some((d) => haystack.includes(d))
+}
+
 function buildFlags(inf, relevancyScore, botScore, config) {
   const flags = []
   // videoRatio is a percentage (0–100) from parseXlsx, not a 0–1 fraction.
@@ -99,8 +116,14 @@ function buildFlags(inf, relevancyScore, botScore, config) {
   }
   if ((inf.paidCount || 0) > 0) flags.push('paid-collab-history')
   // Both suspicious tiers (6 and 8) flag; healthy/neutral tiers (1,3,5) don't.
-  if (botScore.score >= 6) flags.push('bot-risk')
+  // The comment/like ratio heuristic is calibrated for Instagram; Threads has
+  // structurally fewer replies per like, and its visible view counts are direct
+  // reach evidence — so a Threads account with real views isn't flagged.
+  if (botScore.score >= 6 && !(inf.platform === 'threads' && (inf.xlsxMedianViews || 0) > 0)) {
+    flags.push('bot-risk')
+  }
   if ((inf.avgLikes || 0) < 50) flags.push('low-engagement')
+  if (hasAffiliateLink(inf)) flags.push('affiliate-link')
 
   const allText = [...inf.hashtags, ...inf.sampleCaptions].join(' ').toLowerCase()
   if (textContainsAny(allText, ['廣東', 'cantonese', '廣東話', '粵語']).length) flags.push('cantonese-speaker')
@@ -149,6 +172,11 @@ export async function scoreInfluencers(influencers, config) {
 
     return {
       username: inf.username,
+      // Platform + discovery provenance ride along so downstream views (results
+      // table, review queue, exports) can render them without re-joining.
+      platform: inf.platform || 'instagram',
+      sourceTrack: inf.sourceTrack || null,
+      sourceBrand: inf.sourceBrand || '',
       scores: {
         relevancy: parseFloat(relevancyScore.toFixed(1)),
         engagement: engagement.score,

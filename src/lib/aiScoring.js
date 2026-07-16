@@ -33,7 +33,9 @@ export async function pullHistoricalDecisions({ maxRows = 15, maxExamples = 40 }
       const rs = row.review_state || {}
       const byUser = {}
       for (const a of row.accounts || []) {
-        if (a && a.username) byUser[a.username] = a
+        // Threads entries are keyed 'threads:username' in review_state (see
+        // reviewKey in reviewState.js) — mirror that here so their features join.
+        if (a && a.username) byUser[a.platform === 'threads' ? `threads:${a.username}` : a.username] = a
       }
       for (const [username, entry] of Object.entries(rs)) {
         if (username === '__notes__' || username === '__criteria__') continue

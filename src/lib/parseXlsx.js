@@ -176,6 +176,7 @@ export function aggregatePostItems(rows, brandName = '') {
       username: inf.username,
       fullName: inf.fullName,
       bio,
+      platform: 'instagram',
       sourceBrand: brandName,
       accountLocation,
       postCount: n,
@@ -200,6 +201,125 @@ export function aggregatePostItems(rows, brandName = '') {
       samplePostComments,
       samplePostPlays,
       sampleCaptions: posts.slice(0, 5).map((p) => p['caption'] || '').filter(Boolean),
+    }
+  })
+
+  influencers.sort((a, b) => b.totalEngagement - a.totalEngagement)
+  return influencers
+}
+
+// Map the Threads actor's post language to our location labels. `language` is
+// a strong signal (zh_TW ≈ Taiwan audience) — fall back to LOCATION_SIGNALS
+// text matching when it's absent or ambiguous.
+const THREADS_LANGUAGE_LOCATIONS = { zh_TW: 'Taiwan', zh_HK: 'Hong Kong' }
+
+// Pull every URL a Threads item exposes (post links + bio/external links) into
+// a flat string list — buildFlags scans these for affiliate-link patterns.
+// Link entries may be plain strings or {url} objects depending on actor version.
+function threadsItemLinks(row) {
+  const out = []
+  for (const list of [row.urls, row.bio_links, row.external_links]) {
+    for (const entry of list || []) {
+      const url = typeof entry === 'string' ? entry : entry?.url
+      if (url) out.push(String(url))
+    }
+  }
+  return out
+}
+
+/**
+ * Aggregate Threads search items (futurizerush/meta-threads-scraper) into
+ * influencer objects with the SAME shape aggregatePostItems produces, so the
+ * whole scoring/review pipeline works unchanged. Differences from IG:
+ *  - engagement: like_count / reply_count (as comments) / view_count (as views)
+ *  - follower count + bio arrive inline on every search item (no profile rows)
+ *  - `search_keyword` says which query surfaced the post → sourceBrand, and
+ *    trackByTerm maps it to 'painpoint' | 'genre' → sourceTrack
+ *  - reposts are skipped (the author didn't create that content)
+ */
+export function aggregateThreadsPostItems(rows, trackByTerm = {}) {
+  const byOwner = {}
+  for (const row of rows) {
+    if (row.record_type && row.record_type !== 'post') continue
+    if (row.is_repost) continue
+    const username = row.username
+    if (!username) continue
+    if (!byOwner[username]) byOwner[username] = { username, posts: [] }
+    byOwner[username].posts.push(row)
+  }
+
+  const influencers = Object.values(byOwner).map((inf) => {
+    const posts = inf.posts
+    const n = posts.length
+    const first = (pick) => posts.map(pick).find(Boolean) || ''
+
+    const likeValues = posts.map((p) => Number(p.like_count)).filter((v) => !isNaN(v) && v >= 0)
+    const replyValues = posts.map((p) => Number(p.reply_count)).filter((v) => !isNaN(v) && v >= 0)
+    const viewValues = posts.map((p) => Number(p.view_count)).filter((v) => v > 0)
+    const avg = (vals) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : 0)
+    const median = (vals) => {
+      if (!vals.length) return null
+      const sorted = [...vals].sort((a, b) => a - b)
+      const mid = Math.floor(sorted.length / 2)
+      return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid]
+    }
+
+    const avgLikes = avg(likeValues)
+    const avgComments = avg(replyValues)
+    const followerCount = posts.map((p) => Number(p.followers_count)).find((f) => f > 0) ?? null
+    const engagementRate = followerCount
+      ? parseFloat((((avgLikes + avgComments) / followerCount) * 100).toFixed(2))
+      : null
+
+    const videoPosts = posts.filter((p) => (p.media_type || '').toLowerCase() === 'video')
+    const videoRatio = n ? videoPosts.length / n : 0
+
+    const captionsList = posts.map((p) => p.text_content || '').filter(Boolean)
+    const hashtags = [...new Set(posts.flatMap((p) => (p.hashtags || []).map((h) => String(h).toLowerCase())))]
+    const bio = first((p) => p.bio)
+    const paidCount = posts.filter((p) => p.is_paid_partnership === true).length
+
+    // Which search terms surfaced this account (usually one, can be several).
+    const terms = [...new Set(posts.map((p) => p.search_keyword).filter(Boolean))]
+    const sourceTrack = trackByTerm[terms[0]] || null
+
+    const accountLocation = first((p) => THREADS_LANGUAGE_LOCATIONS[p.language])
+
+    const samplePost = posts[0] || null
+    const sampleLikes = samplePost ? Number(samplePost.like_count) : NaN
+    const sampleViews = samplePost ? Number(samplePost.view_count) : NaN
+
+    return {
+      username: inf.username,
+      fullName: first((p) => p.display_name),
+      bio,
+      platform: 'threads',
+      sourceBrand: terms.join(', '),
+      sourceTrack,
+      accountLocation,
+      postCount: n,
+      avgLikes,
+      avgComments,
+      totalEngagement: avgLikes + avgComments,
+      followerCount,
+      engagementRate,
+      xlsxMedianLikes: median(likeValues),
+      xlsxMedianViews: median(viewValues),
+      xlsxHiddenCount: 0,
+      xlsxRecentCount: n,
+      videoRatio: Math.round(videoRatio * 100),
+      hasVideos: videoRatio > 0,
+      captions: captionsList.join(' '),
+      hashtags: hashtags.slice(0, 40),
+      locationNames: [],
+      paidCount,
+      linkUrls: [...new Set(posts.flatMap(threadsItemLinks))].slice(0, 20),
+      samplePostUrl: first((p) => p.post_url),
+      sampleCaption: captionsList[0] || '',
+      samplePostLikes: isNaN(sampleLikes) || sampleLikes < 0 ? null : sampleLikes,
+      samplePostComments: samplePost ? Number(samplePost.reply_count) || null : null,
+      samplePostPlays: isNaN(sampleViews) || sampleViews <= 0 ? null : sampleViews,
+      sampleCaptions: captionsList.slice(0, 5),
     }
   })
 

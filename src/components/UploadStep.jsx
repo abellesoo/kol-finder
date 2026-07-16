@@ -138,14 +138,31 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       const trackByTerm = {}
       for (const t of painTerms) trackByTerm[t] = 'painpoint'
       for (const t of genreTerms) trackByTerm[t] = 'genre'
-      try {
-        const run = await startThreadsSeederScrape(threadsTerms, resultsLimit)
-        const completed = await pollUntilDone(run)
-        const items = await getDatasetItems(completed.defaultDatasetId)
-        brandedResults.push({ items, platform: 'threads', trackByTerm, brand: 'threads' })
-      } catch (err) {
-        failedBrands.push('threads search')
-        console.error('Threads scrape failed:', err)
+      // One Apify run per term. Threads rate-limits multi-keyword sessions, so
+      // a single blocked term must not sink the whole batch; and even a run
+      // that ends FAILED has usually pushed the posts it did fetch, so we read
+      // the dataset regardless (allowPartial) and keep whatever came back.
+      // Each item carries `search_keyword`, so combining terms into one batch
+      // preserves per-term/track provenance.
+      const threadsItems = []
+      const failedTerms = []
+      for (const term of threadsTerms) {
+        try {
+          const run = await startThreadsSeederScrape(term, Math.min(resultsLimit, 50))
+          const completed = await pollUntilDone(run, { allowPartial: true })
+          const items = await getDatasetItems(completed.defaultDatasetId)
+          if (items.length > 0) threadsItems.push(...items)
+          else failedTerms.push(term)
+        } catch (err) {
+          failedTerms.push(term)
+          console.error(`Threads scrape failed for "${term}":`, err)
+        }
+      }
+      if (threadsItems.length > 0) {
+        brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, brand: 'threads' })
+      }
+      if (failedTerms.length > 0) {
+        failedBrands.push(`Threads terms with no results (Threads may have rate-limited these — retry in a few minutes): ${failedTerms.join(', ')}`)
       }
     }
 

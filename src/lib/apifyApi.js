@@ -78,15 +78,22 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
  * Start a Threads keyword-search scrape (futurizerush/meta-threads-scraper).
  * Threads has no public "tagged" page to crawl, so discovery is search-based:
  * each term is a Threads search query (pain-point terms like 掉髮, or
- * content-genre terms like "olive young"). One run covers all terms; every
- * returned post carries a `search_keyword` field identifying which term found
- * it, so per-term provenance survives a combined run. Items also include the
- * author's follower count / bio / bio links inline — no second profile scrape.
- * `search_filter: 'top'` mirrors how trends are browsed on Threads (popular
- * posts first), which is what the seeding process wants.
+ * content-genre terms like "olive young"). Every returned post carries a
+ * `search_keyword` field identifying which term found it, so provenance
+ * survives regardless of batching. Items also include the author's follower
+ * count / bio / bio links inline — no second profile scrape.
+ *
+ * The caller runs ONE term per call: Threads rate-limits multi-keyword
+ * sessions hard (a five-keyword batch reliably got 4/5 blocked in testing and
+ * the whole run exited non-zero), so isolating each term keeps one block from
+ * discarding the rest. `search_filter` defaults to 'recent' — it is markedly
+ * more reliable than 'top' (which frequently returned 0 / got blocked) and
+ * newest-first is also the better lens for "what's trending right now".
  */
-export async function startThreadsSeederScrape(terms, resultsLimit = 30) {
-  const keywords = terms.map((t) => String(t).trim()).filter(Boolean)
+export async function startThreadsSeederScrape(terms, resultsLimit = 50, searchFilter = 'recent') {
+  const keywords = (Array.isArray(terms) ? terms : [terms])
+    .map((t) => String(t).trim())
+    .filter(Boolean)
   if (keywords.length === 0) throw new Error('No search terms provided')
   const res = await fetch(`${PROXY}/start-run/threads-scraper`, {
     method: 'POST',
@@ -95,7 +102,7 @@ export async function startThreadsSeederScrape(terms, resultsLimit = 30) {
       mode: 'search',
       keywords,
       max_posts: resultsLimit,
-      search_filter: 'top',
+      search_filter: searchFilter,
     }),
   })
   if (!res.ok) {
@@ -135,7 +142,12 @@ export async function getDatasetItems(datasetId) {
 // Poll with backoff: 3s → 5s → 8s → 10s (cap)
 const POLL_DELAYS = [3000, 5000, 8000, 10000]
 
-export async function pollUntilDone(run, { timeoutMs = 300000 } = {}) {
+// allowPartial: when true, a non-SUCCEEDED terminal status (FAILED/ABORTED/
+// TIMED-OUT) is returned instead of thrown, so the caller can still read the
+// run's dataset. The Threads actor exits non-zero when Threads rate-limits one
+// or more keywords, but it has usually already pushed whatever posts it did
+// fetch — those are worth salvaging rather than discarding the whole run.
+export async function pollUntilDone(run, { timeoutMs = 300000, allowPartial = false } = {}) {
   let runData = run
   let attempt = 0
   const deadline = Date.now() + timeoutMs
@@ -149,6 +161,7 @@ export async function pollUntilDone(run, { timeoutMs = 300000 } = {}) {
     runData = await getRun(runData.id)
   }
   if (runData.status !== 'SUCCEEDED') {
+    if (allowPartial) return runData
     throw new Error(`Actor run ${runData.status.toLowerCase()}`)
   }
   return runData

@@ -35,8 +35,9 @@ const COLUMN_INFO = {
   engagement_score: {
     title: 'Engagement Score (0–10)',
     lines: [
-      'Before live fetch: log(1 + avgLikes + avgComments×1.5)',
-      'After live fetch:  log(1 + medianLikes + medianViews×0.8 + medianComments×1.5)',
+      'Before live fetch: log(1 + avgLikes + avgComments×1.5) + log10(1 + followers)×0.5',
+      'After live fetch:  log(1 + medianLikes + medianViews×0.8 + medianComments×1.5) + log10(1 + followers)×0.5',
+      'The follower term is a bounded reach boost — bigger audiences help, but engagement still leads.',
       'Live data replaces the export estimate per account.',
       '· ~4 = micro (~50 likes)',
       '· ~6–7 = mid-tier (~500–1k likes)',
@@ -529,7 +530,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       const ai = aiStats[r.username]
       const hasLive = medLikes != null || medViews != null
       const engScore = hasLive
-        ? computeLiveEngagementScore(medLikes, medViews, medComments)
+        ? computeLiveEngagementScore(medLikes, medViews, medComments, r.followerCount)
         : (r.scores?.engagement ?? 0)
       const relScore = r.scores?.relevancy ?? 0
       // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,

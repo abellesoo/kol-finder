@@ -23,22 +23,31 @@ function textContainsAny(text, keywords) {
   })
 }
 
-// Engagement Score (export data): log(1 + avgLikes + avgComments×1.5)
+// Bounded follower "reach" boost added to the engagement score. log10 keeps it
+// gentle — a 5k-follower account gets ~+1.85, a 50k account ~+2.35 — so a bigger
+// audience helps but can't dominate (a high-follower / low-engagement account
+// still scores low). followerCount may be null/0 (unknown) → no boost, no penalty.
+function reachBoost(followerCount) {
+  return Math.log10(1 + (followerCount || 0)) * 0.5
+}
+
+// Engagement Score (export data): log(1 + avgLikes + avgComments×1.5) + reach boost.
 // Instagram has no native repost metric — avgComments used as Replies, reposts treated as 0
 function scoreEngagement(inf) {
   const likes = inf.avgLikes || 0
   const comments = inf.avgComments || 0
-  const raw = Math.log(1 + likes + comments * 1.5)
+  const raw = Math.log(1 + likes + comments * 1.5) + reachBoost(inf.followerCount)
   return { score: parseFloat(Math.min(10, raw).toFixed(2)) }
 }
 
-// Upgraded Engagement Score using live Apify median data.
-// Views weighted at 0.8×; comments weighted at 1.5× (photo-only accounts will have views=0).
-export function computeLiveEngagementScore(medianLikes, medianViews, medianComments) {
+// Upgraded Engagement Score using live/enrichment Apify median data.
+// Views weighted at 0.8×; comments weighted at 1.5× (photo-only accounts will
+// have views=0); plus the bounded follower reach boost.
+export function computeLiveEngagementScore(medianLikes, medianViews, medianComments, followerCount = 0) {
   const likes = medianLikes ?? 0
   const views = medianViews ?? 0
   const comments = medianComments ?? 0
-  const raw = Math.log(1 + likes + views * 0.8 + comments * 1.5)
+  const raw = Math.log(1 + likes + views * 0.8 + comments * 1.5) + reachBoost(followerCount)
   return parseFloat(Math.min(10, raw).toFixed(2))
 }
 

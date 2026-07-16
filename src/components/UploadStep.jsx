@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
-import { startSeederScrape, startThreadsSeederScrape, startThreadsProfileScrape, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { startSeederScrape, startThreadsSeederScrape, fetchThreadsProfileItems, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
@@ -206,28 +206,29 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         let gatedItems = threadsItems.filter((it) => kept.has(it.username))
 
         // Follower count + median likes/comments/views come ONLY from this
-        // profile-enrichment run (the search actor returns none of them), so
+        // profile-enrichment scrape (the search actor returns none of them), so
         // scrape each surviving handle's profile (futurizerush user mode).
-        // Retry once with a fresh run if it fails/returns nothing — Meta blocks
-        // user mode occasionally too. If it still comes back empty, the accounts
-        // still import (just without follower/median stats) and we tell the user
-        // rather than leaving a silent blank.
+        // fetchThreadsProfileItems chunks the handles into runs of ≤20 — the
+        // actor's input schema hard-caps usernames at 20, so one big run for
+        // all handles never even starts — and retries each chunk once. If it
+        // all comes back empty, the accounts still import (just without
+        // follower/median stats) and we tell the user rather than leaving a
+        // silent blank.
         let enrichByUser = {}
         const handles = [...kept]
-        for (let attempt = 0; attempt < 2 && Object.keys(enrichByUser).length === 0; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
-          try {
-            const run = await startThreadsProfileScrape(handles)
-            const completed = await pollUntilDone(run, { allowPartial: true })
-            const profileItems = await getDatasetItems(completed.defaultDatasetId)
-            enrichByUser = buildThreadsEnrichment(profileItems)
-          } catch (err) {
-            console.error(`Threads profile enrichment failed (attempt ${attempt + 1}/2):`, err)
-          }
+        try {
+          const profileItems = await fetchThreadsProfileItems(handles)
+          enrichByUser = buildThreadsEnrichment(profileItems)
+        } catch (err) {
+          console.error('Threads profile enrichment failed:', err)
         }
-        if (Object.keys(enrichByUser).length === 0) {
+        const enrichedCount = handles.filter((u) => enrichByUser[u]).length
+        if (enrichedCount === 0) {
           failedBrands.push('Threads follower counts + median views (profile lookup was blocked by Meta — accounts still imported, just without those stats; re-run to fill them in)')
         } else {
+          if (enrichedCount < handles.length) {
+            notices.push(`Threads profile enrichment covered ${enrichedCount} of ${handles.length} accounts — the rest show no follower/median stats (Meta blocked those lookups; re-run to fill them in).`)
+          }
           // Gate 2 (post-enrichment): drop accounts with too small an audience
           // or no engagement pulse across their recent posts. Only judged where
           // enrichment returned data — a handle the profile run missed keeps the

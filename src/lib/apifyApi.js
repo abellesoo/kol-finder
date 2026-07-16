@@ -123,6 +123,13 @@ export async function startThreadsSeederScrape(term, resultsLimit = 30, sort = '
 export async function startThreadsProfileScrape(usernames, postsPerUser = 10) {
   const list = [...new Set((usernames || []).map((u) => String(u).trim()).filter(Boolean))]
   if (list.length === 0) throw new Error('No usernames to enrich')
+  // The actor's input schema caps usernames at 20 items — a bigger array fails
+  // Apify's schema validation at run CREATION (no run ever starts, so nothing
+  // shows up in the console). Callers with more handles must chunk; use
+  // fetchThreadsProfileItems below.
+  if (list.length > THREADS_PROFILE_CHUNK) {
+    throw new Error(`Threads profile scrape accepts at most ${THREADS_PROFILE_CHUNK} usernames per run (got ${list.length}) — use fetchThreadsProfileItems`)
+  }
   const res = await fetch(`${PROXY}/start-run/threads-scraper`, {
     method: 'POST',
     headers: await workerHeaders({ 'Content-Type': 'application/json' }),
@@ -136,6 +143,58 @@ export async function startThreadsProfileScrape(usernames, postsPerUser = 10) {
   }
   const { data } = await res.json()
   return data
+}
+
+// futurizerush/meta-threads-scraper input schema: usernames maxItems = 20.
+const THREADS_PROFILE_CHUNK = 20
+// Cap concurrent enrichment runs — chunks beyond this queue up client-side.
+const THREADS_PROFILE_CONCURRENCY = 5
+
+/**
+ * Chunked Threads profile enrichment: splits handles into runs of ≤20 (the
+ * actor's hard input-schema cap — see startThreadsProfileScrape), runs up to
+ * 5 chunks concurrently, retries each chunk once with a fresh run (fresh
+ * proxy IP recovers most transient Meta blocks), and returns the combined
+ * dataset items. A chunk that still returns nothing after the retry is
+ * dropped — partial results are far better than none, and the caller treats
+ * only a fully-empty result as "enrichment blocked".
+ */
+export async function fetchThreadsProfileItems(usernames, postsPerUser = 10) {
+  const list = [...new Set((usernames || []).map((u) => String(u).trim()).filter(Boolean))]
+  if (list.length === 0) throw new Error('No usernames to enrich')
+  const chunks = []
+  for (let i = 0; i < list.length; i += THREADS_PROFILE_CHUNK) {
+    chunks.push(list.slice(i, i + THREADS_PROFILE_CHUNK))
+  }
+
+  async function runChunk(chunk) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
+      try {
+        const run = await startThreadsProfileScrape(chunk, postsPerUser)
+        const completed = await pollUntilDone(run, { allowPartial: true })
+        if (completed.defaultDatasetId) {
+          const items = await getDatasetItems(completed.defaultDatasetId)
+          if (items.length > 0) return items
+        }
+      } catch (err) {
+        console.error(`Threads profile enrichment chunk of ${chunk.length} failed (attempt ${attempt + 1}/2):`, err)
+      }
+    }
+    return []
+  }
+
+  const queue = [...chunks]
+  const collected = []
+  await Promise.all(
+    Array.from({ length: Math.min(THREADS_PROFILE_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const chunk = queue.shift()
+        collected.push(...(await runChunk(chunk)))
+      }
+    })
+  )
+  return collected
 }
 
 // Used for KolLookup (single-profile mode)

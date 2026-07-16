@@ -10,45 +10,17 @@ const NICHE_OPTIONS = [
   { id: 'food', label: '🍜 Food & Dining' },
 ]
 
-const BRIEF_GUIDE = `點樣填 Campaign Brief
+const BRIEF_GUIDE = `Campaign Brief 點用
 ─────────────────────
-DM 入面所有品牌／產品資料都只會用你喺度填嘅內容——DeepSeek 唔會自己作成分或數字。
-所以產品 block 需要嘅嘢，一定要喺度寫齊。跟住以下五行填：
+DM 入面所有品牌／產品資料都只會用你喺下面填嘅內容——DeepSeek 唔會自己作成分或數字。所以每個賣點都要喺度寫齊。
 
-品牌：（品牌名，例：Wellage 唯拉珠）
-      ↳ 自我介紹會自動變成「我係 [品牌] 嘅 Marketing」，唔使自己寫成個句
-品牌背景：（母公司或品牌定位，一句，例：韓國醫美大廠 Hugel 旗下品牌）
-新品：（系列／產品名 + 上架渠道 + 一句主打賣點，
-      例：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮）
-合作形式：（例：寄產品體驗，Feed／Reels feature 都可以）
-產品詳情：（每件產品：名稱 + 兩個賣點；成分／濃度／數字照官方寫。可以一件或多件）
-【產品一名稱】
-・賣點 1
-・賣點 2
-【產品二名稱】
-・賣點 1
-・賣點 2
+・自我介紹會自動變成「我係 [品牌] 嘅 Marketing」，唔使自己寫。
+・個人化開場靠 KOL 自己嘅 IG 內容自動生成，唔使你寫。
 
-─────────────────────
-填寫範例（可以照呢個 shape 抄）：
-
-品牌：Wellage 唯拉珠
-品牌背景：韓國醫美大廠 Hugel 旗下品牌
-新品：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮
-合作形式：寄產品體驗，Feed／Reels feature 都可以
-產品詳情：
-【Wellage 唯拉珠 維C高效亮白七日套裝】
-・醫美等級濃度 30% 生維 C ✕ 純穀胱甘肽，改善暗啞及膚色不均
-・即開即用高濃度維他命 C 膠囊，減低氧化，發揮亮白效果
-【Wellage 唯拉珠 維C高效亮白安瓶精華】
-・美白針同款穀胱甘肽，5 秒內透光，2 周打造水光肌
-・蘊含 100% 高親膚純淨穀胱甘肽，令純維他命 C 長效發揮作用
-
-─────────────────────
 三個提示：
-1. 賣點冇寫入 Brief 就唔會出現喺 DM（防止作大成分／功效）。
+1. 賣點冇填就唔會出現喺 DM（防止作大成分／功效）。
 2. 美白／醫美級字眼照官方 listing 原文寫，唔好自己加大——香港《商品說明條例》有風險。
-3. 個人化開場靠 KOL 自己嘅 IG 內容自動生成，唔使你喺 Brief 度寫。`
+3. 一件或多件產品都得，撳「+ 加多件產品」加。`
 
 function StepProgress({ current }) {
   const steps = [
@@ -81,13 +53,53 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [requireVideo, setRequireVideo] = useState(true)
   const [minEngagement, setMinEngagement] = useState(0)
-  const [campaignBrief, setCampaignBrief] = useState('')
+  // Structured campaign-brief fields. They assemble into the single
+  // `campaignBrief` string DeepSeek consumes (assembleBrief), so nothing
+  // downstream (worker DM prompt, storage, display) has to change.
+  const [brandName, setBrandName] = useState('')
+  const [brandBackground, setBrandBackground] = useState('')
+  const [newProduct, setNewProduct] = useState('')
+  const [collabFormat, setCollabFormat] = useState('')
+  const [products, setProducts] = useState([{ name: '', points: '' }])
+  const [briefNotes, setBriefNotes] = useState('')
   const [showBriefGuide, setShowBriefGuide] = useState(false)
 
   const toggleNiche = (id) => {
     setNiches((prev) =>
       prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]
     )
+  }
+
+  const updateProduct = (i, field, value) =>
+    setProducts((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)))
+  const addProduct = () => setProducts((prev) => [...prev, { name: '', points: '' }])
+  const removeProduct = (i) => setProducts((prev) => prev.filter((_, idx) => idx !== i))
+
+  // Re-create the labelled brief shape DeepSeek expects. Empty fields are
+  // dropped so a half-filled brief stays clean. Selling points are one per
+  // line; each gets a ・ bullet (any existing bullet char is stripped first).
+  const assembleBrief = () => {
+    const lines = []
+    if (brandName.trim()) lines.push(`品牌：${brandName.trim()}`)
+    if (brandBackground.trim()) lines.push(`品牌背景：${brandBackground.trim()}`)
+    if (newProduct.trim()) lines.push(`新品：${newProduct.trim()}`)
+    if (collabFormat.trim()) lines.push(`合作形式：${collabFormat.trim()}`)
+    const blocks = products
+      .filter((p) => p.name.trim() || p.points.trim())
+      .map((p) => {
+        const pts = p.points
+          .split('\n')
+          .map((s) => s.trim().replace(/^[・·•\-\s]+/, ''))
+          .filter(Boolean)
+          .map((s) => `・${s}`)
+        return [`【${p.name.trim()}】`, ...pts].join('\n')
+      })
+    if (blocks.length) {
+      lines.push('產品詳情：')
+      lines.push(blocks.join('\n'))
+    }
+    if (briefNotes.trim()) lines.push(briefNotes.trim())
+    return lines.join('\n')
   }
 
   const canStart = niches.length > 0
@@ -99,7 +111,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
       locationTarget,
       requireVideo,
       minEngagement,
-      campaignBrief: campaignBrief.trim(),
+      campaignBrief: assembleBrief(),
     })
   }
 
@@ -237,13 +249,119 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
               {BRIEF_GUIDE}
             </div>
           )}
-          <textarea
-            value={campaignBrief}
-            onChange={(e) => setCampaignBrief(e.target.value)}
-            rows={3}
-            placeholder="e.g. Minimalist skincare brand targeting 25–35 year olds, clean aesthetic, natural ingredients positioning, looking for creators who film at-home routines or morning skincare content."
-            className="w-full px-3 py-2.5 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
-          />
+
+          <div className="space-y-3.5 px-4 py-4 bg-surface border border-card-edge rounded-[12px]">
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-1">
+                品牌 <span className="text-faint font-normal">· Brand name</span>
+              </label>
+              <input
+                type="text"
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                placeholder="例：Wellage 唯拉珠"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+              />
+              <p className="text-[11px] text-faint mt-1">自我介紹會自動變成「我係 {brandName.trim() || '[品牌]'} 嘅 Marketing」</p>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-1">
+                品牌背景 <span className="text-faint font-normal">· Brand background (一句)</span>
+              </label>
+              <input
+                type="text"
+                value={brandBackground}
+                onChange={(e) => setBrandBackground(e.target.value)}
+                placeholder="例：韓國醫美大廠 Hugel 旗下品牌"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-1">
+                新品 <span className="text-faint font-normal">· 系列／產品名 + 上架渠道 + 主打賣點</span>
+              </label>
+              <textarea
+                value={newProduct}
+                onChange={(e) => setNewProduct(e.target.value)}
+                rows={2}
+                placeholder="例：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-1">
+                合作形式 <span className="text-faint font-normal">· Collaboration format</span>
+              </label>
+              <input
+                type="text"
+                value={collabFormat}
+                onChange={(e) => setCollabFormat(e.target.value)}
+                placeholder="例：寄產品體驗，Feed／Reels feature 都可以"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-2">
+                產品詳情 <span className="text-faint font-normal">· 每件：名稱 + 賣點（一行一個賣點）</span>
+              </label>
+              <div className="space-y-3">
+                {products.map((p, i) => (
+                  <div key={i} className="px-3 py-3 bg-white border border-mist rounded-[10px]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-mono text-[10px] tracking-[.12em] text-faint uppercase flex-shrink-0">產品 {i + 1}</span>
+                      {products.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeProduct(i)}
+                          className="ml-auto text-[11px] text-faint hover:text-red-500 transition-colors"
+                        >
+                          移除
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={p.name}
+                      onChange={(e) => updateProduct(i, 'name', e.target.value)}
+                      placeholder="產品名稱，例：維C高效亮白七日套裝"
+                      className="w-full px-3 py-2 mb-2 border border-mist rounded-[8px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+                    />
+                    <textarea
+                      value={p.points}
+                      onChange={(e) => updateProduct(i, 'points', e.target.value)}
+                      rows={2}
+                      placeholder="一行一個賣點，例：&#10;醫美等級濃度 30% 生維 C，改善暗啞&#10;即開即用高濃度維他命 C 膠囊，減低氧化"
+                      className="w-full px-3 py-2 border border-mist rounded-[8px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addProduct}
+                className="mt-2 text-[12px] text-accent hover:text-accent/70 transition-colors font-medium"
+              >
+                + 加多件產品
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-body mb-1">
+                其他備註 <span className="text-faint font-normal">· optional</span>
+              </label>
+              <textarea
+                value={briefNotes}
+                onChange={(e) => setBriefNotes(e.target.value)}
+                rows={2}
+                placeholder="任何上面冇涵蓋嘅補充（語氣、活動期、優惠等）"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+              />
+            </div>
+          </div>
         </section>
 
         <button

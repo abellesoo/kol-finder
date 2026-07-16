@@ -170,19 +170,28 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       }
 
       if (threadsItems.length > 0) {
-        // Best-effort follower/bio enrichment: the search actor omits them, so
-        // scrape each discovered handle's profile (futurizerush user mode, which
-        // stays up even when search is blocked). One batched run; a failure just
-        // leaves follower/bio blank rather than sinking the discovered results.
+        // Follower count + median likes/comments/views come ONLY from this
+        // profile-enrichment run (the search actor returns none of them), so
+        // scrape each discovered handle's profile (futurizerush user mode).
+        // Retry once with a fresh run if it fails/returns nothing — Meta blocks
+        // user mode occasionally too. If it still comes back empty, the accounts
+        // still import (just without follower/median stats) and we tell the user
+        // rather than leaving a silent blank.
         let enrichByUser = {}
         const handles = [...new Set(threadsItems.map((it) => it.username).filter(Boolean))]
-        try {
-          const run = await startThreadsProfileScrape(handles)
-          const completed = await pollUntilDone(run, { allowPartial: true })
-          const profileItems = await getDatasetItems(completed.defaultDatasetId)
-          enrichByUser = buildThreadsEnrichment(profileItems)
-        } catch (err) {
-          console.error('Threads profile enrichment failed (follower/bio left blank):', err)
+        for (let attempt = 0; attempt < 2 && Object.keys(enrichByUser).length === 0; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
+          try {
+            const run = await startThreadsProfileScrape(handles)
+            const completed = await pollUntilDone(run, { allowPartial: true })
+            const profileItems = await getDatasetItems(completed.defaultDatasetId)
+            enrichByUser = buildThreadsEnrichment(profileItems)
+          } catch (err) {
+            console.error(`Threads profile enrichment failed (attempt ${attempt + 1}/2):`, err)
+          }
+        }
+        if (Object.keys(enrichByUser).length === 0) {
+          failedBrands.push('Threads follower counts + median views (profile lookup was blocked by Meta — accounts still imported, just without those stats; re-run to fill them in)')
         }
         brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, enrichByUser, brand: 'threads' })
       }

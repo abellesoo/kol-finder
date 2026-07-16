@@ -165,6 +165,13 @@ export async function scoreInfluencers(influencers, config) {
       relevancyScore -= 1
       configFlags.push('no-video')
     }
+    // Threads: an account surfaced by MULTIPLE search terms is far likelier a
+    // genre creator than a one-off poster. Baked into relevancy (like the
+    // config adjustments above) so it survives the live engagement re-score.
+    if ((inf.discoveryTermCount || 0) > 1) {
+      relevancyScore += 1
+      configFlags.push('multi-keyword')
+    }
     relevancyScore = Math.max(0, Math.min(10, relevancyScore))
     const relevancyAdjusted = { score: relevancyScore, signals: relevancy.signals }
 

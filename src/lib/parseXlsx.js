@@ -332,6 +332,9 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}, enrichByUser =
       platform: 'threads',
       sourceBrand: terms.join(', '),
       sourceTrack,
+      // How many distinct search terms surfaced this account — cross-term hits
+      // are a strong creator signal (scoring gives them a relevancy bonus).
+      discoveryTermCount: terms.length,
       accountLocation,
       postCount: n,
       avgLikes,

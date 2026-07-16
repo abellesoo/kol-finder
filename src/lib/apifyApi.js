@@ -88,8 +88,9 @@ export async function startSeederScrape(lines, resultsLimit = 200) {
  *
  * ONE term per call: search blocks are per-request/per-proxy-IP, so isolating
  * terms (and retrying with a fresh run) keeps one block from sinking the rest.
- * `sort` defaults to 'recent' (more reliable than 'top', and newest-first is
- * the better lens for "trending now"). maxPosts is floored at 20 (actor min).
+ * `sort`: the seeding flow tries 'top' first (Meta's engagement ranking — the
+ * quality pre-filter recent-sort lacks) and falls back to 'recent' if top
+ * fails or returns nothing. maxPosts is floored at 20 (actor min).
  */
 export async function startThreadsSeederScrape(term, resultsLimit = 30, sort = 'recent') {
   const searchQuery = String(Array.isArray(term) ? term[0] : term).trim()

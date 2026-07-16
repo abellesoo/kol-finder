@@ -5,6 +5,15 @@ import { buildThreadsEnrichment } from '../lib/parseXlsx'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 
+// Threads quality funnel. Keyword search — especially the recent-sort fallback —
+// surfaces plenty of ordinary users venting about a pain point, not creators.
+// Gate 1 (pre-enrichment): the account's best discovered post must clear a small
+// likes floor; also saves enrichment cost. Gate 2 (post-enrichment): the profile
+// must show a real audience and an engagement pulse across its recent posts.
+const THREADS_MIN_DISCOVERY_LIKES = 10
+const THREADS_MIN_FOLLOWERS = 500
+const THREADS_MIN_MEDIAN_LIKES = 2
+
 // Instagram path segments that are not usernames — they appear in post/reel/
 // explore URLs (e.g. /p/ABC, /reel/ABC, /explore/tags/x) and must never be
 // treated as a brand handle.
@@ -123,6 +132,9 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     // earlier (already-paid) results.
     const brandedResults = []
     const failedBrands = []
+    // Informational (non-failure) messages surfaced once before hand-off,
+    // e.g. the Threads quality-funnel counts — useful for tuning thresholds.
+    const notices = []
     for (const { brand, lines } of groups) {
       try {
         const run = await startSeederScrape(lines, resultsLimit)
@@ -147,22 +159,28 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       // preserves per-term/track provenance.
       const threadsItems = []
       const failedTerms = []
-      // Discovery = keyword search via igview-owner. Meta anti-bots search per
-      // request/proxy-IP, so a fresh retry run (new IP) recovers most transient
-      // blocks. Two attempts per term; each item is stamped with its query so
-      // provenance survives (the search actor doesn't echo the keyword back).
-      const THREADS_ATTEMPTS = 2
+      // Discovery = keyword search via igview-owner. Attempt 1 sorts by 'top' —
+      // Meta's own engagement ranking, which does the pre-qualification that
+      // brand tagged pages do on IG. Attempt 2 falls back to 'recent' if top
+      // failed or came back empty; a fresh run also gets a fresh proxy IP, which
+      // recovers most transient search blocks. Recent-sort has no quality
+      // ranking, so it gets a lower per-term cap — depth only adds noise there.
+      // Each item is stamped with its query so provenance survives (the search
+      // actor doesn't echo the keyword back).
+      const THREADS_SORTS = ['top', 'recent']
       for (const term of threadsTerms) {
         let got = null
-        for (let attempt = 0; attempt < THREADS_ATTEMPTS && !got; attempt++) {
+        for (let attempt = 0; attempt < THREADS_SORTS.length && !got; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
+          const sort = THREADS_SORTS[attempt]
+          const cap = sort === 'recent' ? Math.min(resultsLimit, 50) : resultsLimit
           try {
-            const run = await startThreadsSeederScrape(term, resultsLimit)
+            const run = await startThreadsSeederScrape(term, cap, sort)
             const completed = await pollUntilDone(run, { allowPartial: true })
             const items = await getDatasetItems(completed.defaultDatasetId)
             if (items.length > 0) got = items.map((it) => ({ ...it, search_keyword: term }))
           } catch (err) {
-            console.error(`Threads search failed for "${term}" (attempt ${attempt + 1}/${THREADS_ATTEMPTS}):`, err)
+            console.error(`Threads search failed for "${term}" (sort=${sort}, attempt ${attempt + 1}/${THREADS_SORTS.length}):`, err)
           }
         }
         if (got) threadsItems.push(...got)
@@ -170,15 +188,32 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       }
 
       if (threadsItems.length > 0) {
+        // Gate 1 (pre-enrichment): keep only accounts whose best discovered
+        // post cleared the likes floor. Reposts don't count — not the author's
+        // content. Never let the gate zero out a paid run: if nothing clears
+        // the floor, keep everything and let scoring sort it out.
+        const bestLikes = {}
+        for (const it of threadsItems) {
+          if (it.is_repost === true || !it.username) continue
+          const likes = Number(it.like_count ?? it.likeCount)
+          if (isNaN(likes)) continue
+          bestLikes[it.username] = Math.max(bestLikes[it.username] ?? 0, likes)
+        }
+        const discoveredCount = Object.keys(bestLikes).length
+        let kept = new Set(Object.keys(bestLikes).filter((u) => bestLikes[u] >= THREADS_MIN_DISCOVERY_LIKES))
+        if (kept.size === 0) kept = new Set(Object.keys(bestLikes))
+        const afterLikesGate = kept.size
+        let gatedItems = threadsItems.filter((it) => kept.has(it.username))
+
         // Follower count + median likes/comments/views come ONLY from this
         // profile-enrichment run (the search actor returns none of them), so
-        // scrape each discovered handle's profile (futurizerush user mode).
+        // scrape each surviving handle's profile (futurizerush user mode).
         // Retry once with a fresh run if it fails/returns nothing — Meta blocks
         // user mode occasionally too. If it still comes back empty, the accounts
         // still import (just without follower/median stats) and we tell the user
         // rather than leaving a silent blank.
         let enrichByUser = {}
-        const handles = [...new Set(threadsItems.map((it) => it.username).filter(Boolean))]
+        const handles = [...kept]
         for (let attempt = 0; attempt < 2 && Object.keys(enrichByUser).length === 0; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
           try {
@@ -192,8 +227,29 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         }
         if (Object.keys(enrichByUser).length === 0) {
           failedBrands.push('Threads follower counts + median views (profile lookup was blocked by Meta — accounts still imported, just without those stats; re-run to fill them in)')
+        } else {
+          // Gate 2 (post-enrichment): drop accounts with too small an audience
+          // or no engagement pulse across their recent posts. Only judged where
+          // enrichment returned data — a handle the profile run missed keeps the
+          // benefit of the doubt. Same never-zero-out rule as gate 1.
+          const dropped = [...kept].filter((u) => {
+            const e = enrichByUser[u]
+            if (!e) return false
+            if (e.followerCount != null && e.followerCount < THREADS_MIN_FOLLOWERS) return true
+            if (e.medianLikes != null && e.medianLikes < THREADS_MIN_MEDIAN_LIKES) return true
+            return false
+          })
+          if (dropped.length > 0 && dropped.length < kept.size) {
+            for (const u of dropped) kept.delete(u)
+            gatedItems = gatedItems.filter((it) => kept.has(it.username))
+          }
         }
-        brandedResults.push({ items: threadsItems, platform: 'threads', trackByTerm, enrichByUser, brand: 'threads' })
+
+        const funnel = `Threads quality funnel: ${discoveredCount} accounts discovered → ${afterLikesGate} cleared the post-likes gate (≥${THREADS_MIN_DISCOVERY_LIKES} likes) → ${kept.size} after follower (≥${THREADS_MIN_FOLLOWERS}) + engagement filters.`
+        console.info(funnel)
+        if (kept.size < discoveredCount) notices.push(funnel)
+
+        brandedResults.push({ items: gatedItems, platform: 'threads', trackByTerm, enrichByUser, brand: 'threads' })
       }
       if (failedTerms.length > 0) {
         failedBrands.push(`Threads terms with no results (Meta may have rate-limited search — retry in a few minutes): ${failedTerms.join(', ')}`)
@@ -218,6 +274,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         'Continuing with the results that succeeded.'
       )
     }
+    if (notices.length > 0) alert(notices.join('\n'))
     setScrapeStatus('idle')
     onScrapedItems(brandedResults)
   }

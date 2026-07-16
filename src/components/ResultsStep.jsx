@@ -247,18 +247,26 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
           if (r.aiScore == null) return <p className="font-mono text-sm text-ink/30">—</p>
           return <span title={r.aiReason || ''}><MiniBar value={r.aiScore} color="bg-accent" /></span>
         }
-        case 'live_median_likes':
+        case 'live_median_likes': {
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
-          if (s?.medianLikes != null) return <p className="font-mono text-sm text-ink">{s.medianLikes.toLocaleString()}</p>
+          // Threads has no live fetch; r.liveMedianLikes carries its enrichment
+          // median so the column populates without a fetch. IG unchanged.
+          const v = s?.medianLikes ?? r.liveMedianLikes
+          if (v != null) return <p className="font-mono text-sm text-ink">{v.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
-        case 'live_median_views':
+        }
+        case 'live_median_views': {
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
-          if (s?.medianViews != null) return <p className="font-mono text-sm text-ink">{s.medianViews.toLocaleString()}</p>
+          const v = s?.medianViews ?? r.liveMedianViews
+          if (v != null) return <p className="font-mono text-sm text-ink">{v.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
-        case 'live_median_comments':
+        }
+        case 'live_median_comments': {
           if (liveStatus === 'loading' && !s) return <Loader2 size={11} className="animate-spin text-faint" />
-          if (s?.medianComments != null) return <p className="font-mono text-sm text-ink">{s.medianComments.toLocaleString()}</p>
+          const v = s?.medianComments ?? r.liveMedianComments
+          if (v != null) return <p className="font-mono text-sm text-ink">{v.toLocaleString()}</p>
           return <p className="font-mono text-sm text-ink/30">—</p>
+        }
         case 'sample_post_url':
           return r.samplePostUrl ? (
             <a href={r.samplePostUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
@@ -507,13 +515,21 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const enriched = useMemo(() => {
     return results.map((r) => {
       const inf = infMap[infKey(r)]
+      const isThreads = r.platform === 'threads'
       // Live stats come from an Instagram re-scrape — never attach them to a
       // Threads row (a same-handle IG account may be a different person).
-      const live = r.platform === 'threads' ? null : liveStats[r.username]
+      const live = isThreads ? null : liveStats[r.username]
+      // Threads has no on-demand re-scrape; its profile-enrichment medians (on
+      // inf, computed in buildThreadsEnrichment) ARE its freshest same-session
+      // data, so treat them as "live" for scoring, display, and sorting. IG
+      // keeps live-only semantics (medians blank until the user fetches live).
+      const medLikes = live?.medianLikes ?? (isThreads ? (inf?.xlsxMedianLikes ?? null) : null)
+      const medViews = live?.medianViews ?? (isThreads ? (inf?.xlsxMedianViews ?? null) : null)
+      const medComments = live?.medianComments ?? (isThreads ? (inf?.xlsxMedianComments ?? null) : null)
       const ai = aiStats[r.username]
-      const hasLive = live && (live.medianLikes != null || live.medianViews != null)
+      const hasLive = medLikes != null || medViews != null
       const engScore = hasLive
-        ? computeLiveEngagementScore(live.medianLikes, live.medianViews, live.medianComments)
+        ? computeLiveEngagementScore(medLikes, medViews, medComments)
         : (r.scores?.engagement ?? 0)
       const relScore = r.scores?.relevancy ?? 0
       // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,
@@ -529,14 +545,14 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         aiScore: ai?.score ?? null,
         aiReason: ai?.reason || '',
         // xlsx medians live on the influencer record (inf), not the result (r).
-        medianLikes: live?.medianLikes ?? inf?.xlsxMedianLikes ?? null,
-        medianViews: live?.medianViews ?? inf?.xlsxMedianViews ?? null,
-        medianComments: live?.medianComments ?? null,
-        // Live-only values so sorting matches the live median columns, which
-        // display live data only (not the hidden xlsx-median fallback).
-        liveMedianLikes: live?.medianLikes ?? null,
-        liveMedianViews: live?.medianViews ?? null,
-        liveMedianComments: live?.medianComments ?? null,
+        medianLikes: medLikes ?? inf?.xlsxMedianLikes ?? null,
+        medianViews: medViews ?? inf?.xlsxMedianViews ?? null,
+        medianComments: medComments ?? inf?.xlsxMedianComments ?? null,
+        // Values powering the live median columns + their sorting. For Threads
+        // these are the enrichment medians; for IG, live-only (unchanged).
+        liveMedianLikes: medLikes,
+        liveMedianViews: medViews,
+        liveMedianComments: medComments,
       }
     })
   }, [results, infMap, liveStats, aiStats, blendAi])

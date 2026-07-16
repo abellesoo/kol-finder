@@ -10,9 +10,12 @@ export const EXPORT_COLUMNS = [
   { id: 'instagram_url',     label: 'instagram_url',      getValue: (r, inf)       => profileUrl({ username: r.username, platform: r.platform || inf.platform }) },
   { id: 'account_location',  label: 'location',           getValue: (r, inf)       => inf.accountLocation || '' },
   { id: 'follower_count',    label: 'follower_count',     getValue: (r, inf, live) => live?.followerCount ?? inf.followerCount ?? '' },
-  { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => live?.medianLikes ?? '' },
-  { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => live?.medianViews ?? '' },
-  { id: 'live_median_comments', label: 'median_comments', getValue: (r, inf, live) => live?.medianComments ?? '' },
+  // Threads has no live re-fetch — its medians come from the profile-enrichment
+  // run and live on the influencer record; fall back to them so the export
+  // isn't blank for Threads rows. IG keeps live-only in these columns.
+  { id: 'live_median_likes', label: 'median_likes',       getValue: (r, inf, live) => (live?.medianLikes ?? (r.platform === 'threads' ? inf.xlsxMedianLikes : null)) ?? '' },
+  { id: 'live_median_views', label: 'median_views',       getValue: (r, inf, live) => (live?.medianViews ?? (r.platform === 'threads' ? inf.xlsxMedianViews : null)) ?? '' },
+  { id: 'live_median_comments', label: 'median_comments', getValue: (r, inf, live) => (live?.medianComments ?? (r.platform === 'threads' ? inf.xlsxMedianComments : null)) ?? '' },
   { id: 'approve',           label: 'Approve Yes/No',     getValue: (r, inf, live, rs)      => rs?.status === 'approved' ? 'Yes' : rs?.status === 'rejected' ? 'No' : '' },
   { id: 'reachout_status',   label: 'Reach-out Status',   getValue: ()                      => 'Not sent' },
   { id: 'remarks',           label: 'Remarks',            getValue: ()                      => '' },

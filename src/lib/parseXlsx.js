@@ -339,8 +339,13 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}, enrichByUser =
       totalEngagement: avgLikes + avgComments,
       followerCount,
       engagementRate,
-      xlsxMedianLikes: median(likeValues),
-      xlsxMedianViews: median(viewValues),
+      // Prefer enrichment medians (futurizerush user mode) — they include views
+      // and cover the account's recent posts. Fall back to the search items'
+      // medians (igview-owner: likes/replies only, no views) if enrichment was
+      // skipped or failed.
+      xlsxMedianLikes: enrich.medianLikes ?? median(likeValues),
+      xlsxMedianViews: enrich.medianViews ?? median(viewValues),
+      xlsxMedianComments: enrich.medianComments ?? median(replyValues),
       xlsxHiddenCount: 0,
       xlsxRecentCount: n,
       videoRatio: Math.round(videoRatio * 100),
@@ -364,26 +369,55 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}, enrichByUser =
 }
 
 /**
- * Build a username→{followerCount,bio,accountLocation} map from the raw items
- * of a futurizerush user-mode enrichment run. Used to backfill follower/bio
- * onto igview-owner search candidates (which lack them).
+ * Build a username→{followerCount,bio,accountLocation,medianLikes,
+ * medianComments,medianViews} map from the raw items of a futurizerush
+ * user-mode enrichment run. The search actor (igview-owner) returns none of
+ * these; user mode returns follower_count/bio/language plus per-post
+ * like_count/reply_count/view_count, so we compute the medians here. For
+ * Threads this enrichment IS the "live" data (same-session, freshest), so the
+ * results table treats these medians as live. Reshared posts are excluded from
+ * the medians (the account didn't author that content). Views are only counted
+ * when Threads actually exposed them (view_count_status !== 'not_available').
  */
 export function buildThreadsEnrichment(rows) {
-  const map = {}
+  const acc = {}
   for (const row of rows || []) {
     const u = row.username
     if (!u) continue
+    if (!acc[u]) acc[u] = { followerCount: null, bio: '', accountLocation: '', likes: [], replies: [], views: [] }
+    const a = acc[u]
     const followers = Number(row.followers_count)
-    if (!map[u]) map[u] = { followerCount: null, bio: '', accountLocation: '' }
-    if (!isNaN(followers) && followers > 0 && !(map[u].followerCount > 0)) {
-      map[u].followerCount = followers
+    if (!isNaN(followers) && followers > 0 && !(a.followerCount > 0)) a.followerCount = followers
+    if (!a.bio && row.bio) a.bio = row.bio
+    if (!a.accountLocation && THREADS_LANGUAGE_LOCATIONS[row.language]) {
+      a.accountLocation = THREADS_LANGUAGE_LOCATIONS[row.language]
     }
-    if (!map[u].bio && row.bio) map[u].bio = row.bio
-    if (!map[u].accountLocation && THREADS_LANGUAGE_LOCATIONS[row.language]) {
-      map[u].accountLocation = THREADS_LANGUAGE_LOCATIONS[row.language]
+    if (row.is_repost === true) continue
+    const lk = Number(row.like_count)
+    if (!isNaN(lk) && lk >= 0) a.likes.push(lk)
+    const rp = Number(row.reply_count)
+    if (!isNaN(rp) && rp >= 0) a.replies.push(rp)
+    const vw = Number(row.view_count)
+    if (row.view_count_status !== 'not_available' && !isNaN(vw) && vw > 0) a.views.push(vw)
+  }
+  const median = (vals) => {
+    if (!vals.length) return null
+    const s = [...vals].sort((x, y) => x - y)
+    const m = Math.floor(s.length / 2)
+    return s.length % 2 === 0 ? Math.round((s[m - 1] + s[m]) / 2) : s[m]
+  }
+  const out = {}
+  for (const [u, a] of Object.entries(acc)) {
+    out[u] = {
+      followerCount: a.followerCount,
+      bio: a.bio,
+      accountLocation: a.accountLocation,
+      medianLikes: median(a.likes),
+      medianComments: median(a.replies),
+      medianViews: median(a.views),
     }
   }
-  return map
+  return out
 }
 
 /**

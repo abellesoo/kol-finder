@@ -1,7 +1,23 @@
 # KOL Finder — Pre-Launch Audit Fix Plan
 
 _Internal execution plan for addressing the pre-launch audit findings._
-_Status: awaiting go-ahead. No code changed yet._
+
+_Status: **done** — the plan below was executed; it's kept as a record of what
+the audit found and why the fixes look the way they do. See git history for the
+individual changes._
+
+_Verified against the live system 2026-07-17:_
+- _RLS is applied and enforcing — `is_markato()` exists and returns false for an
+  anonymous caller (manual item 1)._
+- _The `merge_review_entry` RPC is applied, so the P0 concurrency fix runs on its
+  atomic path, not the fetch-merge-write fallback in `reviewState.js`._
+- _Worker auth is live — unauthenticated requests get a 401 (manual item 3)._
+- _`deploy.yml` pins `wrangler@3` and gates the worker on the `worker-production`
+  environment (manual item 5). Note the environment has no required reviewers, so
+  it currently records rather than gates — fine for a solo maintainer._
+
+_Not verifiable from code — confirm in the dashboards if it matters: OAuth
+hosted-domain restriction (item 2) and secret rotation (item 4, precautionary)._
 
 Findings were produced by a full codebase read plus four parallel review agents
 (security, data integrity, edge cases, auth/state). This document is the plan to

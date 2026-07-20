@@ -6,7 +6,7 @@ import { fetchBatchStats, fetchThreadsProfileItems } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
-import { computeLiveEngagementScore } from '../lib/scoreInfluencers'
+import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluencers'
 import { updateSessionLiveStats } from '../lib/sessionHistory'
 import { supabase } from '../lib/supabase'
 import TableErrorBoundary from './TableErrorBoundary'
@@ -308,8 +308,8 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
   }
 
   return (
-    <div className="border border-card-edge rounded-[14px] overflow-x-auto bg-white">
-      <div className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
+    <div className="border border-card-edge rounded-[14px] overflow-auto max-h-[70vh] bg-white">
+      <div className="sticky top-0 z-10 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
         {selectionMode && <span />}
         <span>Account</span>
@@ -565,12 +565,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
         ? computeLiveEngagementScore(medLikes, medViews, medComments, followerCount)
         : (r.scores?.engagement ?? 0)
       const relScore = r.scores?.relevancy ?? 0
-      // Base Overall = Eng×8 + Rel×2. When blend is on AND an AI fit exists,
-      // reweight to 60% Engagement + 10% Relevancy + 30% AI fit:
-      // Eng×6 + Rel×1 + AIfit×3 (each sub-score 0–10 → total 0–100).
-      const overall = (blendAi && ai?.score != null)
-        ? Math.round(engScore * 6 + relScore * 1 + ai.score * 3)
-        : Math.round(engScore * 8 + relScore * 2)
+      // Same blend + off-niche cap as the initial score (computeOverall):
+      // 50% Eng / 50% Rel, or 35/25/40 with Eng/Rel/AI-fit when blend is on.
+      const overall = computeOverall(engScore, relScore, ai?.score ?? null, blendAi)
       return {
         ...r, ...inf,
         // Explicit: `...inf` would otherwise clobber a persisted r.followerCount
@@ -717,7 +714,12 @@ export default function ResultsStep({ results, influencers, config, sessionId })
       }))
       const scoreMap = await fetchAiScores(
         candidates,
-        { campaignBrief: config?.campaignBrief || '' },
+        {
+          campaignBrief: config?.campaignBrief || '',
+          targetAudience: config?.targetAudience || '',
+          criteria: config?.targetKeywords ? `In-niche signals to reward: ${config.targetKeywords}` : '',
+          excludeNiches: config?.excludeKeywords || '',
+        },
         (done, total) => setAiProgress({ done, total }),
       )
       setAiStats((prev) => ({ ...prev, ...scoreMap }))

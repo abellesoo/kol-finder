@@ -896,7 +896,7 @@ Hi dear,
       const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
       if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
 
-      const { candidates = [], criteria = '', campaignBrief = '', examples = [] } = await request.json()
+      const { candidates = [], criteria = '', campaignBrief = '', targetAudience = '', excludeNiches = '', examples = [] } = await request.json()
       if (!Array.isArray(candidates) || candidates.length === 0) {
         return json({ error: 'candidates required' }, 400, origin)
       }
@@ -921,25 +921,29 @@ Hi dear,
         `@${clean(c.username)}: bio="${clean(c.bio).slice(0, 160)}"; niches=[${tags(c.nicheSignals)}]; hashtags=[${tags(c.hashtags)}]; flags=[${tags(c.flags)}]; ${num(c.followerCount)} followers; ~${num(c.medianLikes)} median likes; rule_score=${c.overall == null ? '?' : c.overall}`
       )).join('\n')
 
-      const prompt = `You are an assistant helping a Hong Kong beauty/skincare brand's marketing team decide which social KOLs (Instagram or Threads creators) fit a seeding campaign. Rate each candidate 0–100 for how well they fit THIS campaign.
+      const prompt = `You help a marketing team decide which Instagram/Threads creators fit a KOL seeding campaign. Score each candidate 0–100 on how well their CONTENT NICHE and AUDIENCE match this specific campaign. Niche/audience fit is the goal; reach and engagement are secondary.
 
-# Campaign brief
+# Campaign brief (brand, product, selling points)
 ${clean(campaignBrief) || '(none provided)'}
 
-# What the team is looking for (seeding criteria)
-${clean(criteria) || '(none provided)'}
+# Target audience — who this product is FOR
+${clean(targetAudience) || '(not specified — infer from the brief)'}
 
-# The team's past decisions on similar accounts — LEARN their taste from these
-${exampleLines || '(no past decisions yet — rate on criteria + brief alone)'}
+# Who fits vs who does NOT
+${clean(criteria) || '(none provided)'}${clean(excludeNiches) ? `\nNot a fit — score these 25 or below even with high engagement: ${clean(excludeNiches)}` : ''}
 
-# Candidates to rate now
+# The team's past decisions on similar accounts — learn their taste
+${exampleLines || '(no past decisions yet — score on brief + audience + fit criteria alone)'}
+
+# Candidates to score now
 ${candidateLines}
 
-# How to score
-- Weigh the seeding criteria and brief most heavily, then the patterns in past decisions (what they approved vs rejected, and why).
-- A high rule_score (engagement/relevancy) is a positive signal but NOT decisive — a niche/audience mismatch or a rejection-worthy pattern should pull the score down even if engagement is high.
-- If there are few or no past decisions, score on the criteria and brief; be moderate, don't over-confidently give extremes.
-- reason: ONE short English sentence (max ~15 words) explaining the score, referencing a concrete signal or a past-decision pattern when relevant.
+# How to score (audience fit first)
+- Judge primarily by the creator's actual content niche and who follows them. Ask: would this creator's audience plausibly buy THIS product?
+- A creator in a DIFFERENT vertical scores low even with excellent engagement. Example: a makeup/skincare creator for a food, fitness, or nutrition product is a mismatch — score it low. High reach in the wrong niche is still the wrong niche.
+- rule_score reflects reach and engagement, NOT niche fit. Treat it as weak evidence and do not anchor on it.
+- Use the full range. Anchors: 80–100 = squarely in-niche, audience is the target buyer; 50–65 = adjacent/lifestyle overlap, plausible but not core; 25–45 = weak or tangential fit; 0–20 = wrong niche or excluded category.
+- reason: ONE short English sentence (max ~15 words) naming the concrete niche/audience signal that drove the score.
 
 # Output
 Return ONLY valid JSON, no markdown, in exactly this shape:

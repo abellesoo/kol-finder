@@ -50,6 +50,14 @@ function StepProgress({ current }) {
 export default function ConfigStep({ fileNames = [], influencerCount, onStart }) {
   const [sessionTitle, setSessionTitle] = useState('')
   const [niches, setNiches] = useState(['beauty', 'skincare'])
+  // Per-campaign relevancy vocabulary. The six fixed niches can't express a
+  // specific product (減脂 protein shake, etc.), so the operator types the
+  // in-niche signals to reward and the wrong-vertical signals to penalise.
+  // Both feed the rule engine (scoreRelevancy) and the AI scorer (criteria /
+  // excludeNiches). targetAudience describes WHO the product is for.
+  const [targetAudience, setTargetAudience] = useState('')
+  const [targetKeywords, setTargetKeywords] = useState('')
+  const [excludeKeywords, setExcludeKeywords] = useState('')
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [requireVideo, setRequireVideo] = useState(true)
   const [minEngagement, setMinEngagement] = useState(0)
@@ -108,6 +116,9 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
     onStart({
       sessionTitle: sessionTitle.trim(),
       niches: niches.map((id) => NICHE_OPTIONS.find((n) => n.id === id)?.label || id),
+      targetAudience: targetAudience.trim(),
+      targetKeywords: targetKeywords.trim(),
+      excludeKeywords: excludeKeywords.trim(),
       locationTarget,
       requireVideo,
       minEngagement,
@@ -166,6 +177,49 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
                 {n.label}
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* Target audience + relevancy keywords */}
+        <section className="mb-8 space-y-4">
+          <div>
+            <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
+              Target audience
+              <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">who the product is for — sharpens relevancy scoring</span>
+            </label>
+            <textarea
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              rows={2}
+              placeholder="例：20–45 歲女性，注重健康、辦公室 OL、gym 女生（唔極端戒糖）、鍾意甜食但想低卡"
+              className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
+              In-niche keywords
+              <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">reward these — comma or new line separated</span>
+            </label>
+            <textarea
+              value={targetKeywords}
+              onChange={(e) => setTargetKeywords(e.target.value)}
+              rows={2}
+              placeholder="例：減脂, 高蛋白, protein, 健身, gym, 代餐, 低卡, 減脂餐, 增肌, 健康食"
+              className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+            />
+          </div>
+          <div>
+            <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
+              Exclude keywords
+              <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">wrong-vertical signals — strongly penalised even with high engagement</span>
+            </label>
+            <input
+              type="text"
+              value={excludeKeywords}
+              onChange={(e) => setExcludeKeywords(e.target.value)}
+              placeholder="例：makeup, 化妝, 美妝, cosmetic, 眼影, 唇膏"
+              className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+            />
           </div>
         </section>
 

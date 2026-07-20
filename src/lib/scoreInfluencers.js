@@ -51,12 +51,32 @@ export function computeLiveEngagementScore(medianLikes, medianViews, medianComme
   return parseFloat(Math.min(10, raw).toFixed(2))
 }
 
-// Relevancy Score: baseline 3, +1 per keyword hit in target niches, -1 per off-niche category match
-function scoreRelevancy(inf, targetNiches) {
+// Split a comma / newline separated keyword string (or array) into clean terms.
+function parseKeywordList(input) {
+  if (!input) return []
+  const arr = Array.isArray(input) ? input : String(input).split(/[\n,]/)
+  return arr.map((s) => String(s).trim().toLowerCase()).filter(Boolean)
+}
+
+// Relevancy Score: baseline 3, then adjusted by niche fit. Built-in niche
+// keywords give +1 per hit in target niches and -1 per off-niche category.
+// The operator's own campaign keywords carry more weight than the fixed niche
+// dictionary — they describe THIS product ("減脂", "高蛋白"), which the six built-in
+// niches can't. Exclude keywords ("makeup", "化妝") are a hard negative: a match
+// pulls the score below the off-niche floor so engagement can't rescue a
+// wrong-vertical creator (a makeup account on a protein-shake campaign).
+const TARGET_KEYWORD_WEIGHT = 1.5
+const EXCLUDE_KEYWORD_PENALTY = 3
+function scoreRelevancy(inf, config) {
+  const targetNiches = config.niches || []
+  const targetKeywords = parseKeywordList(config.targetKeywords)
+  const excludeKeywords = parseKeywordList(config.excludeKeywords)
+
   const allText = [
     ...inf.hashtags,
     ...inf.sampleCaptions,
     inf.fullName || '',
+    inf.bio || '',
   ].join(' ')
 
   const targetLabels = new Set(
@@ -77,8 +97,39 @@ function scoreRelevancy(inf, targetNiches) {
     }
   }
 
+  // Operator-defined campaign keywords — the precise, per-campaign signal.
+  const targetFound = textContainsAny(allText, targetKeywords)
+  hits += targetFound.length * TARGET_KEYWORD_WEIGHT
+  signals.push(...targetFound)
+
+  // Exclude keywords: strong negative per matched term.
+  const excludeFound = textContainsAny(allText, excludeKeywords)
+  deductions += excludeFound.length * EXCLUDE_KEYWORD_PENALTY
+
   const score = Math.max(0, Math.min(10, 3 + hits - deductions))
   return { score, signals: [...new Set(signals)].slice(0, 5) }
+}
+
+// Off-niche floor + overall blend, shared so the initial score (here) and the
+// live-median re-score in ResultsStep stay identical.
+//
+// Base overall = 50% Engagement + 50% Relevancy (each 0–10 → 0–100). Relevancy
+// was only 20% before, which let a high-engagement wrong-niche creator top the
+// list — the exact failure that seeded makeup accounts onto a protein campaign.
+// When AI blend is on and a fit score exists: 35% Eng + 25% Rel + 40% AI fit.
+//
+// The floor is the safety net: a creator whose relevancy fell BELOW baseline
+// (net off-niche / excluded matches) is capped, so reach alone can't lift a
+// wrong-vertical account into the shortlist.
+export const RELEVANCY_FLOOR = 3
+export const OFF_NICHE_CAP = 40
+export function computeOverall(engScore, relScore, aiScore = null, blendAi = false) {
+  const raw = (blendAi && aiScore != null)
+    ? engScore * 3.5 + relScore * 2.5 + aiScore * 4
+    : engScore * 5 + relScore * 5
+  let overall = Math.round(raw)
+  if (relScore < RELEVANCY_FLOOR) overall = Math.min(overall, OFF_NICHE_CAP)
+  return overall
 }
 
 // Higher score = HIGHER bot risk (matches the field name `botRisk`).
@@ -144,7 +195,7 @@ function buildFlags(inf, relevancyScore, botScore, config) {
 export async function scoreInfluencers(influencers, config) {
   return influencers.map((inf) => {
     const engagement = scoreEngagement(inf)
-    const relevancy = scoreRelevancy(inf, config.niches)
+    const relevancy = scoreRelevancy(inf, config)
     const botRisk = scoreBotRisk(inf)
 
     // Apply the two config options that were previously collected but ignored:
@@ -175,8 +226,8 @@ export async function scoreInfluencers(influencers, config) {
     relevancyScore = Math.max(0, Math.min(10, relevancyScore))
     const relevancyAdjusted = { score: relevancyScore, signals: relevancy.signals }
 
-    // Overall = 80% Engagement Score + 20% Relevancy Score (each 0–10, total 0–100)
-    const overall = Math.round(engagement.score * 8 + relevancyScore * 2)
+    // 50% Engagement + 50% Relevancy, with the off-niche cap (see computeOverall).
+    const overall = computeOverall(engagement.score, relevancyScore)
 
     const flags = [...buildFlags(inf, relevancyAdjusted, botRisk, config), ...configFlags]
 

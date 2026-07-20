@@ -66,7 +66,7 @@ export async function pullHistoricalDecisions({ maxRows = 15, maxExamples = 40 }
 // worker call stays within a reliable JSON-output size. Mirrors fetchBatchStats'
 // contract: reports progress, never throws away succeeded batches on one bad
 // batch, and attaches a non-enumerable _failed list of usernames.
-export async function fetchAiScores(candidates, { criteria = '', campaignBrief = '', examples = null } = {}, onProgress) {
+export async function fetchAiScores(candidates, { criteria = '', campaignBrief = '', targetAudience = '', excludeNiches = '', examples = null } = {}, onProgress) {
   const BATCH = 15
   const scoreMap = {}
   const failed = []
@@ -101,6 +101,8 @@ export async function fetchAiScores(candidates, { criteria = '', campaignBrief =
           })),
           criteria,
           campaignBrief,
+          targetAudience,
+          excludeNiches,
           examples: hist,
         }),
       })

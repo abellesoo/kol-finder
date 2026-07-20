@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry, reviewKey } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey, campaignDmDraft, DM_DRAFT_KEY } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
@@ -58,7 +58,9 @@ function FitRating({ value, onChange }) {
   )
 }
 
-async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignBrief }) {
+// One DM draft per campaign — generated from the brief alone and reused for
+// every approved KOL (no per-KOL personalization).
+async function fetchDmDraft({ campaignBrief }) {
   // The worker now requires a Supabase Bearer token on every endpoint.
   const headers = { 'Content-Type': 'application/json' }
   if (supabase) {
@@ -69,7 +71,7 @@ async function fetchDmDraft({ username, bio, hashtags, sampleCaptions, campaignB
   const res = await fetch(`${PROXY}/draft-dm`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ username, bio, hashtags, sampleCaptions, campaignBrief }),
+    body: JSON.stringify({ campaignBrief }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -187,32 +189,25 @@ function ColumnPicker({ selected, onChange }) {
 
 
 
-function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedColumns }) {
+function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
-  const dmDraft = reviewEntry?.dm_draft || ''
   const rejectReason = reviewEntry?.reject_reason || null
   const fitRating = reviewEntry?.fit_rating || null
 
-  const [drafting, setDrafting] = useState(false)
-  const [draftError, setDraftError] = useState(null)
-  const [localDraft, setLocalDraft] = useState(dmDraft)
   const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
   const [notesSaving, setNotesSaving] = useState(false)
   const notesTimerRef = useRef(null)
-  const draftTimerRef = useRef(null)
-  // Refs mirror the latest local values so async callbacks (draft generation)
-  // don't overwrite notes/draft the user typed while a request was in flight.
+  // Ref mirrors the latest local value so async callbacks don't overwrite
+  // notes the user typed while a request was in flight.
   const localNotesRef = useRef(localNotes)
-  const localDraftRef = useRef(localDraft)
 
-  useEffect(() => { setLocalDraft(dmDraft); localDraftRef.current = dmDraft }, [dmDraft])
   useEffect(() => { setLocalNotes(reviewEntry?.notes || ''); localNotesRef.current = reviewEntry?.notes || '' }, [reviewEntry?.notes])
 
   // Helper so every onUpdate call includes the full current entry (from refs,
   // never a stale closure).
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current,
+    status, dm_status: dmStatus, notes: localNotesRef.current,
     reject_reason: rejectReason, fit_rating: fitRating, ...overrides,
   })
 
@@ -227,39 +222,8 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
     }, 800)
   }
 
-  const handleDraftChange = (val) => {
-    setLocalDraft(val)
-    localDraftRef.current = val
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    draftTimerRef.current = setTimeout(() => {
-      onUpdate(reviewKey(account), entry({ status: 'approved', dm_draft: val }))
-    }, 800)
-  }
-
-  const generateDraft = async () => {
-    setDrafting(true)
-    setDraftError(null)
-    try {
-      const draft = await fetchDmDraft({
-        username: account.username,
-        bio: account.bio,
-        hashtags: account.hashtags,
-        sampleCaptions: account.sampleCaption ? [account.sampleCaption] : [],
-        campaignBrief,
-      })
-      setLocalDraft(draft)
-      localDraftRef.current = draft
-      onUpdate(reviewKey(account), entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
-    } catch (err) {
-      setDraftError(err.message)
-    } finally {
-      setDrafting(false)
-    }
-  }
-
   const handleApprove = () => {
     onUpdate(reviewKey(account), entry({ status: 'approved' }))
-    generateDraft()
   }
 
   const handleReject = () => {
@@ -267,7 +231,7 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
   }
 
   // Undo returns to the pending state — it must NOT flip to the opposite
-  // decision (which previously also fired a paid DM draft).
+  // decision.
   const handleUndo = () => {
     onUpdate(reviewKey(account), entry({ status: 'pending' }))
   }
@@ -322,14 +286,14 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
                 className="flex items-center gap-1 px-3 py-1.5 rounded-[9px] border border-rose/40 text-rose text-[12px] hover:bg-rose/10 transition-all">
                 <X size={12} /> Reject
               </button>
-              <button onClick={handleApprove} disabled={drafting}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-[9px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all disabled:opacity-50">
-                {drafting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+              <button onClick={handleApprove}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-[9px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all">
+                <Check size={12} />
                 Approve
               </button>
             </div>
           )}
-          {isApproved && !drafting && (
+          {isApproved && (
             <div className="flex flex-col items-end gap-1.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] text-sage font-mono flex items-center gap-1"><Check size={11} /> Approved</span>
@@ -406,65 +370,25 @@ function AccountCard({ account, reviewEntry, campaignBrief, onUpdate, selectedCo
         />
       </div>
 
-      {/* DM Draft — only when approved */}
-      {isApproved && (
-        <div className="border-t border-card-edge/60 px-5 py-4">
-          {drafting && (
-            <div className="flex items-center gap-2 text-[11px] text-faint mb-3">
-              <Loader2 size={13} className="animate-spin" /> Generating DM draft…
-            </div>
-          )}
-          {draftError && !drafting && (
-            <div className="flex items-center gap-3 mb-3">
-              <p className="text-[11px] text-rose">Draft failed: {draftError}</p>
-              <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Retry</button>
-            </div>
-          )}
-          {localDraft && !drafting && (
-            <>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">DM Draft</p>
-                <button onClick={generateDraft} className="text-[10px] font-mono text-faint hover:text-ink transition-colors">Regenerate</button>
-              </div>
-              <textarea
-                value={localDraft}
-                onChange={(e) => handleDraftChange(e.target.value)}
-                rows={5}
-                className="w-full px-3 py-2.5 border border-card-edge rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
-              />
-            </>
-          )}
-          {!localDraft && !drafting && !draftError && (
-            <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Generate DM draft</button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
 
-function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, selectedColumns }) {
+function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns }) {
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
-  const dmDraft = reviewEntry?.dm_draft || ''
   const rejectReason = reviewEntry?.reject_reason || null
   const fitRating = reviewEntry?.fit_rating || null
   const [expanded, setExpanded] = useState(false)
-  const [drafting, setDrafting] = useState(false)
-  const [draftError, setDraftError] = useState(null)
-  const [localDraft, setLocalDraft] = useState(dmDraft)
   const [localNotes, setLocalNotes] = useState(reviewEntry?.notes || '')
   const [notesSaving, setNotesSaving] = useState(false)
   const notesTimerRef = useRef(null)
-  const draftTimerRef = useRef(null)
   const localNotesRef = useRef(localNotes)
-  const localDraftRef = useRef(localDraft)
 
-  useEffect(() => { setLocalDraft(dmDraft); localDraftRef.current = dmDraft }, [dmDraft])
   useEffect(() => { setLocalNotes(reviewEntry?.notes || ''); localNotesRef.current = reviewEntry?.notes || '' }, [reviewEntry?.notes])
 
   const entry = (overrides) => ({
-    status, dm_status: dmStatus, dm_draft: localDraftRef.current, notes: localNotesRef.current,
+    status, dm_status: dmStatus, notes: localNotesRef.current,
     reject_reason: rejectReason, fit_rating: fitRating, ...overrides,
   })
 
@@ -479,41 +403,9 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
     }, 800)
   }
 
-  const handleDraftChange = (val) => {
-    setLocalDraft(val)
-    localDraftRef.current = val
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    draftTimerRef.current = setTimeout(() => {
-      onUpdate(reviewKey(account), entry({ status: 'approved', dm_draft: val }))
-    }, 800)
-  }
-
-  const generateDraft = async () => {
-    setDrafting(true)
-    setDraftError(null)
-    try {
-      const draft = await fetchDmDraft({
-        username: account.username,
-        bio: account.bio,
-        hashtags: account.hashtags,
-        sampleCaptions: account.sampleCaption ? [account.sampleCaption] : [],
-        campaignBrief,
-      })
-      setLocalDraft(draft)
-      localDraftRef.current = draft
-      onUpdate(reviewKey(account), entry({ status: 'approved', dm_status: 'not_sent', dm_draft: draft }))
-    } catch (err) {
-      setDraftError(err.message)
-    } finally {
-      setDrafting(false)
-    }
-  }
-
   const handleApprove = (e) => {
     e.stopPropagation()
-    setExpanded(true)
     onUpdate(reviewKey(account), entry({ status: 'approved' }))
-    generateDraft()
   }
 
 
@@ -571,10 +463,9 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
               </button>
               <button
                 onClick={handleApprove}
-                disabled={drafting}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all disabled:opacity-50"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-[8px] bg-sage text-white text-[12px] hover:bg-sage/80 transition-all"
               >
-                {drafting ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                <Check size={11} />
                 Approve
               </button>
             </>
@@ -640,38 +531,6 @@ function AccountTableRow({ account, reviewEntry, campaignBrief, onUpdate, select
                 Sample post <ExternalLink size={10} />
               </a>
             )}
-            {isApproved && (
-              <div className="mt-3">
-                {drafting && (
-                  <div className="flex items-center gap-2 text-[11px] text-faint">
-                    <Loader2 size={13} className="animate-spin" /> Generating DM draft…
-                  </div>
-                )}
-                {draftError && !drafting && (
-                  <div className="flex items-center gap-3">
-                    <p className="text-[11px] text-rose">Draft failed: {draftError}</p>
-                    <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Retry</button>
-                  </div>
-                )}
-                {localDraft && !drafting && (
-                  <>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em]">DM Draft</p>
-                      <button onClick={generateDraft} className="text-[10px] font-mono text-faint hover:text-ink transition-colors">Regenerate</button>
-                    </div>
-                    <textarea
-                      value={localDraft}
-                      onChange={(e) => handleDraftChange(e.target.value)}
-                      rows={4}
-                      className="w-full px-3 py-2 border border-card-edge rounded-[10px] text-[12px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none"
-                    />
-                  </>
-                )}
-                {!localDraft && !drafting && !draftError && (
-                  <button onClick={generateDraft} className="text-[11px] font-mono text-faint hover:text-ink transition-colors underline">Generate DM draft</button>
-                )}
-              </div>
-            )}
           </div>
         </div>
         {/* Notes — always visible in expanded row */}
@@ -711,6 +570,14 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [editingCriteria, setEditingCriteria] = useState(false)
   const [criteriaDraft, setCriteriaDraft] = useState('')
   const criteriaInputRef = useRef(null)
+  // One DM draft per campaign — persisted in review_state.__dm_draft__ and
+  // reused verbatim for every approved account.
+  const [dmDraft, setDmDraft] = useState('')
+  const [editingDm, setEditingDm] = useState(false)
+  const [dmEditText, setDmEditText] = useState('')
+  const dmInputRef = useRef(null)
+  const [dmGenerating, setDmGenerating] = useState(false)
+  const [dmError, setDmError] = useState(null)
   const [viewMode, setViewMode] = useState(null)
   // Refs so persistUpdate can always read latest values without stale closures
   const bmNotesRef = useRef('')
@@ -734,8 +601,17 @@ export default function ReviewPage({ reviewId, onBack }) {
       // pattern as __notes__) so no schema migration is needed.
       const notes = typeof rs.__notes__ === 'string' ? rs.__notes__ : ''
       const crit = typeof rs.__criteria__ === 'string' ? rs.__criteria__ : ''
-      const RESERVED = new Set(['__notes__', '__criteria__'])
+      const RESERVED = new Set(['__notes__', '__criteria__', DM_DRAFT_KEY])
       const accountState = Object.fromEntries(Object.entries(rs).filter(([k]) => !RESERVED.has(k)))
+      // Seed the campaign draft from a legacy per-KOL dm_draft if the
+      // campaign-level key isn't set yet (old drafts were never personalized,
+      // so any one of them is the campaign message). Persist the seed so it
+      // survives even after legacy per-KOL fields stop being written.
+      const draft = campaignDmDraft(rs)
+      if (draft && typeof rs[DM_DRAFT_KEY] !== 'string') {
+        mergeReviewEntry(reviewId, DM_DRAFT_KEY, draft).catch((e) => console.error('Failed to seed campaign DM draft', e))
+      }
+      setDmDraft(draft)
       setCampaignBrief(data.campaign_brief || '')
       setCriteria(crit)
       setAccounts(accs)
@@ -759,10 +635,11 @@ export default function ReviewPage({ reviewId, onBack }) {
       // only trust the map if it actually contains the account we just wrote —
       // otherwise keep the optimistic local state rather than wiping it.
       if (merged && merged[username]) {
-        const { __notes__, __criteria__, ...accountState } = merged
+        const { __notes__, __criteria__, __dm_draft__, ...accountState } = merged
         reviewStateRef.current = accountState
         if (typeof __notes__ === 'string') bmNotesRef.current = __notes__
         if (typeof __criteria__ === 'string') setCriteria(__criteria__)
+        if (typeof __dm_draft__ === 'string') setDmDraft(__dm_draft__)
         setReviewState(accountState)
       }
     } catch (e) {
@@ -814,6 +691,46 @@ export default function ReviewPage({ reviewId, onBack }) {
       console.error('Failed to save seeding criteria', e)
     }
   }, [criteriaDraft, criteria, reviewId])
+
+  // Persist the single campaign DM draft under the reserved __dm_draft__ key,
+  // via the same atomic merge helper as notes/criteria.
+  const saveDmDraft = useCallback(async (text) => {
+    setDmDraft(text)
+    try {
+      await mergeReviewEntry(reviewId, DM_DRAFT_KEY, text)
+    } catch (e) {
+      console.error('Failed to save DM draft', e)
+    }
+  }, [reviewId])
+
+  const generateDmDraft = useCallback(async () => {
+    setDmGenerating(true)
+    setDmError(null)
+    try {
+      const draft = await fetchDmDraft({ campaignBrief })
+      setEditingDm(false)
+      await saveDmDraft(draft)
+    } catch (e) {
+      setDmError(e.message)
+    } finally {
+      setDmGenerating(false)
+    }
+  }, [campaignBrief, saveDmDraft])
+
+  const startEditDm = () => {
+    setDmEditText(dmDraft)
+    setEditingDm(true)
+    setTimeout(() => dmInputRef.current?.focus(), 0)
+  }
+
+  const cancelEditDm = () => setEditingDm(false)
+
+  const commitDm = useCallback(async () => {
+    const trimmed = dmEditText.trim()
+    setEditingDm(false)
+    if (trimmed === dmDraft) return
+    await saveDmDraft(trimmed)
+  }, [dmEditText, dmDraft, saveDmDraft])
 
   const handleUpdate = useCallback((username, entry) => {
     // Optimistic local update for snappy UI; persistUpdate reconciles with the
@@ -971,6 +888,56 @@ export default function ReviewPage({ reviewId, onBack }) {
           )}
         </div>
 
+        {/* One DM draft per campaign — generated from the brief and reused for
+            every approved account. Editable; never regenerates on its own. */}
+        <div className="mt-3 px-4 py-3 bg-surface border border-card-edge rounded-[12px] group/dm">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">Campaign DM draft — sent to every approved account</p>
+            <div className="flex items-center gap-3">
+              {dmDraft && !editingDm && !dmGenerating && (
+                <>
+                  <button onClick={generateDmDraft} className="text-[10px] font-mono text-faint hover:text-ink transition-colors">Regenerate</button>
+                  <button onClick={startEditDm} className="text-faint hover:text-ink transition-colors opacity-0 group-hover/dm:opacity-100" title="Edit DM draft">
+                    <Pencil size={12} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          {dmGenerating ? (
+            <div className="flex items-center gap-2 text-[11px] text-faint py-1">
+              <Loader2 size={13} className="animate-spin" /> Generating DM draft…
+            </div>
+          ) : editingDm ? (
+            <div>
+              <textarea
+                ref={dmInputRef}
+                value={dmEditText}
+                onChange={(e) => setDmEditText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') cancelEditDm() }}
+                rows={6}
+                className="w-full text-[13px] text-ink bg-white border border-ink/30 rounded-[8px] px-3 py-2 focus:outline-none resize-none"
+              />
+              <div className="flex gap-2 mt-2">
+                <button onClick={commitDm} className="flex items-center gap-1 px-3 py-1 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 transition-all">
+                  <Check size={12} /> Save
+                </button>
+                <button onClick={cancelEditDm} className="text-[12px] text-faint hover:text-ink transition-colors px-2">Cancel</button>
+              </div>
+            </div>
+          ) : dmDraft ? (
+            <p className="text-[13px] text-body whitespace-pre-wrap">{dmDraft}</p>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button onClick={generateDmDraft} className="text-[12px] font-mono text-faint hover:text-ink transition-colors underline">Generate DM draft</button>
+              {dmError && <span className="text-[11px] text-rose">Draft failed: {dmError}</span>}
+            </div>
+          )}
+          {dmError && dmDraft && !dmGenerating && !editingDm && (
+            <p className="text-[11px] text-rose mt-2">Draft failed: {dmError}</p>
+          )}
+        </div>
+
       </div>
 
       {viewMode === 'table' ? (() => {
@@ -1006,7 +973,6 @@ export default function ReviewPage({ reviewId, onBack }) {
               key={reviewKey(account)}
               account={account}
               reviewEntry={reviewState[reviewKey(account)]}
-              campaignBrief={campaignBrief}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}
             />
@@ -1021,7 +987,6 @@ export default function ReviewPage({ reviewId, onBack }) {
               key={reviewKey(account)}
               account={account}
               reviewEntry={reviewState[reviewKey(account)]}
-              campaignBrief={campaignBrief}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}
             />
@@ -1030,7 +995,7 @@ export default function ReviewPage({ reviewId, onBack }) {
       )}
 
       <p className="mt-8 text-[11px] text-faint font-mono text-center">
-        Approve to generate a DM draft · Changes save automatically
+        Approved accounts share the campaign DM draft above · Changes save automatically
       </p>
     </div>
   )

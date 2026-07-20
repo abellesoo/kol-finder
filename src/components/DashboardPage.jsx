@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, AlertCircle, Rocket } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { reviewKey } from '../lib/reviewState'
+import { reviewKey, campaignDmDraft } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
 import { listCampaigns } from '../lib/campaigns'
 
@@ -78,6 +78,9 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
   campaigns.forEach((c) => {
     const rs = c.review_state || {}
     const accounts = c.accounts || []
+    // One DM draft per campaign — an approved account is "ready" when the
+    // campaign has a draft and its own DM hasn't gone out yet.
+    const hasDraft = !!campaignDmDraft(rs)
     accounts.forEach((a) => {
       const entry = rs[reviewKey(a)]
       if (!entry?.status || entry.status === 'pending') {
@@ -86,7 +89,7 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
         approved++
         const dmStatus = entry.dm_status || 'not_sent'
         if (dmStatus === 'sent' || dmStatus === 'replied') dmsSent++
-        if (dmStatus === 'not_sent' && entry.dm_draft) dmReady++
+        if (dmStatus === 'not_sent' && hasDraft) dmReady++
       }
     })
   })

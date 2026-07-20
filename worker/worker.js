@@ -791,15 +791,15 @@ export default {
     }
 
     // POST /draft-dm
-    // Body: { username, campaignBrief } — bio/hashtags/sampleCaptions may still
-    // be sent by older clients but are no longer used (no personalization).
+    // Body: { campaignBrief } — one draft per campaign, reused for every
+    // approved KOL. username/bio/hashtags/sampleCaptions may still be sent by
+    // older clients but are ignored (no personalization).
     // Returns: { draft }  — HK Traditional Chinese DM draft
     if (pathname === '/draft-dm' && request.method === 'POST') {
       const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
       if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
 
-      const { username, campaignBrief = '' } = await request.json()
-      if (!username) return json({ error: 'username required' }, 400, origin)
+      const { campaignBrief = '' } = await request.json()
 
       // Strip control chars and lone Unicode surrogates that corrupt JSON serialisation
       const clean = (s) => String(s || '')

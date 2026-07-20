@@ -3,7 +3,24 @@ import { supabase } from './supabase'
 // Canonical review_state persistence.
 //
 // review_state is a jsonb map on the shared_results row:
-//   { [username]: { status, dm_status, dm_draft, notes }, __notes__: string }
+//   { [username]: { status, dm_status, notes }, __notes__: string,
+//     __criteria__: string, __dm_draft__: string }
+
+// One DM draft per campaign (shared_results row), stored under a reserved key
+// like __notes__/__criteria__. Legacy rows carry per-KOL dm_draft fields
+// instead — those were never actually personalized, so any one of them seeds
+// the campaign draft. Nothing writes per-KOL dm_draft anymore.
+export const DM_DRAFT_KEY = '__dm_draft__'
+
+export function campaignDmDraft(reviewState) {
+  const rs = reviewState || {}
+  if (typeof rs[DM_DRAFT_KEY] === 'string' && rs[DM_DRAFT_KEY]) return rs[DM_DRAFT_KEY]
+  for (const [key, entry] of Object.entries(rs)) {
+    if (key.startsWith('__')) continue
+    if (entry && typeof entry === 'object' && entry.dm_draft) return entry.dm_draft
+  }
+  return ''
+}
 
 // Key for an account's review_state entry. Instagram accounts keep the bare
 // username (backward compatible with every existing row); Threads accounts are

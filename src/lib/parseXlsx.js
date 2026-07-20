@@ -16,6 +16,24 @@ const LOCATION_SIGNALS = {
   'Macau': ['macau', 'macao', '澳門'],
 }
 
+// Score `searchText` (already-joined hashtags/captions/bio/etc.) against each
+// LOCATION_SIGNALS entry and return the name with the most keyword hits, or ''
+// if nothing matches. Shared by IG (structured-field fallback) and Threads
+// (only signal available — Threads posts carry no city/country/locationName).
+function matchLocationSignals(searchText) {
+  const lower = searchText.toLowerCase()
+  let bestLocation = ''
+  let bestCount = 0
+  for (const [loc, signals] of Object.entries(LOCATION_SIGNALS)) {
+    const count = signals.filter((kw) => lower.includes(kw.toLowerCase())).length
+    if (count > bestCount) {
+      bestCount = count
+      bestLocation = loc
+    }
+  }
+  return bestLocation
+}
+
 // Handle hashtags from both xlsx rows (hashtags/0, hashtags/1…) and raw API items (array)
 function getRowHashtags(row) {
   if (Array.isArray(row.hashtags)) return row.hashtags.map((h) => String(h).toLowerCase())
@@ -137,23 +155,7 @@ export function aggregatePostItems(rows, brandName = '') {
       .find(Boolean) || ''
 
     if (!accountLocation) {
-      const searchText = [
-        ...uniqueHashtags,
-        captions,
-        ...locationNames,
-        bio,
-      ].join(' ').toLowerCase()
-
-      let bestLocation = ''
-      let bestCount = 0
-      for (const [loc, signals] of Object.entries(LOCATION_SIGNALS)) {
-        const count = signals.filter((kw) => searchText.includes(kw.toLowerCase())).length
-        if (count > bestCount) {
-          bestCount = count
-          bestLocation = loc
-        }
-      }
-      accountLocation = bestLocation
+      accountLocation = matchLocationSignals([...uniqueHashtags, captions, ...locationNames, bio].join(' '))
     }
 
     // Most recent post URL
@@ -212,6 +214,20 @@ export function aggregatePostItems(rows, brandName = '') {
 // a strong signal (zh_TW ≈ Taiwan audience) — fall back to LOCATION_SIGNALS
 // text matching when it's absent or ambiguous.
 const THREADS_LANGUAGE_LOCATIONS = { zh_TW: 'Taiwan', zh_HK: 'Hong Kong' }
+
+// Written-Cantonese markers — characters used in Hong Kong vernacular writing
+// that essentially never appear in Taiwan / standard-Mandarin posts. Threads
+// skews heavily Taiwanese and its search actor has NO geo filter, so any
+// Traditional-Chinese query returns a TW-dominated feed. A Cantonese caption is
+// the strongest available signal that an account is actually Hong Kong — far
+// stronger than Meta's `language` tag, which labels most HK creators zh_TW or
+// leaves them blank. Ambiguous characters that also occur in Mandarin compounds
+// (係 in 關係, 邊 in 旁邊, 點 in 地點, 度 in 溫度) are deliberately EXCLUDED — only
+// high-confidence markers are listed, to avoid false-positive HK labels.
+const CANTONESE_MARKERS = /[嘅唔咗喺啲嗰冇佢嘢嚟諗咩㗎睇攞靚咁乜攰嘥嗌畀嘞]/
+export function isCantoneseText(text) {
+  return CANTONESE_MARKERS.test(String(text || ''))
+}
 
 // Pull every URL a Threads item exposes (post links + bio/external links + link
 // previews) into a flat string list — buildFlags scans these for affiliate-link
@@ -318,8 +334,19 @@ export function aggregateThreadsPostItems(rows, trackByTerm = {}, enrichByUser =
     const terms = [...new Set(posts.map((p) => p.search_keyword).filter(Boolean))]
     const sourceTrack = trackByTerm[terms[0]] || null
 
-    const accountLocation =
-      (enrich.accountLocation || '') || first((p) => THREADS_LANGUAGE_LOCATIONS[p.language])
+    // Location signal, strongest first. Threads posts carry no city/country/
+    // locationName field (unlike IG), so text signals are all we have:
+    //  1. Written Cantonese in caption/bio — highest confidence, overrides below.
+    //  2. Brand/district/keyword matching (same LOCATION_SIGNALS list IG uses)
+    //     over hashtags+captions+bio — catches HK (and TW/SG/Macau) accounts
+    //     that don't happen to use a Cantonese-only character.
+    //  3. Meta's `language` tag — weakest; defaults most HK creators to zh_TW.
+    const writesCantonese =
+      isCantoneseText(captionsList.join(' ')) || isCantoneseText(bio)
+    const accountLocation = writesCantonese
+      ? 'Hong Kong'
+      : matchLocationSignals([...hashtags, captionsList.join(' '), bio].join(' ')) ||
+        (enrich.accountLocation || '') || first((p) => THREADS_LANGUAGE_LOCATIONS[p.language])
 
     const samplePost = posts[0] || null
     const sampleLikes = samplePost ? tLikes(samplePost) : NaN

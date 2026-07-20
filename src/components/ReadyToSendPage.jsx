@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry, reviewKey } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey, campaignDmDraft } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
 
@@ -97,6 +97,8 @@ export default function ReadyToSendPage() {
       const ready = []
       for (const row of data || []) {
         metaMap[row.id] = { campaignBrief: row.campaign_brief || '', createdAt: row.created_at }
+        // One DM draft per campaign, reused for every approved account in it.
+        const campaignDraft = campaignDmDraft(row.review_state)
         for (const account of row.accounts || []) {
           const entry = row.review_state?.[reviewKey(account)]
           if (entry?.status === 'approved') {
@@ -106,7 +108,7 @@ export default function ReadyToSendPage() {
               stateKey: reviewKey(account), // review_state key (≠ username for Threads)
               platform: account.platform || 'instagram',
               fullName: account.fullName || '',
-              dm_draft: entry.dm_draft || '',
+              dm_draft: campaignDraft,
               dmStatus: entry.dm_status || 'not_sent',
               campaignBrief: row.campaign_brief || '',
               reviewEntry: entry,
@@ -187,7 +189,9 @@ export default function ReadyToSendPage() {
             onClick={() => {
               const results = items.map((item) => item.accountData || { username: item.username })
               const influencers = items.map((item) => item.accountData || { username: item.username, fullName: item.fullName })
-              const reviewState = Object.fromEntries(items.map((item) => [item.stateKey, item.reviewEntry]))
+              // The DM draft is campaign-level now; fold it onto each account's
+              // entry so the exporter's per-row dm_draft column stays populated.
+              const reviewState = Object.fromEntries(items.map((item) => [item.stateKey, { ...item.reviewEntry, dm_draft: item.dm_draft }]))
               const exportIds = [
                 ...ALWAYS_EXPORT_IDS,
                 ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),

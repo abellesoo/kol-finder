@@ -339,7 +339,7 @@ const nodes = [
   // Weighted result
   {
     id: 'weighted', label: 'Overall Score',
-    sub: 'engagement × 8 + relevancy × 2',
+    sub: 'engagement × 5 + relevancy × 5 · cap 40 if rel < 3',
     type: 'process', x: 118, y: 548, w: 186, h: 54,
   },
 
@@ -435,7 +435,7 @@ const details = {
   n_relevancy: {
     title: 'scoreRelevancy',
     colorType: 'sub',
-    what: 'Keyword-matches the influencer\'s hashtags, captions, and display name against niche-specific keyword lists (English + Traditional Chinese). Starts at a baseline of 3. Adds 1 point per keyword match in target niches, deducts 1 point per off-niche category with hits (penalises unfocused accounts). Score capped at 0–10. Returns matched signal words for display in the table.',
+    what: 'Keyword-matches the influencer\'s hashtags, captions, display name, and bio against niche-specific keyword lists (English + Traditional Chinese). Starts at a baseline of 3. Adds 1 point per keyword match in target niches, deducts 1 point per off-niche category with hits. Operator-entered per-campaign keywords weigh more: in-niche keywords +1.5 each, exclude keywords −3 each (pushing a wrong-vertical account below the off-niche floor). Score capped at 0–10. Returns matched signal words for display in the table.',
     output: '{ score: 0–10, signals: string[] }',
   },
   n_bot: {
@@ -604,8 +604,9 @@ function showDetail(id) {
       <div>
         <div class="section-label">Score weights</div>
         <div class="weights-grid">
-          <div class="weight-chip"><strong>Engagement</strong>× 8 (80%)</div>
-          <div class="weight-chip"><strong>Relevancy</strong>× 2 (20%)</div>
+          <div class="weight-chip"><strong>Engagement</strong>× 5 (50%)</div>
+          <div class="weight-chip"><strong>Relevancy</strong>× 5 (50%)</div>
+          <div class="weight-chip" style="grid-column:span 2"><strong>Off-niche cap</strong>Overall capped at 40 when relevancy &lt; 3</div>
           <div class="weight-chip" style="grid-column:span 2;opacity:0.6"><strong>Bot Risk</strong>informational only — not in overall</div>
         </div>
       </div>` : ''}

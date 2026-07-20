@@ -136,7 +136,7 @@ export default function InstructionsPage() {
             {
               n: 2,
               title: 'Define your brief',
-              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Also write a <strong>Campaign brief</strong> — it's used later to generate each approved account's personalised DM draft, so it works best filled in with five structured fields: brand name, brand background, new product (+ where it's sold, + hook), collab format, and per-product selling points. DeepSeek only ever uses what's written here — it won't invent ingredients, numbers, or claims. Click <strong>"How to fill this in →"</strong> on the Configure screen for the full guide and a filled-in example.</>,
+              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Sharpen relevancy with three optional fields: <strong>Target audience</strong> (who the product is for), <strong>In-niche keywords</strong> to reward (e.g. 減脂, 高蛋白, 健身), and <strong>Exclude keywords</strong> to penalise (e.g. makeup, 化妝) — these tune the Relevancy score and, when AI Fit is on, guide DeepSeek too. Also write a <strong>Campaign brief</strong> — it's used later to generate each approved account's personalised DM draft, so it works best filled in with five structured fields: brand name, brand background, new product (+ where it's sold, + hook), collab format, and per-product selling points. DeepSeek only ever uses what's written here — it won't invent ingredients, numbers, or claims. Click <strong>"How to fill this in →"</strong> on the Configure screen for the full guide and a filled-in example.</>,
             },
             {
               n: 3,
@@ -206,12 +206,13 @@ export default function InstructionsPage() {
         <div className="bg-surface border border-card-edge rounded-[12px] px-5 py-4 mb-6">
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body">
-            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 8 + Relevancy Score × 2</p>
-            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 6 + Relevancy × 1 + AI Fit × 3 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (60% Eng / 10% Rel / 30% AI)</span></p>
+            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 5 + Relevancy Score × 5 <span className="text-ink/40 text-xs">· 50% Eng / 50% Rel</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 3.5 + Relevancy × 2.5 + AI Fit × 4 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (35% Eng / 25% Rel / 40% AI)</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= capped at 40 <span className="text-ink/40 text-xs">· when Relevancy &lt; 3 (off-niche floor — reach can't rescue a wrong-vertical account)</span></p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
-            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + keyword hits − off-niche category hits <span className="text-ink/40 text-xs">· capped 0–10</span></p>
-            <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–10 vs. brief + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
+            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + niche hits + (in-niche keyword hits × 1.5) − off-niche categories − (exclude keyword hits × 3) <span className="text-ink/40 text-xs">· capped 0–10</span></p>
+            <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–10 vs. brief + audience + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
           </div>
         </div>
 
@@ -234,8 +235,8 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
-            formula="(engagement × 8) + (relevancy × 2)"
-            description="80% Engagement Score + 20% Relevancy Score. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail."
+            formula="(engagement × 5) + (relevancy × 5)   ·   capped at 40 when relevancy < 3"
+            description="50% Engagement Score + 50% Relevancy Score — niche fit and audience activity weigh equally, so a high-engagement account in the wrong niche no longer floats to the top. If an account's relevancy falls below the baseline of 3 (net off-niche or excluded matches), Overall is capped at 40 — the off-niche floor — so reach alone can't lift a wrong-vertical creator into the shortlist. Accounts scoring 70+ are flagged as strong matches; 45–69 as possible; below 45 as low fit. Use it to triage who to review first, not as a definitive pass/fail."
           />
           <ScoreRow
             name="Engagement Score"
@@ -246,9 +247,17 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Relevancy Score"
             range="0 – 10"
-            formula="3 + (hits in target niches) − (off-niche categories with hits)"
+            formula="3 + niche hits + (in-niche keyword hits × 1.5) − off-niche categories − (exclude keyword hits × 3)"
             description={<>
-              <p className="mb-3">Starts at a baseline of 3. The account's hashtags, captions, and display name are scanned against six niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category that has any match at all deducts −1 (flat per category, not per word). Score is capped 0–10.</p>
+              <p className="mb-3">Starts at a baseline of 3. The account's hashtags, captions, display name, and bio are scanned against six built-in niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category that has any match at all deducts −1 (flat per category, not per word). Score is capped 0–10.</p>
+              <div className="border border-card-edge rounded-[10px] bg-surface px-4 py-3 mb-3">
+                <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">Per-campaign keywords (Configure screen)</p>
+                <p className="mb-2">The six built-in niches can't describe every product (a 減脂 protein shake, say). On the Configure screen you can add your own <strong>In-niche keywords</strong> and <strong>Exclude keywords</strong>:</p>
+                <ul className="list-disc ml-4 space-y-1">
+                  <li><strong>In-niche keywords</strong> you type (e.g. 減脂, 高蛋白, 健身, 代餐) count <strong>+1.5 each</strong> — weighted above the built-in dictionary because they describe <em>this</em> campaign.</li>
+                  <li><strong>Exclude keywords</strong> (e.g. makeup, 化妝, 美妝) are a hard negative at <strong>−3 each</strong>, which pushes a wrong-vertical account below the off-niche floor so the Overall cap kicks in.</li>
+                </ul>
+              </div>
               <div className="border border-card-edge rounded-[10px] overflow-hidden mb-3">
                 <table className="w-full text-[12px]">
                   <thead>
@@ -300,7 +309,7 @@ export default function InstructionsPage() {
                 <p className="mb-2">Because it re-reads the latest decisions every run, it improves the moment your team logs more reviews — no training step, no waiting. The trade-offs: it looks at the <strong>most recent ~40 decisions</strong> (not your entire history forever — a token-budget limit), and it's matching demonstrated patterns, not tracking specific past "mistakes" with a correction signal. On a brand-new database with no decisions yet, it scores on the brief alone and stays deliberately moderate.</p>
                 <p className="text-[12px] text-faint">This is why <strong className="text-body">Phase 1 matters</strong>: the more consistently brand managers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
               </div>
-              <p>By default it's <strong>advisory</strong> — shown in its own column but it does not move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>60% Engagement + 10% Relevancy + 30% AI Fit</strong> (Engagement × 6 + Relevancy × 1 + AI Fit × 3).</p>
+              <p>By default it's <strong>advisory</strong> — shown in its own column but it does not move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>35% Engagement + 25% Relevancy + 40% AI Fit</strong> (Engagement × 3.5 + Relevancy × 2.5 + AI Fit × 4). The off-niche cap still applies — a below-floor relevancy caps Overall at 40 even with a high AI Fit.</p>
             </>}
           />
         </div>

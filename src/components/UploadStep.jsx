@@ -1,9 +1,14 @@
 import { useRef, useState } from 'react'
 import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
-import { startSeederScrape, startThreadsSeederScrape, fetchThreadsProfileItems, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { startSeederScrape, startThreadsSeederScrape, fetchThreadsProfileItems, pollUntilDone, getDatasetItems, runWithConcurrency } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
+
+// Max concurrent Apify runs per platform phase. Kept modest because the account's
+// memory pool is shared with the Threads enrichment pool (5); excess runs queue in
+// READY harmlessly rather than erroring, so this is a throughput knob, not a limit.
+const SCRAPE_CONCURRENCY = 3
 
 // Threads quality funnel. Keyword search — especially the recent-sort fallback —
 // surfaces plenty of ordinary users venting about a pain point, not creators.
@@ -79,6 +84,8 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   const [resultsLimit, setResultsLimit] = useState(200)
   const [scrapeStatus, setScrapeStatus] = useState('idle') // idle | running | error
   const [scrapeError, setScrapeError] = useState(null)
+  // Live "what's happening now" line shown under the button while running.
+  const [scrapeProgress, setScrapeProgress] = useState('')
 
   const parseTerms = (text) => [...new Set(text.split('\n').map((l) => l.trim()).filter(Boolean))]
 
@@ -115,10 +122,12 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     }
   }
 
-  // Scrape handler — runs one Apify job per brand sequentially to avoid
-  // hitting Apify's concurrent-run limit (most plans allow 1 at a time).
-  // Threads is one extra job covering all keyword terms — each returned post
-  // carries `search_keyword`, so per-term/track provenance survives one run.
+  // Scrape handler — runs Apify jobs in bounded-concurrency pools (SCRAPE_CONCURRENCY
+  // per platform) instead of one-at-a-time. The client-side enrichment pool already
+  // runs 5 Apify runs at once with no issue; if a plan's concurrency limit is ever
+  // hit, extra runs queue in READY (which pollUntilDone waits through), so the worst
+  // case degrades to sequential rather than erroring. IG and Threads hit different
+  // actors, so both platform phases run simultaneously via Promise.all.
   const handleScrape = async () => {
     const groups = platforms.instagram ? parseBrandGroups(scrapeInput) : []
     const painTerms = platforms.threads ? parseTerms(painpointInput) : []
@@ -127,6 +136,20 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     if (groups.length === 0 && threadsTerms.length === 0) return
     setScrapeStatus('running')
     setScrapeError(null)
+    setScrapeProgress('')
+
+    // Live progress: IG and Threads phases update their own slice concurrently,
+    // so keep counters in a shared object and recompose the one-line status from
+    // whichever phases are active.
+    const prog = { igDone: 0, igTotal: groups.length, tDone: 0, tTotal: threadsTerms.length, enrich: null }
+    const renderProgress = () => {
+      const parts = []
+      if (prog.igTotal > 0) parts.push(`Instagram ${prog.igDone}/${prog.igTotal} brand${prog.igTotal > 1 ? 's' : ''}`)
+      if (prog.tTotal > 0) parts.push(`Threads ${prog.tDone}/${prog.tTotal} term${prog.tTotal > 1 ? 's' : ''}`)
+      if (prog.enrich) parts.push(prog.enrich)
+      setScrapeProgress(parts.join(' · '))
+    }
+    renderProgress()
 
     // Run each brand independently so a later failure never discards the
     // earlier (already-paid) results.
@@ -135,19 +158,29 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     // Informational (non-failure) messages surfaced once before hand-off,
     // e.g. the Threads quality-funnel counts — useful for tuning thresholds.
     const notices = []
-    for (const { brand, lines } of groups) {
-      try {
-        const run = await startSeederScrape(lines, resultsLimit)
-        const completed = await pollUntilDone(run)
-        const items = await getDatasetItems(completed.defaultDatasetId)
-        brandedResults.push({ items, brand: brand || 'scraped' })
-      } catch (err) {
-        failedBrands.push(brand || 'scraped')
-        console.error(`Scrape failed for ${brand || 'scraped'}:`, err)
-      }
-    }
 
-    if (threadsTerms.length > 0) {
+    // ── Instagram phase: one pooled task per brand ──
+    const igPhase = runWithConcurrency(
+      groups.map(({ brand, lines }) => async () => {
+        try {
+          const run = await startSeederScrape(lines, resultsLimit)
+          const completed = await pollUntilDone(run)
+          const items = await getDatasetItems(completed.defaultDatasetId)
+          brandedResults.push({ items, brand: brand || 'scraped' })
+        } catch (err) {
+          failedBrands.push(brand || 'scraped')
+          console.error(`Scrape failed for ${brand || 'scraped'}:`, err)
+        } finally {
+          prog.igDone++
+          renderProgress()
+        }
+      }),
+      SCRAPE_CONCURRENCY
+    )
+
+    // ── Threads phase: pooled keyword search, then enrichment + quality gates ──
+    const threadsPhase = (async () => {
+      if (threadsTerms.length === 0) return
       const trackByTerm = {}
       for (const t of painTerms) trackByTerm[t] = 'painpoint'
       for (const t of genreTerms) trackByTerm[t] = 'genre'
@@ -168,24 +201,29 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       // Each item is stamped with its query so provenance survives (the search
       // actor doesn't echo the keyword back).
       const THREADS_SORTS = ['top', 'recent']
-      for (const term of threadsTerms) {
-        let got = null
-        for (let attempt = 0; attempt < THREADS_SORTS.length && !got; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
-          const sort = THREADS_SORTS[attempt]
-          const cap = sort === 'recent' ? Math.min(resultsLimit, 50) : resultsLimit
-          try {
-            const run = await startThreadsSeederScrape(term, cap, sort)
-            const completed = await pollUntilDone(run, { allowPartial: true })
-            const items = await getDatasetItems(completed.defaultDatasetId)
-            if (items.length > 0) got = items.map((it) => ({ ...it, search_keyword: term }))
-          } catch (err) {
-            console.error(`Threads search failed for "${term}" (sort=${sort}, attempt ${attempt + 1}/${THREADS_SORTS.length}):`, err)
+      await runWithConcurrency(
+        threadsTerms.map((term) => async () => {
+          let got = null
+          for (let attempt = 0; attempt < THREADS_SORTS.length && !got; attempt++) {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 4000))
+            const sort = THREADS_SORTS[attempt]
+            const cap = sort === 'recent' ? Math.min(resultsLimit, 50) : resultsLimit
+            try {
+              const run = await startThreadsSeederScrape(term, cap, sort)
+              const completed = await pollUntilDone(run, { allowPartial: true })
+              const items = await getDatasetItems(completed.defaultDatasetId)
+              if (items.length > 0) got = items.map((it) => ({ ...it, search_keyword: term }))
+            } catch (err) {
+              console.error(`Threads search failed for "${term}" (sort=${sort}, attempt ${attempt + 1}/${THREADS_SORTS.length}):`, err)
+            }
           }
-        }
-        if (got) threadsItems.push(...got)
-        else failedTerms.push(term)
-      }
+          if (got) threadsItems.push(...got)
+          else failedTerms.push(term)
+          prog.tDone++
+          renderProgress()
+        }),
+        SCRAPE_CONCURRENCY
+      )
 
       if (threadsItems.length > 0) {
         // Gate 1 (pre-enrichment): keep only accounts whose best discovered
@@ -217,10 +255,16 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
         let enrichByUser = {}
         const handles = [...kept]
         try {
-          const profileItems = await fetchThreadsProfileItems(handles)
+          const profileItems = await fetchThreadsProfileItems(handles, 10, (done, total) => {
+            prog.enrich = `enriching Threads profiles ${done}/${total}`
+            renderProgress()
+          })
           enrichByUser = buildThreadsEnrichment(profileItems)
         } catch (err) {
           console.error('Threads profile enrichment failed:', err)
+        } finally {
+          prog.enrich = null
+          renderProgress()
         }
         const enrichedCount = handles.filter((u) => enrichByUser[u]).length
         if (enrichedCount === 0) {
@@ -255,7 +299,10 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
       if (failedTerms.length > 0) {
         failedBrands.push(`Threads terms with no results (Meta may have rate-limited search — retry in a few minutes): ${failedTerms.join(', ')}`)
       }
-    }
+    })()
+
+    // Both platforms hit different actors — run them together and wait for both.
+    await Promise.all([igPhase, threadsPhase])
 
     if (brandedResults.length === 0) {
       setScrapeError(
@@ -264,6 +311,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
           : 'No results were scraped.'
       )
       setScrapeStatus('error')
+      setScrapeProgress('')
       return
     }
 
@@ -277,6 +325,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
     }
     if (notices.length > 0) alert(notices.join('\n'))
     setScrapeStatus('idle')
+    setScrapeProgress('')
     onScrapedItems(brandedResults)
   }
 
@@ -534,7 +583,7 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
 
             {isLoading && (
               <p className="mt-3 text-[12px] text-faint text-center">
-                This usually takes 1–5 minutes depending on result count.
+                {scrapeProgress || 'This usually takes 1–5 minutes depending on result count.'}
               </p>
             )}
           </>

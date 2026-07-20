@@ -151,6 +151,28 @@ const THREADS_PROFILE_CHUNK = 20
 const THREADS_PROFILE_CONCURRENCY = 5
 
 /**
+ * Run an array of async task fns with at most `limit` in flight, returning
+ * their results in task order. Tasks are expected to handle their own errors
+ * (a throw rejects the whole pool) — every caller here wraps per-task
+ * try/catch so one failed Apify run never sinks its siblings. If the Apify
+ * plan's concurrency limit is exceeded, extra runs just sit in READY until
+ * capacity frees, which pollUntilDone already waits through.
+ */
+export async function runWithConcurrency(tasks, limit) {
+  const results = new Array(tasks.length)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+      while (next < tasks.length) {
+        const i = next++
+        results[i] = await tasks[i]()
+      }
+    })
+  )
+  return results
+}
+
+/**
  * Chunked Threads profile enrichment: splits handles into runs of ≤20 (the
  * actor's hard input-schema cap — see startThreadsProfileScrape), runs up to
  * 5 chunks concurrently, retries each chunk once with a fresh run (fresh
@@ -184,20 +206,17 @@ export async function fetchThreadsProfileItems(usernames, postsPerUser = 10, onP
     return []
   }
 
-  const queue = [...chunks]
-  const collected = []
   let done = 0
-  await Promise.all(
-    Array.from({ length: Math.min(THREADS_PROFILE_CONCURRENCY, queue.length) }, async () => {
-      while (queue.length > 0) {
-        const chunk = queue.shift()
-        collected.push(...(await runChunk(chunk)))
-        done += chunk.length
-        if (onProgress) onProgress(Math.min(done, list.length), list.length)
-      }
-    })
+  const perChunk = await runWithConcurrency(
+    chunks.map((chunk) => async () => {
+      const items = await runChunk(chunk)
+      done += chunk.length
+      if (onProgress) onProgress(Math.min(done, list.length), list.length)
+      return items
+    }),
+    THREADS_PROFILE_CONCURRENCY
   )
-  return collected
+  return perChunk.flat()
 }
 
 // Used for KolLookup (single-profile mode)

@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Settings, ChevronRight } from 'lucide-react'
+import { Settings, ChevronRight, Sparkles, Loader2, Save, Trash2, Check } from 'lucide-react'
+import { parseBrief } from '../lib/apifyApi'
+import { loadPresets, savePreset, deletePreset } from '../lib/configPresets'
 
 const NICHE_OPTIONS = [
   { id: 'beauty', label: '💄 Beauty & Makeup' },
@@ -15,7 +17,7 @@ const BRIEF_GUIDE = `Campaign Brief 點用
 DM 入面所有品牌／產品資料都只會用你喺下面填嘅內容——DeepSeek 唔會自己作成分或數字。所以每個賣點都要喺度寫齊。
 
 ・自我介紹會自動變成「我係 [品牌] 嘅 Marketing」，唔使自己寫。
-・個人化開場靠 KOL 自己嘅 IG 內容自動生成，唔使你寫。
+・開場係固定一句「你嘅 content style 好啱我哋品牌」，唔會逐個 KOL 個人化——一個 campaign 出一封 DM，approve 之後大家共用。
 
 三個提示：
 1. 賣點冇填就唔會出現喺 DM（防止作大成分／功效）。
@@ -71,6 +73,83 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
   const [products, setProducts] = useState([{ name: '', points: '' }])
   const [briefNotes, setBriefNotes] = useState('')
   const [showBriefGuide, setShowBriefGuide] = useState(false)
+
+  // Paste-to-fill: paste a freeform brief, DeepSeek splits it into the fields below.
+  const [pasteText, setPasteText] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState('')
+  const [parsedOk, setParsedOk] = useState(false)
+
+  // Presets: save the whole step-2 form (browser-local) and reload it next run.
+  const [presets, setPresets] = useState(() => loadPresets())
+  const [selectedPreset, setSelectedPreset] = useState('')
+  const [presetName, setPresetName] = useState('')
+  const [saveMsg, setSaveMsg] = useState('')
+
+  // Everything the operator fills — the shape a preset stores and restores.
+  const gatherConfig = () => ({
+    niches, targetAudience, targetKeywords, excludeKeywords,
+    locationTarget, requireVideo, minEngagement,
+    brandName, brandBackground, newProduct, collabFormat, products, briefNotes,
+  })
+
+  const applyPreset = (c) => {
+    if (!c) return
+    setNiches(c.niches ?? [])
+    setTargetAudience(c.targetAudience ?? '')
+    setTargetKeywords(c.targetKeywords ?? '')
+    setExcludeKeywords(c.excludeKeywords ?? '')
+    setLocationTarget(c.locationTarget ?? 'Hong Kong')
+    setRequireVideo(c.requireVideo ?? true)
+    setMinEngagement(c.minEngagement ?? 0)
+    setBrandName(c.brandName ?? '')
+    setBrandBackground(c.brandBackground ?? '')
+    setNewProduct(c.newProduct ?? '')
+    setCollabFormat(c.collabFormat ?? '')
+    setProducts(c.products?.length ? c.products : [{ name: '', points: '' }])
+    setBriefNotes(c.briefNotes ?? '')
+  }
+
+  const handleLoadPreset = (name) => {
+    setSelectedPreset(name)
+    const p = presets.find((x) => x.name === name)
+    if (p) applyPreset(p.config)
+  }
+
+  const handleSavePreset = () => {
+    const name = presetName.trim() || brandName.trim()
+    if (!name) { setSaveMsg('Name it (or fill Brand) first'); return }
+    setPresets(savePreset(name, gatherConfig()))
+    setPresetName('')
+    setSelectedPreset(name)
+    setSaveMsg(`Saved "${name}"`)
+    setTimeout(() => setSaveMsg(''), 2500)
+  }
+
+  const handleDeletePreset = () => {
+    if (!selectedPreset) return
+    setPresets(deletePreset(selectedPreset))
+    setSelectedPreset('')
+  }
+
+  const handleParseBrief = async () => {
+    if (!pasteText.trim()) return
+    setParseError(''); setParsedOk(false); setParsing(true)
+    try {
+      const r = await parseBrief(pasteText)
+      setBrandName(r.brandName || '')
+      setBrandBackground(r.brandBackground || '')
+      setNewProduct(r.newProduct || '')
+      setCollabFormat(r.collabFormat || '')
+      setProducts(r.products?.length ? r.products : [{ name: '', points: '' }])
+      setBriefNotes(r.briefNotes || '')
+      setParsedOk(true)
+    } catch (e) {
+      setParseError(e.message || 'Could not read that brief')
+    } finally {
+      setParsing(false)
+    }
+  }
 
   const toggleNiche = (id) => {
     setNiches((prev) =>
@@ -142,6 +221,56 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
             </>
           )}
         </p>
+
+        {/* Presets — reuse a saved setup instead of re-typing every run */}
+        <section className="mb-8 flex flex-wrap items-center gap-2 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
+          <span className="font-mono text-[10px] tracking-[.14em] text-faint uppercase flex-shrink-0">Presets</span>
+          {presets.length > 0 ? (
+            <>
+              <select
+                value={selectedPreset}
+                onChange={(e) => handleLoadPreset(e.target.value)}
+                className="px-2.5 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30"
+              >
+                <option value="">Load a saved setup…</option>
+                {presets.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+              </select>
+              {selectedPreset && (
+                <button
+                  type="button"
+                  onClick={handleDeletePreset}
+                  title={`Delete "${selectedPreset}"`}
+                  className="text-faint hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="text-[12px] text-faint">None yet — fill this in once and save it to reuse next time.</span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {saveMsg && (
+              <span className="flex items-center gap-1 text-[11.5px] text-sage">
+                <Check size={12} /> {saveMsg}
+              </span>
+            )}
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder={brandName.trim() || 'Name (e.g. brand)'}
+              className="w-[150px] px-2.5 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
+            />
+            <button
+              type="button"
+              onClick={handleSavePreset}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] bg-ink text-white text-[12px] font-medium hover:bg-ink/80 transition-colors"
+            >
+              <Save size={13} /> Save current
+            </button>
+          </div>
+        </section>
 
         {/* Session title */}
         <section className="mb-8">
@@ -305,6 +434,44 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
           )}
 
           <div className="space-y-3.5 px-4 py-4 bg-surface border border-card-edge rounded-[12px]">
+            {/* Paste-to-fill — paste any brief, DeepSeek splits it into the fields below */}
+            <div className="pb-3.5 border-b border-mist">
+              <label className="block text-[12px] font-medium text-body mb-1">
+                貼上你嘅 brief <span className="text-faint font-normal">· Paste your brief, auto-fill the fields</span>
+              </label>
+              <p className="text-[11px] text-faint mb-2">
+                有現成 brief（WhatsApp／文件）就直接貼落嚟，撳自動填入，DeepSeek 會幫你拆返落下面每格。記得填完檢查一下。
+              </p>
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                rows={3}
+                placeholder="貼上品牌同產品資料，例：Wellage 係韓國醫美大廠 Hugel 旗下品牌，新推出「生維 C」系列登陸萬寧，主打一夜急救煥膚…"
+                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
+              />
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={handleParseBrief}
+                  disabled={parsing || !pasteText.trim()}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors
+                    ${parsing || !pasteText.trim()
+                      ? 'bg-mist text-faint cursor-not-allowed'
+                      : 'bg-accent text-white hover:bg-accent/80'
+                    }`}
+                >
+                  {parsing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  {parsing ? '整緊…' : '自動填入 · Auto-fill'}
+                </button>
+                {parseError && <span className="text-[11.5px] text-rose">{parseError}</span>}
+                {parsedOk && !parseError && (
+                  <span className="flex items-center gap-1 text-[11.5px] text-sage">
+                    <Check size={12} /> 已填入下面，記得檢查
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div>
               <label className="block text-[12px] font-medium text-body mb-1">
                 品牌 <span className="text-faint font-normal">· Brand name</span>

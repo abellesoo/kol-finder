@@ -290,6 +290,22 @@ export async function runVerification(campaignId) {
   return summary
 }
 
+// Parse a freeform pasted campaign brief into the structured fields ConfigStep's
+// brief card expects, so the operator pastes once instead of typing ~6 boxes.
+// Returns { brandName, brandBackground, newProduct, collabFormat, products, briefNotes }.
+export async function parseBrief(text) {
+  const res = await fetch(`${PROXY}/parse-brief`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Brief parse failed (${res.status}): ${body || 'no response body'}`)
+  }
+  return res.json()
+}
+
 // Generate an overdue nudge DM draft. Language follows the market (HK →
 // Cantonese, TW → zh-TW) — the worker never mixes them. Returns { draft, language }.
 export async function draftNudge({ handle, brand, market }) {

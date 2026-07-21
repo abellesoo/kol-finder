@@ -17,6 +17,7 @@ import {
 import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
 import { useTableControls } from '../lib/useTableControls'
+import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
 
 function formatDate(isoStr) {
@@ -673,7 +674,7 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
   const [sfBusy, setSfBusy] = useState(false)
   const [showSfSender, setShowSfSender] = useState(false)
   const [toast, setToast] = useState(null)
-  const [view, setView] = useState('board') // 'board' | 'table'
+  const [view, setView] = useUrlParam('campaign_view', 'board') // 'board' | 'table' (shareable via URL)
 
   const load = useCallback(async () => {
     setLoading(true)

@@ -6,6 +6,7 @@ import { mergeReviewEntry, reviewKey, campaignDmDraft, DM_DRAFT_KEY } from '../l
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
+import { useUrlParam } from '../lib/useUrlParam'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
 import ColumnPicker from './table/ColumnPicker'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
@@ -530,7 +531,9 @@ export default function ReviewPage({ reviewId, onBack }) {
   const dmInputRef = useRef(null)
   const [dmGenerating, setDmGenerating] = useState(false)
   const [dmError, setDmError] = useState(null)
-  const [viewMode, setViewMode] = useState(null)
+  // Shareable via URL (?…&review_view=cards|table). Null until decided: a URL
+  // value wins; otherwise the load effect picks a default based on account count.
+  const [viewMode, setViewMode] = useUrlParam('review_view', null)
   // Refs so persistUpdate can always read latest values without stale closures
   const bmNotesRef = useRef('')
   const reviewStateRef = useRef({})
@@ -570,7 +573,8 @@ export default function ReviewPage({ reviewId, onBack }) {
       setReviewState(accountState)
       reviewStateRef.current = accountState
       bmNotesRef.current = notes
-      setViewMode(accs.length > 20 ? 'table' : 'cards')
+      // Respect a view already chosen via the URL; only default by size otherwise.
+      setViewMode((prev) => prev ?? (accs.length > 20 ? 'table' : 'cards'))
       setLoading(false)
     }
     load()

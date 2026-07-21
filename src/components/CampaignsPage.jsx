@@ -4,6 +4,7 @@ import {
   LayoutGrid, Table2, FileSpreadsheet,
 } from 'lucide-react'
 import { listCampaigns, createCampaign, parseTokens, getApprovedKolsForRun, attachKols } from '../lib/campaigns'
+import { useUrlParam } from '../lib/useUrlParam'
 import ImportCampaignModal from './ImportCampaignModal'
 
 // Roll a campaign's per-state counts up to the numbers the table view shows.
@@ -202,7 +203,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
   const [campaigns, setCampaigns] = useState([])
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [view, setView] = useState('cards') // 'cards' | 'table'
+  const [view, setView] = useUrlParam('campaigns_view', 'cards') // 'cards' | 'table' (shareable via URL)
   const [seedState, setSeedState] = useState(null) // { runId, name, count }
   const seedRunRef = useRef(null)
 

@@ -691,6 +691,14 @@ export default function ReviewPage({ reviewId, onBack }) {
     persistUpdate(username, entry)
   }, [persistUpdate])
 
+  // Shared sort/filter engine — same behavior as the Results table. Default to
+  // the account's stored order (no sort) until a header is clicked. MUST be
+  // called before any early return so the hook order is stable across the
+  // loading → loaded transition (otherwise React errors with "rendered more
+  // hooks than during the previous render").
+  const { processed: sortedAccounts, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
+    useTableControls(accounts, { defaultSortId: null, defaultSortDir: 'desc' })
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -719,11 +727,6 @@ export default function ReviewPage({ reviewId, onBack }) {
   const approvedCount = Object.values(reviewState).filter((e) => e.status === 'approved').length
   const rejectedCount = Object.values(reviewState).filter((e) => e.status === 'rejected').length
   const pendingCount = accounts.length - approvedCount - rejectedCount
-
-  // Shared sort/filter engine — same behavior as the Results table. Default to
-  // the account's stored order (no sort) until a header is clicked.
-  const { processed: sortedAccounts, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
-    useTableControls(accounts, { defaultSortId: null, defaultSortDir: 'desc' })
 
   return (
     <div className="min-h-screen bg-paper px-[48px] py-[40px]">

@@ -136,7 +136,7 @@ export default function InstructionsPage() {
             {
               n: 2,
               title: 'Define your brief',
-              text: <>On the <strong>Configure</strong> screen, choose your target niches (beauty, skincare, lifestyle…) and set a minimum average-likes threshold to filter out low-engagement accounts. Sharpen relevancy with three optional fields: <strong>Target audience</strong> (who the product is for), <strong>In-niche keywords</strong> to reward (e.g. 減脂, 高蛋白, 健身), and <strong>Exclude keywords</strong> to penalise (e.g. makeup, 化妝) — these tune the Relevancy score and, when AI Fit is on, guide DeepSeek too. Also write a <strong>Campaign brief</strong> — it's used later to generate each approved account's personalised DM draft, so it works best filled in with five structured fields: brand name, brand background, new product (+ where it's sold, + hook), collab format, and per-product selling points. DeepSeek only ever uses what's written here — it won't invent ingredients, numbers, or claims. Click <strong>"How to fill this in →"</strong> on the Configure screen for the full guide and a filled-in example.</>,
+              text: <>Data intake and configuration sit <strong>side by side</strong> on one <strong>Set up your run</strong> screen, so you can tune the scoring while your data loads. Choose your target niches (beauty, skincare, lifestyle…). Two <strong>hard filters</strong> drop accounts before scoring: a minimum average-likes threshold, and <strong>Target location</strong> — pick Hong Kong / Taiwan / Singapore / Macau and any account detected in a <em>different</em> region is excluded (accounts with no detectable location are kept, so you don't lose good candidates the scraper couldn't geo-tag). Sharpen the Relevancy score with three text fields: <strong>Target audience</strong> (who the product is for), <strong>In-niche keywords</strong> to reward (e.g. 減脂, 高蛋白, 健身), and <strong>Exclude keywords</strong> to penalise (e.g. makeup, 化妝) — target audience and in-niche keywords each add +1.5 per matched term, exclude keywords subtract, and all three also guide DeepSeek when AI Fit is on. Also write a <strong>Campaign brief</strong> — it's used later to generate each approved account's personalised DM draft, so it works best filled in with five structured fields: brand name, brand background, new product (+ where it's sold, + hook), collab format, and per-product selling points. DeepSeek only ever uses what's written here — it won't invent ingredients, numbers, or claims. Click <strong>"How to fill this in →"</strong> for the full guide and a filled-in example. Ran this brand before? Reload both steps in one click from the shared <strong>Databank</strong> bar at the top.</>,
             },
             {
               n: 3,
@@ -146,7 +146,7 @@ export default function InstructionsPage() {
             {
               n: 4,
               title: 'Review & shortlist',
-              text: <>Browse the ranked Results table. Sort, filter, and customise columns to zero in on the right accounts. Expand any row to see the scoring verdict, AI Fit reasoning, niche signals, top hashtags, and flags.</>,
+              text: <>Browse the ranked Results table. The header row stays frozen as you scroll; click a numeric column to sort (high→low, then low→high) or open a category column's dropdown to filter (e.g. by Location). Your chosen columns are remembered across tabs and reloads. Use the <strong>Content</strong> filter (All / Video only / Non-video) to narrow by format — this is where video lives now, it no longer affects the score. Expand any row to see the scoring verdict, AI Fit reasoning, niche signals, top hashtags, and flags. Every sort/filter is captured in the page URL, so you can copy the link and a teammate opens the exact same view.</>,
             },
             {
               n: 5,
@@ -211,7 +211,7 @@ export default function InstructionsPage() {
             <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= capped at 40 <span className="text-ink/40 text-xs">· when Relevancy &lt; 3 (off-niche floor — reach can't rescue a wrong-vertical account)</span></p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) <span className="text-ink/40 text-xs">· after live fetch</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) <span className="text-ink/40 text-xs">· before live fetch</span></p>
-            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + niche hits + (in-niche keyword hits × 1.5) − off-niche categories − (exclude keyword hits × 3) <span className="text-ink/40 text-xs">· capped 0–10</span></p>
+            <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + niche hits + ((in-niche keyword + audience term hits) × 1.5) − off-niche categories − (exclude keyword hits × 3) <span className="text-ink/40 text-xs">· capped 0–10; +1 if location matches</span></p>
             <p><span className="text-ink/40 mr-2">AI Fit</span>= DeepSeek rating 0–10 vs. brief + audience + past decisions <span className="text-ink/40 text-xs">· advisory unless blended</span></p>
           </div>
         </div>
@@ -247,15 +247,17 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Relevancy Score"
             range="0 – 10"
-            formula="3 + niche hits + (in-niche keyword hits × 1.5) − off-niche categories − (exclude keyword hits × 3)"
+            formula="3 + niche hits + ((in-niche keyword + audience term) hits × 1.5) − off-niche categories − (exclude keyword hits × 3)   ·   +1 when location matches"
             description={<>
               <p className="mb-3">Starts at a baseline of 3. The account's hashtags, captions, display name, and bio are scanned against six built-in niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category that has any match at all deducts −1 (flat per category, not per word). Score is capped 0–10.</p>
               <div className="border border-card-edge rounded-[10px] bg-surface px-4 py-3 mb-3">
-                <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">Per-campaign keywords (Configure screen)</p>
-                <p className="mb-2">The six built-in niches can't describe every product (a 減脂 protein shake, say). On the Configure screen you can add your own <strong>In-niche keywords</strong> and <strong>Exclude keywords</strong>:</p>
+                <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">Per-campaign signals (Configure screen)</p>
+                <p className="mb-2">The six built-in niches can't describe every product (a 減脂 protein shake, say). On the Configure screen you add your own signals:</p>
                 <ul className="list-disc ml-4 space-y-1">
                   <li><strong>In-niche keywords</strong> you type (e.g. 減脂, 高蛋白, 健身, 代餐) count <strong>+1.5 each</strong> — weighted above the built-in dictionary because they describe <em>this</em> campaign.</li>
+                  <li><strong>Target audience</strong> terms (who the product is for) also count <strong>+1.5 each</strong>. The free-text description is split into terms and matched the same way — so keep it to discrete, comma-separated terms (e.g. <code className="font-mono text-[11px] bg-white px-1 rounded">健康, gym, OL, 低卡, 減脂</code>) for the strongest effect; long run-on phrases match less reliably.</li>
                   <li><strong>Exclude keywords</strong> (e.g. makeup, 化妝, 美妝) are a hard negative at <strong>−3 each</strong>, which pushes a wrong-vertical account below the off-niche floor so the Overall cap kicks in.</li>
+                  <li><strong>Target location</strong> adds <strong>+1</strong> when an account's detected region matches. Note this is separate from the location <em>filter</em>, which removes wrong-region accounts before scoring even reaches this step.</li>
                 </ul>
               </div>
               <div className="border border-card-edge rounded-[10px] overflow-hidden mb-3">

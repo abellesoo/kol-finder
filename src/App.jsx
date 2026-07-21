@@ -13,7 +13,7 @@ import CampaignDetailPage from './components/CampaignDetailPage'
 import LoginPage from './components/LoginPage'
 import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
-import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems } from './lib/parseXlsx'
+import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems, classifyRegion } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession, loadSessionFull } from './lib/sessionHistory'
 import { readUrlState, popStashedDeepLink, syncUrl } from './lib/urlState'
@@ -312,7 +312,20 @@ function MainApp({ user, role, onSignOut }) {
     setStep('scoring')
     setProgress({ done: 0, total: influencers.length, error: null })
 
-    const toScore = influencers.filter((inf) => inf.avgLikes >= (cfg.minEngagement || 0))
+    // Step-2 hard filters applied before scoring:
+    //  • min avg likes
+    //  • target location — drop accounts whose detected region is a DIFFERENT
+    //    known region (e.g. Taiwan when Hong Kong is chosen). Accounts whose
+    //    location can't be classified are kept, so we don't silently lose good
+    //    candidates the scraper couldn't geo-tag.
+    const toScore = influencers.filter((inf) => {
+      if (inf.avgLikes < (cfg.minEngagement || 0)) return false
+      if (cfg.locationTarget) {
+        const region = classifyRegion(inf.accountLocation)
+        if (region && region !== cfg.locationTarget) return false
+      }
+      return true
+    })
     setProgress((p) => ({ ...p, total: toScore.length }))
 
     try {

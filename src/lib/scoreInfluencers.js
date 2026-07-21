@@ -1,3 +1,5 @@
+import { classifyRegion } from './parseXlsx'
+
 const NICHE_KEYWORDS = {
   beauty: ['makeup', 'lipstick', 'foundation', 'eyeshadow', 'blush', 'mascara', 'concealer', 'beauty', '化妝', '唇膏', '眼影', '粉底'],
   skincare: ['skincare', 'serum', 'moisturizer', 'spf', 'sunscreen', 'toner', 'retinol', 'acne', 'skin', '護膚', '精華', '保濕', '防曬'],
@@ -205,10 +207,15 @@ export async function scoreInfluencers(influencers, config) {
     let relevancyScore = relevancy.score
     const configFlags = []
     if (config.locationTarget && inf.accountLocation) {
-      if (inf.accountLocation === config.locationTarget) {
+      // Classify the raw location the same way the Step-2 filter does, so a HK
+      // account tagged "香港"/"Kowloon" still earns the match bonus. Off-region
+      // accounts are normally filtered out before scoring; the flag remains for
+      // any that slip through (e.g. re-scored legacy sessions).
+      const region = classifyRegion(inf.accountLocation)
+      if (region === config.locationTarget) {
         relevancyScore += 1
         configFlags.push('location-match')
-      } else {
+      } else if (region) {
         configFlags.push('off-location')
       }
     }

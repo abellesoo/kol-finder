@@ -34,6 +34,15 @@ function matchLocationSignals(searchText) {
   return bestLocation
 }
 
+// Classify a raw location string (e.g. an account's `accountLocation`, which may
+// be a scraper value like "Taipei City" / "香港" / "TW") into one of the canonical
+// regions, or '' when it can't be determined. Reuses the same signal list as
+// inference so the Step-2 location filter and the scorer agree. An exact canonical
+// name (e.g. "Hong Kong") matches because it's itself a signal keyword.
+export function classifyRegion(raw) {
+  return matchLocationSignals(String(raw || ''))
+}
+
 // Handle hashtags from both xlsx rows (hashtags/0, hashtags/1…) and raw API items (array)
 function getRowHashtags(row) {
   if (Array.isArray(row.hashtags)) return row.hashtags.map((h) => String(h).toLowerCase())

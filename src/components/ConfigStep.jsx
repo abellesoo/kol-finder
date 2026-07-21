@@ -92,20 +92,30 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     brandName, brandBackground, newProduct, collabFormat, products, briefNotes,
   })
 
+  // Applies only the keys present in `c`, so callers control the granularity:
+  // the databank sends just the three brand fields for a brand-only load, or a
+  // complete config (defaults pre-merged in inputDatabank.js) for a full load.
+  // Local presets always pass the full gatherConfig() shape, so nothing changes
+  // for them.
   const applyPreset = (c) => {
     if (!c) return
-    setNiches(c.niches ?? [])
-    setTargetAudience(c.targetAudience ?? '')
-    setTargetKeywords(c.targetKeywords ?? '')
-    setExcludeKeywords(c.excludeKeywords ?? '')
-    setLocationTarget(c.locationTarget ?? 'Hong Kong')
-    setMinEngagement(c.minEngagement ?? 0)
-    setBrandName(c.brandName ?? '')
-    setBrandBackground(c.brandBackground ?? '')
-    setNewProduct(c.newProduct ?? '')
-    setCollabFormat(c.collabFormat ?? '')
-    setProducts(c.products?.length ? c.products : [{ name: '', points: '' }])
-    setBriefNotes(c.briefNotes ?? '')
+    const setters = {
+      niches: setNiches,
+      targetAudience: setTargetAudience,
+      targetKeywords: setTargetKeywords,
+      excludeKeywords: setExcludeKeywords,
+      locationTarget: setLocationTarget,
+      minEngagement: setMinEngagement,
+      brandName: setBrandName,
+      brandBackground: setBrandBackground,
+      newProduct: setNewProduct,
+      collabFormat: setCollabFormat,
+      briefNotes: setBriefNotes,
+      products: (v) => setProducts(v?.length ? v : [{ name: '', points: '' }]),
+    }
+    for (const [key, set] of Object.entries(setters)) {
+      if (c[key] !== undefined) set(c[key])
+    }
   }
 
   const handleLoadPreset = (name) => {

@@ -362,6 +362,13 @@ function MainApp({ user, role, onSignOut }) {
       setOpenCampaignId(null)
       setCampaignSeed(null) // a manual nav shouldn't reopen a stale "start campaign" form
     }
+    // Re-clicking Seeder while viewing results goes back to Set up. Nothing is
+    // lost: results stay in memory (step "2 Results" jumps back to them) and
+    // the run is already saved in History.
+    if (newMode === 'seeder' && mode === 'seeder' && step === 'results') {
+      setStep(influencers.length > 0 ? 'config' : 'upload')
+      return
+    }
     setMode(newMode)
   }
 
@@ -470,10 +477,17 @@ function MainApp({ user, role, onSignOut }) {
                 onFiles={handleFiles}
                 onScrapedItems={handleScrapedItems}
                 onStart={handleStart}
+                onViewResults={results.length > 0 ? () => setStep('results') : null}
               />
             )}
             {step === 'results' && (
-              <ResultsStep results={results} influencers={influencers} config={config} sessionId={currentSessionId} />
+              <ResultsStep
+                results={results}
+                influencers={influencers}
+                config={config}
+                sessionId={currentSessionId}
+                onBackToSetup={() => setStep(influencers.length > 0 ? 'config' : 'upload')}
+              />
             )}
           </>
         )}

@@ -40,8 +40,7 @@
       width: 3px;
       height: 3px;
       border-radius: 50%;
-      back
-      round: #2a2a2a;
+      background: #2a2a2a;
     }
 
     .page-title {
@@ -73,15 +72,15 @@
 
     .chart-area {
       position: relative;
-      width: 820px;
-      height: 810px;
+      width: 900px;
+      height: 1060px;
     }
 
     .chart-svg {
       position: absolute;
       inset: 0;
-      width: 820px;
-      height: 810px;
+      width: 900px;
+      height: 1060px;
       pointer-events: none;
       z-index: 0;
     }
@@ -296,110 +295,139 @@
 // ─────────────────────────────────────────────────────────────────
 
 const nodes = [
-  // ── FINDER MODE ──────────────────────────────────────────────
+  // ── SEEDING PIPELINE ─────────────────────────────────────────
   {
-    id: 'xlsx', label: 'XLSX Files',
-    sub: 'Apify Instagram export · multi-file',
-    type: 'input', x: 125, y: 40, w: 172, h: 54,
+    id: 'xlsx', label: 'XLSX Upload',
+    sub: 'Apify export · multi-file',
+    type: 'input', x: 15, y: 40, w: 170, h: 54,
   },
   {
-    id: 'parse', label: 'parseApifyXlsx',
-    sub: 'Group by username · aggregate stats',
-    type: 'skill', x: 125, y: 140, w: 172, h: 54,
+    id: 'scrape', label: 'Scrape URLs / Hashtags',
+    sub: 'Instagram + Threads',
+    type: 'input', x: 200, y: 40, w: 195, h: 54,
   },
   {
-    id: 'dedup', label: 'Deduplicate & Sort',
-    sub: 'Keep highest engagement per user',
-    type: 'process', x: 125, y: 240, w: 172, h: 54,
+    id: 'apify_s', label: 'Apify API', sub: '',
+    type: 'api', x: 410, y: 52, w: 80, h: 30,
   },
   {
-    id: 'config', label: 'Config Step',
-    sub: 'niches · location · min likes · video',
-    type: 'config', x: 125, y: 340, w: 172, h: 54,
+    id: 'parse', label: 'Parse & Dedupe',
+    sub: 'group by handle · aggregate stats',
+    type: 'skill', x: 115, y: 142, w: 180, h: 54,
   },
   {
-    id: 'batch', label: 'Filter + Batch Score',
-    sub: '5 accounts per batch',
-    type: 'process', x: 125, y: 435, w: 172, h: 54,
+    id: 'setup', label: 'Set Up Your Run',
+    sub: 'niches · audience · keywords · brief · Databank',
+    type: 'config', x: 115, y: 244, w: 180, h: 54,
   },
-  // sub-nodes fan out below batch
-  { id: 'n_niche',   label: 'scoreNiche',    sub: 'keyword match',      type: 'sub', x: 8,   y: 537, w: 108, h: 44 },
-  { id: 'n_loc',     label: 'scoreLocation', sub: 'signal words',       type: 'sub', x: 124, y: 537, w: 108, h: 44 },
-  { id: 'n_content', label: 'scoreContent',  sub: 'video ratio',        type: 'sub', x: 240, y: 537, w: 108, h: 44 },
-  { id: 'n_bot',     label: 'scoreBotRisk',  sub: 'comment/like ratio', type: 'sub', x: 356, y: 537, w: 108, h: 44 },
   {
-    id: 'weighted', label: 'Weighted Score',
-    sub: 'niche×3.5 + loc×3.0 + format×2.0 + bot×1.5',
-    type: 'process', x: 125, y: 630, w: 172, h: 54,
+    id: 'filters', label: 'Hard Filters',
+    sub: 'min avg likes · target location',
+    type: 'process', x: 115, y: 346, w: 180, h: 54,
+  },
+  {
+    id: 'batch', label: 'Batch Score',
+    sub: '5 per batch · free, in-browser',
+    type: 'process', x: 115, y: 448, w: 180, h: 54,
+  },
+  // sub-scores fan out below batch
+  { id: 's_eng', label: 'Engagement',  sub: 'log likes · comments · reach', type: 'sub', x: 15,  y: 550, w: 120, h: 46 },
+  { id: 's_rel', label: 'Relevancy',   sub: 'niches · keywords · audience', type: 'sub', x: 150, y: 550, w: 120, h: 46 },
+  { id: 's_bot', label: 'Bot Risk',    sub: 'informational only',           type: 'sub', x: 285, y: 550, w: 120, h: 46 },
+  {
+    id: 'overall', label: 'Overall Score',
+    sub: '50% Eng + 50% Rel · off-niche cap 40',
+    type: 'process', x: 115, y: 648, w: 180, h: 54,
   },
   {
     id: 'results', label: 'Results Table',
-    sub: 'Sort · Filter · Export CSV',
-    type: 'output', x: 125, y: 730, w: 172, h: 54,
+    sub: 'live stats · AI fit · filters · export XLSX',
+    type: 'output', x: 115, y: 750, w: 180, h: 54,
+  },
+  { id: 'apify_r', label: 'Apify API',    sub: '', type: 'api', x: 330, y: 738, w: 110, h: 28 },
+  { id: 'ds_r',    label: 'DeepSeek API', sub: '', type: 'api', x: 330, y: 774, w: 110, h: 28 },
+  {
+    id: 'review', label: 'Review Queue',
+    sub: 'approve / reject · fit rating · DM draft',
+    type: 'output', x: 115, y: 852, w: 180, h: 54,
+  },
+  {
+    id: 'ready', label: 'Ready to Send',
+    sub: 'DM status tracking · copy & open',
+    type: 'output', x: 115, y: 954, w: 180, h: 54,
   },
 
-  // ── PROFILE LOOKUP MODE ───────────────────────────────────────
+  // ── CAMPAIGN OPS ─────────────────────────────────────────────
   {
-    id: 'username', label: '@username',
-    sub: 'or instagram.com/username',
-    type: 'input', x: 516, y: 40, w: 172, h: 54,
+    id: 'camp_create', label: 'Create / Import Campaign',
+    sub: '#hashtags + @mentions = "posted" signals',
+    type: 'input', x: 560, y: 40, w: 190, h: 54,
   },
   {
-    id: 'scraper', label: 'startReelScraper',
-    sub: 'Trigger Apify actor run',
-    type: 'skill', x: 516, y: 140, w: 172, h: 54,
+    id: 'attach', label: 'Attach KOLs',
+    sub: 'from approved Review Queue · set format',
+    type: 'process', x: 560, y: 142, w: 190, h: 54,
   },
   {
-    id: 'apify_api', label: 'Apify API', sub: '',
-    type: 'api', x: 710, y: 151, w: 84, h: 30,
+    id: 'pipeline', label: 'KOL Pipeline',
+    sub: 'approved → shipped → awaiting → posted',
+    type: 'config', x: 560, y: 244, w: 190, h: 54,
   },
   {
-    id: 'poll', label: 'Poll getRun',
-    sub: 'Every 3s until SUCCEEDED',
-    type: 'process', x: 516, y: 248, w: 172, h: 54,
+    id: 'verify', label: 'Verify Posts',
+    sub: 'auto ~2×/day + manual',
+    type: 'skill', x: 560, y: 346, w: 190, h: 54,
+  },
+  { id: 'apify_v', label: 'Apify API', sub: '', type: 'api', x: 770, y: 358, w: 90, h: 30 },
+  {
+    id: 'confirm', label: 'Confirm Match',
+    sub: 'human sign-off gate',
+    type: 'process', x: 560, y: 448, w: 190, h: 54,
   },
   {
-    id: 'dataset', label: 'getDatasetItems',
-    sub: 'Fetch all scraped reels',
-    type: 'skill', x: 516, y: 348, w: 172, h: 54,
+    id: 'nudge', label: 'Draft Nudge',
+    sub: 'overdue KOLs · market language',
+    type: 'skill', x: 560, y: 550, w: 190, h: 54,
   },
+  { id: 'ds_n', label: 'DeepSeek API', sub: '', type: 'api', x: 770, y: 562, w: 100, h: 30 },
   {
-    id: 'compute', label: 'computeStats',
-    sub: 'Filter to last 90 days',
-    type: 'process', x: 516, y: 448, w: 172, h: 54,
-  },
-  {
-    id: 'dashboard', label: 'Profile Dashboard',
-    sub: 'Median likes · views · hidden count',
-    type: 'output', x: 516, y: 553, w: 172, h: 54,
+    id: 'campdash', label: 'Campaign Dashboard',
+    sub: 'fulfilled % · board / table · exports',
+    type: 'output', x: 560, y: 652, w: 190, h: 54,
   },
 ]
 
 // edges: from node id → to node id
 const edges = [
-  // finder vertical chain
+  // seeding vertical chain
   { from: 'xlsx',    to: 'parse' },
-  { from: 'parse',   to: 'dedup' },
-  { from: 'dedup',   to: 'config' },
-  { from: 'config',  to: 'batch' },
+  { from: 'scrape',  to: 'parse' },
+  { from: 'scrape',  to: 'apify_s', style: 'api' },
+  { from: 'parse',   to: 'setup' },
+  { from: 'setup',   to: 'filters' },
+  { from: 'filters', to: 'batch' },
   // fan out
-  { from: 'batch',   to: 'n_niche' },
-  { from: 'batch',   to: 'n_loc' },
-  { from: 'batch',   to: 'n_content' },
-  { from: 'batch',   to: 'n_bot' },
+  { from: 'batch',   to: 's_eng' },
+  { from: 'batch',   to: 's_rel' },
+  { from: 'batch',   to: 's_bot' },
   // fan in
-  { from: 'n_niche',   to: 'weighted' },
-  { from: 'n_loc',     to: 'weighted' },
-  { from: 'n_content', to: 'weighted' },
-  { from: 'n_bot',     to: 'weighted' },
-  { from: 'weighted', to: 'results' },
-  // lookup chain
-  { from: 'username', to: 'scraper' },
-  { from: 'scraper',  to: 'apify_api', style: 'api' },
-  { from: 'scraper',  to: 'poll' },
-  { from: 'poll',     to: 'dataset' },
-  { from: 'dataset',  to: 'compute' },
-  { from: 'compute',  to: 'dashboard' },
+  { from: 's_eng',   to: 'overall' },
+  { from: 's_rel',   to: 'overall' },
+  { from: 's_bot',   to: 'overall' },
+  { from: 'overall', to: 'results' },
+  { from: 'results', to: 'apify_r', style: 'api' },
+  { from: 'results', to: 'ds_r',    style: 'api' },
+  { from: 'results', to: 'review' },
+  { from: 'review',  to: 'ready' },
+  // campaign ops chain
+  { from: 'camp_create', to: 'attach' },
+  { from: 'attach',      to: 'pipeline' },
+  { from: 'pipeline',    to: 'verify' },
+  { from: 'verify',      to: 'apify_v', style: 'api' },
+  { from: 'verify',      to: 'confirm' },
+  { from: 'confirm',     to: 'nudge' },
+  { from: 'nudge',       to: 'ds_n', style: 'api' },
+  { from: 'nudge',       to: 'campdash' },
 ]
 
 // ─────────────────────────────────────────────────────────────────
@@ -408,110 +436,130 @@ const edges = [
 
 const details = {
   xlsx: {
-    title: 'XLSX Files',
+    title: 'XLSX Upload',
     colorType: 'input',
-    what: 'One or more Excel files exported from an Apify Instagram scraper run. Each file contains rows of posts — one row per post — with columns like ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, paidPartnership, and productType.',
+    what: 'One or more Excel files exported from an Apify Instagram Scraper run — one row per post, with ownerUsername, caption, likesCount, commentsCount, hashtags, locationName, and more. Drag-and-drop multiple files to combine sources; the filename becomes the Source label in the export.',
     output: 'Raw post rows, one per Instagram post',
-    notes: 'Multiple files are accepted. Identical usernames across files are merged; the version with the highest totalEngagement wins.',
+    notes: 'Parsing is free and local. Identical usernames across files are merged; the version with the highest total engagement wins.',
+  },
+  scrape: {
+    title: 'Scrape URLs / Hashtags',
+    colorType: 'input',
+    what: 'Direct intake without leaving the tool. Instagram: paste competitor post URLs, brand-tagged pages, or hashtags (grouped per brand, one Apify job each). Threads: keyword search with two separate fields — pain-point keywords and content-genre keywords — each result stamped with which term found it. Both platforms scrape in parallel with a live progress line.',
+    output: 'Scraped post rows, fed into the same parser as XLSX uploads',
+    notes: 'Threads results pass a two-gate quality funnel (post-likes floor, then follower/median floors after profile enrichment). Cost scales with the result limit (~$0.50–1 per 200 results). All API calls go through the Cloudflare Worker proxy — keys never reach the browser.',
   },
   parse: {
-    title: 'parseApifyXlsx',
+    title: 'Parse & Dedupe',
     colorType: 'skill',
-    what: 'Reads the XLSX using the xlsx library, groups rows by ownerUsername, and aggregates per influencer: avgLikes, avgComments, videoRatio, up to 40 deduplicated hashtags, 5 sample captions, locationNames, and a count of paid-partnership posts.',
-    output: 'Array of influencer objects sorted by totalEngagement desc',
-    notes: 'Video detection checks the "type" or "productType" column for "video", "clip", or "reel".',
+    what: 'Groups rows by handle and aggregates per account: avgLikes, avgComments, followerCount, videoRatio, deduplicated hashtags, sample captions, and location names. When the same account appears in multiple files or scrapes, the version with the highest total engagement is kept.',
+    output: 'Clean, deduplicated account array sorted by engagement',
   },
-  dedup: {
-    title: 'Deduplicate & Sort',
-    colorType: 'process',
-    what: 'When multiple XLSX files are uploaded, the same account may appear in more than one. Deduplication keeps the version with the highest totalEngagement (avgLikes + avgComments). The final list is sorted descending by that metric.',
-    output: 'Clean, deduplicated influencer array',
-  },
-  config: {
-    title: 'Config Step',
+  setup: {
+    title: 'Set Up Your Run',
     colorType: 'config',
-    what: 'Before scoring, the user sets four parameters: target niches (beauty, skincare, lifestyle, fashion, health, food), target location (Hong Kong, Taiwan, Singapore, or Macau), a minimum average-likes threshold, and whether to require video content.',
-    output: 'Config object: { niches, locationTarget, minEngagement, requireVideo }',
+    what: 'Data intake and scoring config sit side by side on one screen. Choose target niches (beauty, skincare, lifestyle, fashion, food, health), describe the target audience, add in-niche keywords to reward and exclude keywords to penalise, pick a target location and minimum avg likes, and write the campaign brief (five structured fields — auto-fill can parse a pasted freeform brief via DeepSeek). The shared team Databank saves and reloads both intake and config in one click.',
+    output: 'Config object: niches, audience, keywords, location, brief',
+  },
+  filters: {
+    title: 'Hard Filters',
+    colorType: 'process',
+    what: 'Applied before any scoring. Accounts below the minimum avg-likes threshold are dropped. The target-location filter removes accounts detected in a different region (HK / Taiwan / Singapore / Macau) — accounts with no detectable location are kept so good candidates the scraper couldn\'t geo-tag aren\'t lost.',
+    output: 'Filtered account list ready to score',
   },
   batch: {
-    title: 'Filter + Batch Score',
+    title: 'Batch Score',
     colorType: 'process',
-    what: 'Influencers below the minimum engagement threshold are removed first. Remaining accounts are scored in batches of 5, with the progress bar updated after each batch. Batching keeps the UI responsive even with hundreds of accounts.',
+    what: 'Remaining accounts are scored in batches of 5, with the progress bar updating after each batch. All scoring is deterministic arithmetic in the browser — no external calls, no cost.',
     output: 'Progress state + final scored results array',
   },
-  n_niche: {
-    title: 'scoreNiche',
+  s_eng: {
+    title: 'Engagement Score',
     colorType: 'sub',
-    what: 'Keyword-matches the influencer\'s hashtags, captions, and full name against a curated niche dictionary (English + Traditional Chinese terms). Each hit scores 1.5 points, capped at 10. Also returns the matched signal words for display.',
-    output: '{ score: 0–10, signals: string[] }',
-  },
-  n_loc: {
-    title: 'scoreLocation',
-    colorType: 'sub',
-    what: 'Scans hashtags, captions, and locationNames for region-specific signals — e.g. "香港", "causeway bay", "旺角" for HK; "台灣", "taipei" for Taiwan. For Taiwan, pairing traditional Chinese with Putonghua voiceover signals adds a +4 boost. Capped at 10.',
-    output: '{ score: 0–10, signals: string[] }',
-  },
-  n_content: {
-    title: 'scoreContentFormat',
-    colorType: 'sub',
-    what: 'If the user requires video, the score equals videoRatio × 10 (share of posts that are reels or clips). If video is not required, a neutral score of 7 is used so it doesn\'t penalise static-content creators.',
+    what: 'log(1 + avgLikes + avgComments × 1.5) plus a bounded follower reach boost. After Fetch Live Stats it upgrades to median likes, views (× 0.8), and comments (× 1.5) from the 10 most recent posts — median resists viral-post skew.',
     output: '{ score: 0–10 }',
   },
-  n_bot: {
-    title: 'scoreBotRisk',
+  s_rel: {
+    title: 'Relevancy Score',
     colorType: 'sub',
-    what: 'Checks the comment-to-like ratio. Very high likes with near-zero comments is a bot signal. Scores 2–9: accounts with >5k likes and <0.5% comment ratio score 2 (suspicious); healthy ratios (≥2%) score 9. A score ≤3 appends a "bot-risk" flag.',
-    output: '{ score: 0–10 }',
+    what: 'Starts at baseline 3. +1 per built-in niche keyword hit in a target niche; −1 per off-niche category matched. Your own in-niche keywords and target-audience terms count +1.5 each; exclude keywords −3 each; +1 for a location match. Capped 0–10.',
+    output: '{ score: 0–10, signals: string[] }',
   },
-  weighted: {
-    title: 'Weighted Score',
+  s_bot: {
+    title: 'Bot Risk Score',
+    colorType: 'sub',
+    what: 'Comment-to-like ratio heuristic. High likes with near-zero comments is a bot signal: scores 2 (suspicious) to 9 (healthy, ratio ≥ 2%). Informational only — it never moves the Overall score, but ≤ 3 appends a "bot-risk" flag.',
+    output: '{ score: 0–10 } · not in Overall',
+  },
+  overall: {
+    title: 'Overall Score',
     colorType: 'process',
-    what: 'Combines the four sub-scores into a single integer using fixed weights. Also generates a human-readable verdict ("Strong HK signals, good niche fit") and a flag array (e.g. "hk-based", "video-creator", "bot-risk", "cantonese-speaker").',
-    output: '{ overall, scores, verdict, flags[], locationSignals, nicheSignals }',
+    what: 'Base formula: Engagement × 5 + Relevancy × 5 (50/50 — niche fit weighs as much as reach). If "Blend into Overall" is ticked after AI scoring, it reweights to 35% Engagement + 25% Relevancy + 40% AI Fit. Off-niche cap: when relevancy falls below the baseline of 3, Overall is capped at 40 — reach alone can\'t rescue a wrong-vertical account. Also generates the verdict text and flags (video-creator, bot-risk, location-match…).',
+    output: '{ overall 0–100, scores, verdict, flags[] }',
     weights: true,
   },
   results: {
     title: 'Results Table',
     colorType: 'output',
-    what: 'Displays all scored influencers in a sortable, filterable table. Columns show username, overall score, niche, location, content format, and bot-risk sub-scores, plus flags and matched signals. Users can download the full dataset as a CSV.',
-    output: 'Interactive table + CSV export via exportCsv.js',
+    what: 'Ranked, sortable, filterable table with a column picker and a Content filter (All / Video only / Non-video). Every sort and filter is captured in the URL, so a copied link opens the exact same view. From here: Fetch Live Stats (Apify, ~$0.01/account, cached 7 days), Score fit with AI (DeepSeek, learns from your team\'s ~40 most recent review decisions), Export XLSX, and Send for Review.',
+    output: 'Interactive table + formatted XLSX export',
   },
-  username: {
-    title: '@username Input',
-    colorType: 'input',
-    what: 'The user types an Instagram handle (with or without @) or a full instagram.com URL. The extractUsername() helper strips URL prefixes and the @ symbol to produce a clean handle for the API call.',
-    output: 'Cleaned username string',
-  },
-  scraper: {
-    title: 'startReelScraper',
-    colorType: 'skill',
-    what: 'POSTs to the Apify API using the VITE_APIFY_API_KEY (baked into the bundle at build time by Vite). Starts an Instagram Reels scraper actor for the given username and returns a run object containing the run ID used for polling.',
-    output: '{ id: string, status: "READY" | "RUNNING" }',
-    notes: 'The API key is stored in .env as VITE_APIFY_API_KEY and injected at build time — it is visible in the client bundle.',
-  },
-  poll: {
-    title: 'Poll getRun',
-    colorType: 'process',
-    what: 'Calls getRun(run.id) every 3 seconds in a while loop until the status is no longer READY or RUNNING. If the run ends in any status other than SUCCEEDED (e.g. FAILED, ABORTED), an error is thrown and shown to the user.',
-    output: 'Completed run object with defaultDatasetId',
-  },
-  dataset: {
-    title: 'getDatasetItems',
-    colorType: 'skill',
-    what: 'Fetches the full result set from the Apify dataset using the defaultDatasetId from the completed run. Returns an array of reel post objects with fields: timestamp, likesCount, videoViewCount, caption, and url.',
-    output: 'Post objects array from Apify dataset',
-  },
-  compute: {
-    title: 'computeStats',
-    colorType: 'process',
-    what: 'Filters posts to the last 90 days, then computes: median likes (skipping hidden-like posts where likesCount === -1), median video view count, and a count of posts with hidden likes. Returns up to 20 most recent posts for the list view.',
-    output: '{ total, hiddenCount, avgLikes, avgViews, posts[] }',
-  },
-  dashboard: {
-    title: 'Profile Dashboard',
+  review: {
+    title: 'Review Queue',
     colorType: 'output',
-    what: 'Renders three stat cards (median likes, median views, hidden-like count) and a scrollable table of up to 20 recent reels with per-post like and view counts plus dates. Each row links out to the reel on Instagram.',
-    output: 'Profile analytics UI (real-time, single account)',
+    what: 'Team reviews each submitted account: Reject with a categorised reason (off-niche, audience mismatch, bot risk…) or Approve with a 1–5 fit rating — both feed the AI Fit score as training signal. One DM draft is generated per campaign from the brief (DeepSeek) and reused for every approved account. "Start campaign" bridges approved KOLs straight into Campaign Ops.',
+    output: 'Approved / rejected decisions + campaign DM draft',
+  },
+  ready: {
+    title: 'Ready to Send',
+    colorType: 'output',
+    what: 'Aggregates approved accounts across submissions for outreach. Track DM status per account (Not sent / Sent / Replied / No response) so the team never double-sends. "Copy & open profile" copies the DM draft, opens Instagram, and auto-marks Sent. Sending stays copy-paste for now (Meta API paused).',
+    output: 'Outreach tracker + XLSX export',
+  },
+
+  camp_create: {
+    title: 'Create / Import Campaign',
+    colorType: 'input',
+    what: 'New campaign sets brand, market (HK / TW / SG / MY), type (gifted / paid / mixed), start date, and posting deadline — plus the #hashtags and @mentions that count as "posted" (the detection signals the tracker matches against). Or Import an existing marketing-plan .xlsx to pull handles, budgets, and formats. Toggle card and table views.',
+    output: 'Campaign with detection signals + deadline',
+  },
+  attach: {
+    title: 'Attach KOLs',
+    colorType: 'process',
+    what: 'Pull approved KOLs straight from the Review Queue (deduped against already-attached). Tag each with the content they owe: Feed and Reel are auto-verified from the scrape; Story (expires in 24h) and Blog (off-platform) are flagged "verify manually" and never auto-marked overdue.',
+    output: 'Campaign KOLs with content format',
+  },
+  pipeline: {
+    title: 'KOL Pipeline',
+    colorType: 'config',
+    what: 'Each KOL moves through approved → shipped → awaiting post → posted. Past the deadline with no detected post → overdue. A late post still counts (overdue → posted is allowed), and any non-terminal KOL can be marked opted out. Managers can move a KOL to any state manually.',
+    output: 'Per-KOL pipeline state',
+  },
+  verify: {
+    title: 'Verify Posts',
+    colorType: 'skill',
+    what: 'Scrapes each awaiting / overdue KOL and matches recent posts against the campaign\'s hashtag and mention signals. Runs automatically ~twice a day (1am & 1pm cron) and on demand via the "Verify posts" button. Posts published before the ship date are surfaced but not counted. A match records the post — link plus which signals hit — and sets the KOL to Posted.',
+    output: 'Detected posts + updated KOL states',
+    notes: 'Same Apify scrape as Live Stats: ~$0.01 per KOL checked, via the Cloudflare Worker.',
+  },
+  confirm: {
+    title: 'Confirm Match',
+    colorType: 'process',
+    what: 'Auto-detection is deliberately cautious: it sets Posted but stores the post as unconfirmed (human_verified: false). A manager eyeballs the detected post and clicks Confirm — nothing is treated as fully verified until a person signs off. This is the safety gate against a mis-tagged or coincidental post being counted.',
+    output: 'Human-verified post record',
+  },
+  nudge: {
+    title: 'Draft Nudge',
+    colorType: 'skill',
+    what: 'For overdue KOLs only: generates a warm, no-pressure reminder DM in the campaign\'s market language — Cantonese for HK, zh-TW for Taiwan, never mixed. Copy it, send from Instagram, then "Mark sent" to log it.',
+    output: 'Reminder DM draft + send log',
+    notes: 'DeepSeek chat — a fraction of a cent per draft.',
+  },
+  campdash: {
+    title: 'Campaign Dashboard',
+    colorType: 'output',
+    what: 'Per-campaign board and table views with KOLs, Posted, Overdue, and Fulfilled % (opted-out KOLs excluded). Also: SF Express waybill tracking and bulk shipping-file export, and Google Sheet create/sync for sharing outside the tool.',
+    output: 'Fulfilment tracking + shipping & sheet exports',
   },
 }
 
@@ -562,8 +610,8 @@ function render() {
 
   // Mode labels
   ;[
-    { text: '— Finder Mode',         left: 125 },
-    { text: '— Profile Lookup Mode', left: 516 },
+    { text: '— Seeding Pipeline', left: 115 },
+    { text: '— Campaign Ops',     left: 560 },
   ].forEach(({ text, left }) => {
     const el = document.createElement('div')
     el.className = 'mode-label'
@@ -576,7 +624,7 @@ function render() {
   const ns = 'http://www.w3.org/2000/svg'
   const svg = document.createElementNS(ns, 'svg')
   svg.classList.add('chart-svg')
-  svg.setAttribute('viewBox', '0 0 820 810')
+  svg.setAttribute('viewBox', '0 0 900 1060')
 
   // Marker definitions
   svg.innerHTML = `
@@ -592,8 +640,8 @@ function render() {
 
   // Vertical separator between modes
   const sep = document.createElementNS(ns, 'line')
-  sep.setAttribute('x1', '472'); sep.setAttribute('y1', '28')
-  sep.setAttribute('x2', '472'); sep.setAttribute('y2', '620')
+  sep.setAttribute('x1', '510'); sep.setAttribute('y1', '28')
+  sep.setAttribute('x2', '510'); sep.setAttribute('y2', '1008')
   sep.setAttribute('stroke', '#181818')
   sep.setAttribute('stroke-width', '1')
   sep.setAttribute('stroke-dasharray', '5 5')
@@ -669,10 +717,10 @@ function showDetail(id) {
       <div>
         <div class="section-label">Score weights</div>
         <div class="weights-grid">
-          <div class="weight-chip"><strong>Niche</strong>× 3.5</div>
-          <div class="weight-chip"><strong>Location</strong>× 3.0</div>
-          <div class="weight-chip"><strong>Format</strong>× 2.0</div>
-          <div class="weight-chip"><strong>Bot Risk</strong>× 1.5</div>
+          <div class="weight-chip"><strong>Engagement</strong>× 5.0</div>
+          <div class="weight-chip"><strong>Relevancy</strong>× 5.0</div>
+          <div class="weight-chip"><strong>AI blend</strong>35 / 25 / 40</div>
+          <div class="weight-chip"><strong>Off-niche cap</strong>≤ 40</div>
         </div>
       </div>` : ''}
       ${d.notes ? `

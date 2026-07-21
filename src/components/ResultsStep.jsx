@@ -20,8 +20,9 @@ const COLUMN_INFO = {
   overall: {
     title: 'Overall Score (0–100)',
     lines: [
-      '80% Engagement Score + 20% Relevancy Score.',
+      '50% Engagement Score + 50% Relevancy Score.',
       'Each sub-score is 0–10; combined and scaled to 0–100.',
+      'Capped at 40 when Relevancy < 3 (off-niche floor).',
       '· 70+ = strong match',
       '· 45–69 = possible',
       '· <45 = low fit',
@@ -31,7 +32,8 @@ const COLUMN_INFO = {
     title: 'Relevancy Score (0–10)',
     lines: [
       'Baseline 3. Adds 1 per keyword hit in your target niches.',
-      'Deducts 1 per off-niche category that also has keyword hits.',
+      'Your in-niche keywords and audience terms add 1.5 each; exclude keywords deduct 3 each.',
+      'Deducts 1 per off-niche category that also has keyword hits; +1 for a location match.',
       'Scans captions, hashtags, and display name.',
       '· 8–10 = strong niche match',
       '· 5–7 = some relevant content',
@@ -362,31 +364,40 @@ function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
 
-function StepProgress({ current }) {
+function StepProgress({ current, onGoToSetup }) {
   const steps = [
-    { num: 1, label: 'Set up' },
+    { num: 1, label: 'Set up', onClick: onGoToSetup },
     { num: 2, label: 'Results' },
   ]
   return (
     <div className="flex items-center mb-6">
-      {steps.map((s, i) => (
-        <div key={s.num} className="flex items-center">
-          <div className="flex items-center gap-2">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${
-              s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
-            }`}>{s.num}</span>
-            <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === current ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
+      {steps.map((s, i) => {
+        const clickable = Boolean(s.onClick) && s.num !== current
+        return (
+          <div key={s.num} className="flex items-center">
+            <button
+              type="button"
+              onClick={clickable ? s.onClick : undefined}
+              disabled={!clickable}
+              title={clickable ? 'Back to set-up — these results are kept' : undefined}
+              className={`flex items-center gap-2 group ${clickable ? '' : 'cursor-default'}`}
+            >
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 transition-colors ${
+                s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
+              } ${clickable ? 'group-hover:bg-ink group-hover:text-white' : ''}`}>{s.num}</span>
+              <span className={`text-[12.5px] font-medium whitespace-nowrap transition-colors ${s.num === current ? 'text-ink' : 'text-faint'} ${clickable ? 'group-hover:text-ink' : ''}`}>{s.label}</span>
+            </button>
+            {i < steps.length - 1 && (
+              <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />
+            )}
           </div>
-          {i < steps.length - 1 && (
-            <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />
-          )}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
-export default function ResultsStep({ results, influencers, config, sessionId }) {
+export default function ResultsStep({ results, influencers, config, sessionId, onBackToSetup }) {
   const sessionIdRef = useRef(sessionId)
   useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
@@ -756,7 +767,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   return (
     <div className="px-10 py-8 w-full">
 
-      <StepProgress current={2} />
+      <StepProgress current={2} onGoToSetup={onBackToSetup} />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
@@ -851,7 +862,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
             </button>
           ) : aiStatus === 'done' ? (
             <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1.5 text-[11px] font-mono text-muted cursor-pointer select-none" title="Reweight Overall to 60% Engagement + 10% Relevancy + 30% AI fit (Eng×6 + Rel×1 + AI×3)">
+              <label className="flex items-center gap-1.5 text-[11px] font-mono text-muted cursor-pointer select-none" title="Reweight Overall to 35% Engagement + 25% Relevancy + 40% AI fit (Eng×3.5 + Rel×2.5 + AI×4)">
                 <input type="checkbox" checked={blendAi} onChange={(e) => setBlendAi(e.target.checked)} className="w-3.5 h-3.5 accent-ink cursor-pointer" />
                 Blend into Overall
               </label>

@@ -1,7 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, ChevronUp, ChevronDown, Filter, Columns, Info, Loader2, RefreshCw, Send, Check, X, Sparkles } from 'lucide-react'
+import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, Sparkles } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
-import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
+import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
+import { useTableControls } from '../lib/useTableControls'
+import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
+import ColumnPicker from './table/ColumnPicker'
+import ColumnHeaderCell from './table/ColumnHeaderCell'
 import { fetchBatchStats, fetchThreadsProfileItems } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
@@ -154,72 +158,12 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
-function ColumnPicker({ selected, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const toggle = (id) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((c) => c !== id))
-    } else {
-      const order = TABLE_COLUMNS.map(c => c.id)
-      onChange([...selected, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
-    }
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-4 py-2 border border-[#E1DBCD] rounded-[10px] text-[13px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
-      >
-        <Columns size={14} />
-        Columns
-        {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
-            {selected.length}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-card-edge rounded-[12px] shadow-lg z-10 p-3">
-          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Show / export columns</p>
-          <div className="space-y-1">
-            {TABLE_COLUMNS.map((col) => (
-              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
-                <span className="font-mono text-[11px] text-body">{col.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
-            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-
-function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortKey, sortDir, toggleSort, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
   // Extra leading column for checkbox when in selection mode
   const gridTemplate = selectionMode
     ? `2rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
     : `2fr ${visibleCols.map((c) => c.width).join(' ')}`
-
-  const SortIcon = ({ k }) => {
-    if (sortKey !== k) return <ChevronUp size={12} className="opacity-20" />
-    return sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />
-  }
 
   const renderCell = (col, r) => {
     try {
@@ -309,20 +253,22 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
 
   return (
     <div className="border border-card-edge rounded-[14px] overflow-auto max-h-[70vh] bg-white">
-      <div className="sticky top-0 z-10 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
+      <div className="sticky top-0 z-20 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
-        {selectionMode && <span />}
-        <span>Account</span>
+        {selectionMode && <span className="sticky left-0 bg-surface z-10" />}
+        <span className={`sticky ${selectionMode ? 'left-8' : 'left-0'} bg-surface z-10`}>Account</span>
         {visibleCols.map((col) => (
-          col.sortKey ? (
-            <button key={col.id} onClick={() => toggleSort(col.sortKey)} className="flex items-center justify-center gap-1 hover:text-ink">
-              {col.label} <SortIcon k={col.sortKey} />{col.infoKey && <InfoTooltip column={col.infoKey} />}
-            </button>
-          ) : (
-            <span key={col.id} className="flex items-center justify-center gap-1">
-              {col.label}{col.infoKey && <InfoTooltip column={col.infoKey} />}
-            </span>
-          )
+          <ColumnHeaderCell
+            key={col.id}
+            col={col}
+            sortId={sortId}
+            sortDir={sortDir}
+            onToggleSort={toggleSort}
+            distinctValues={distinctValues(col.id)}
+            activeFilter={filters[col.id] || []}
+            onFilterChange={setFilter}
+            infoSlot={col.infoKey ? <InfoTooltip column={col.infoKey} /> : null}
+          />
         ))}
       </div>
 
@@ -332,12 +278,12 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       {filtered.map((r) => (
         <div key={r.username}>
           <div
-            className="grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
+            className="group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
           >
             {selectionMode && (
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-center">
+              <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center justify-center">
                 <input
                   type="checkbox"
                   checked={selectedAccounts.has(r.username)}
@@ -346,7 +292,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
                 />
               </div>
             )}
-            <div className="min-w-0">
+            <div className={`min-w-0 sticky ${selectionMode ? 'left-8' : 'left-0'} z-[1] bg-white group-hover:bg-surface`}>
               <div className="flex items-center gap-2">
                 <a href={profileUrl(r)} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -417,9 +363,8 @@ function writeCache(cache) {
 
 function StepProgress({ current }) {
   const steps = [
-    { num: 1, label: 'Get Data' },
-    { num: 2, label: 'Configure' },
-    { num: 3, label: 'Results' },
+    { num: 1, label: 'Set up' },
+    { num: 2, label: 'Results' },
   ]
   return (
     <div className="flex items-center mb-6">
@@ -444,12 +389,15 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const sessionIdRef = useRef(sessionId)
   useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
-  const [sortKey, setSortKey] = useState('overall')
-  const [sortDir, setSortDir] = useState('desc')
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   const [expandedRow, setExpandedRow] = useState(null)
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
+  // Column visibility is remembered across tabs + reloads (Phase 4).
+  const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
+  const handleColumnsChange = useCallback((next) => {
+    setSelectedColumns(next)
+    saveColumnPrefs(next)
+  }, [])
 
   // Selection + share state
   const [selectionMode, setSelectionMode] = useState(false)
@@ -590,35 +538,16 @@ export default function ResultsStep({ results, influencers, config, sessionId })
     })
   }, [results, infMap, liveStats, threadsStats, aiStats, blendAi])
 
-  const filtered = useMemo(() => {
+  // Pre-filter (min score + legacy flag filter) feeds the shared sort/filter
+  // engine, which owns per-column sort + category filters.
+  const preFiltered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
     if (filterFlag !== 'all') list = list.filter((r) => (r.flags || []).includes(filterFlag))
-    if (sortKey) {
-      const getVal = (r) =>
-        sortKey === 'overall'             ? r.overall
-        : sortKey === 'relevancy'         ? (r.scores?.relevancy ?? 0)
-        : sortKey === 'eng_score'         ? (r.scores?.engagement ?? 0)
-        : sortKey === 'ai_fit'            ? (r.aiScore ?? -1)
-        : sortKey === 'live_median_likes' ? (r.liveMedianLikes ?? -1)
-        : sortKey === 'live_median_views'    ? (r.liveMedianViews ?? -1)
-        : sortKey === 'live_median_comments' ? (r.liveMedianComments ?? -1)
-        : r.overall
-      list = [...list].sort((a, b) =>
-        sortDir === 'desc' ? getVal(b) - getVal(a) : getVal(a) - getVal(b)
-      )
-    }
     return list
-  }, [enriched, sortKey, sortDir, filterFlag, minScore])
+  }, [enriched, filterFlag, minScore])
 
-  const toggleSort = (key) => {
-    if (sortKey === key) {
-      if (sortDir === 'desc') setSortDir('asc')
-      else setSortKey(null) // third click resets to original scored order
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
+  const { processed: filtered, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
+    useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc' })
 
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
@@ -821,7 +750,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   return (
     <div className="px-10 py-8 w-full">
 
-      <StepProgress current={3} />
+      <StepProgress current={2} />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
@@ -836,7 +765,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} />
 
           {/* Selection + Send for Review controls */}
           {!selectionMode ? (
@@ -983,9 +912,12 @@ export default function ResultsStep({ results, influencers, config, sessionId })
           filtered={filtered}
           expandedRow={expandedRow}
           setExpandedRow={setExpandedRow}
-          sortKey={sortKey}
+          sortId={sortId}
           sortDir={sortDir}
           toggleSort={toggleSort}
+          filters={filters}
+          setFilter={setFilter}
+          distinctValues={distinctValues}
           liveStats={liveStats}
           liveStatus={liveStatus}
           aiStatus={aiStatus}

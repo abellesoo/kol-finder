@@ -16,6 +16,8 @@ import {
 } from '../lib/campaigns'
 import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
+import { useTableControls } from '../lib/useTableControls'
+import ColumnHeaderCell from './table/ColumnHeaderCell'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -40,6 +42,26 @@ const ACTION_LABEL = {
   approved: 'Reopen',
 }
 const BOARD_ORDER = ['approved', 'shipped', 'awaiting_post', 'overdue', 'posted', 'opted_out']
+
+// Sort/filter config for the spreadsheet view. Ops columns don't map to the KOL
+// scoring accessors, so KolTable feeds these to the shared useTableControls.
+const FORMAT_LABEL = (id) => CONTENT_FORMATS.find((f) => f.id === id)?.label || id
+const CAMPAIGN_COLS = [
+  { id: 'tier',     label: 'Tier',     type: 'category' },
+  { id: 'format',   label: 'Format',   type: 'category' },
+  { id: 'status',   label: 'Status',   type: 'category' },
+  { id: 'shipped',  label: 'Shipped',  type: 'number' },
+  { id: 'tracking', label: 'Tracking', type: 'text' },
+  { id: 'deadline', label: 'Deadline', type: 'number' },
+  { id: 'post',     label: 'Post',     type: 'text' },
+]
+const CAMPAIGN_ACCESSORS = {
+  tier:     { filterValues: (k) => [tierLabel(k.tier)] },
+  format:   { filterValues: (k) => (k.content_formats || []).map(FORMAT_LABEL) },
+  status:   { filterValues: (k) => [STATE_META[k.state]?.label || k.state] },
+  shipped:  { sortValue: (k) => (k.shipped_at ? Date.parse(k.shipped_at) : null) },
+  deadline: { sortValue: (k) => (k.deadline_override ? Date.parse(k.deadline_override) : null) },
+}
 
 function AttachModal({ campaignId, existingHandles, onClose, onAttached }) {
   const [loading, setLoading] = useState(true)
@@ -560,28 +582,38 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
 // format, deadline, post-confirm) in a compact grid. Nudge drafting stays in the
 // board view to keep the table lean.
 function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onSetFormats }) {
+  const { processed: sortedKols, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
+    useTableControls(kols, { defaultSortId: null, accessors: CAMPAIGN_ACCESSORS })
+
   return (
-    <div className="overflow-x-auto border border-card-edge rounded-[14px] bg-white">
+    <div className="overflow-auto max-h-[70vh] border border-card-edge rounded-[14px] bg-white">
       <table className="w-full min-w-[980px] text-[12.5px] border-collapse">
         <thead>
-          <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint border-b border-mist">
-            <th className="px-4 py-3 font-normal">KOL</th>
-            <th className="px-3 py-3 font-normal">Tier</th>
-            <th className="px-3 py-3 font-normal">Format</th>
-            <th className="px-3 py-3 font-normal">Status</th>
-            <th className="px-3 py-3 font-normal">Shipped</th>
-            <th className="px-3 py-3 font-normal">Tracking</th>
-            <th className="px-3 py-3 font-normal">Deadline</th>
-            <th className="px-3 py-3 font-normal">Post</th>
-            <th className="px-4 py-3 font-normal"></th>
+          <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint">
+            <th className="sticky left-0 top-0 z-30 bg-surface px-4 py-3 font-normal border-b border-mist">KOL</th>
+            {CAMPAIGN_COLS.map((col) => (
+              <th key={col.id} className="sticky top-0 z-20 bg-surface px-3 py-3 font-normal border-b border-mist">
+                <ColumnHeaderCell
+                  col={col}
+                  align="left"
+                  sortId={sortId}
+                  sortDir={sortDir}
+                  onToggleSort={toggleSort}
+                  distinctValues={distinctValues(col.id)}
+                  activeFilter={filters[col.id] || []}
+                  onFilterChange={setFilter}
+                />
+              </th>
+            ))}
+            <th className="sticky top-0 z-20 bg-surface px-4 py-3 font-normal border-b border-mist"></th>
           </tr>
         </thead>
         <tbody>
-          {kols.map((kol) => {
+          {sortedKols.map((kol) => {
             const posts = postsByKol[kol.id] || []
             return (
               <tr key={kol.id} className="border-b border-mist/60 last:border-0 align-top">
-                <td className="px-4 py-3">
+                <td className="sticky left-0 z-[1] bg-white px-4 py-3">
                   <a href={`https://instagram.com/${kol.kol_handle}`} target="_blank" rel="noreferrer"
                     className="font-medium text-ink hover:text-ink/70 inline-flex items-center gap-1 whitespace-nowrap">
                     @{kol.kol_handle} <ExternalLink size={10} className="opacity-40" />

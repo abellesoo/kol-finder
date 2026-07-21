@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket } from 'lucide-react'
-import UploadStep from './components/UploadStep'
-import ConfigStep from './components/ConfigStep'
+import CombinedStep from './components/CombinedStep'
 import ResultsStep from './components/ResultsStep'
 import DashboardPage from './components/DashboardPage'
 import InstructionsPage from './components/InstructionsPage'
@@ -409,11 +408,11 @@ function MainApp({ user, role, onSignOut }) {
             {step === 'scoring' && (
               <div className="px-8 py-8">
                 <div className="flex items-center mb-8">
-                  {[{ num: 1, label: 'Get Data' }, { num: 2, label: 'Configure' }, { num: 3, label: 'Results' }].map((s, i, arr) => (
+                  {[{ num: 1, label: 'Set up' }, { num: 2, label: 'Results' }].map((s, i, arr) => (
                     <div key={s.num} className="flex items-center">
                       <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${s.num === 3 ? 'bg-accent text-white' : 'bg-mist text-body'}`}>{s.num}</span>
-                        <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === 3 ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${s.num === 2 ? 'bg-accent text-white' : 'bg-mist text-body'}`}>{s.num}</span>
+                        <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === 2 ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
                       </div>
                       {i < arr.length - 1 && <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />}
                     </div>
@@ -451,11 +450,12 @@ function MainApp({ user, role, onSignOut }) {
                 </div>
               </div>
             )}
-            {step === 'upload' && <UploadStep onFiles={handleFiles} onScrapedItems={handleScrapedItems} />}
-            {step === 'config' && (
-              <ConfigStep
+            {(step === 'upload' || step === 'config') && (
+              <CombinedStep
+                influencers={influencers}
                 fileNames={fileNames}
-                influencerCount={influencers.length}
+                onFiles={handleFiles}
+                onScrapedItems={handleScrapedItems}
                 onStart={handleStart}
               />
             )}

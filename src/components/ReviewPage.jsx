@@ -1,10 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, Columns, ArrowLeft, Pencil, LayoutGrid, Table2, ChevronUp, ChevronDown } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, ArrowLeft, Pencil, LayoutGrid, Table2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { mergeReviewEntry, reviewKey, campaignDmDraft, DM_DRAFT_KEY } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
-import { TABLE_COLUMNS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
+import { TABLE_COLUMNS } from '../lib/columnDefs'
+import { useTableControls } from '../lib/useTableControls'
+import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
+import ColumnPicker from './table/ColumnPicker'
+import ColumnHeaderCell from './table/ColumnHeaderCell'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
@@ -131,62 +135,6 @@ function buildGridTemplate(activeCols) {
   })
   return ['minmax(160px,3fr)', ...colDefs, 'minmax(130px,auto)'].join(' ')
 }
-
-// ColumnPicker — same pattern and TABLE_COLUMNS as ResultsStep
-function ColumnPicker({ selected, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const toggle = (id) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter(c => c !== id))
-    } else {
-      const order = TABLE_COLUMNS.map(c => c.id)
-      onChange([...selected, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
-    }
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-1.5 border border-[#E1DBCD] rounded-[9px] text-[12px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
-      >
-        <Columns size={13} />
-        Columns
-        {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
-            {selected.length}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-card-edge rounded-[12px] shadow-lg z-20 p-3">
-          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Show / export columns</p>
-          <div className="space-y-1">
-            {TABLE_COLUMNS.map((col) => (
-              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
-                <span className="font-mono text-[11px] text-body">{col.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(TABLE_COLUMNS.map(c => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
-            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 
 
 function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
@@ -429,13 +377,13 @@ function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns }) {
   return (
     <>
       <div
-        className={`grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
+        className={`group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
           isApproved ? 'bg-[#F5F8F4]/50' : isRejected ? 'opacity-60' : ''
         }`}
         style={{ gridTemplateColumns: gridTemplate }}
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className="min-w-0 flex flex-col justify-center">
+        <div className="min-w-0 flex flex-col justify-center sticky left-0 z-[1] bg-white group-hover:bg-surface">
           <a
             href={profileUrl(account)}
             target="_blank"
@@ -560,9 +508,13 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [campaignBrief, setCampaignBrief] = useState('')
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
-  const [sortDir, setSortDir] = useState(null) // null = original, 'desc' = high→low, 'asc' = low→high
   const [saving, setSaving] = useState(false)
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
+  // Column visibility is remembered across tabs + reloads (Phase 4).
+  const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
+  const handleColumnsChange = useCallback((next) => {
+    setSelectedColumns(next)
+    saveColumnPrefs(next)
+  }, [])
   const [editingBrief, setEditingBrief] = useState(false)
   const [briefDraft, setBriefDraft] = useState('')
   const briefInputRef = useRef(null)
@@ -768,10 +720,10 @@ export default function ReviewPage({ reviewId, onBack }) {
   const rejectedCount = Object.values(reviewState).filter((e) => e.status === 'rejected').length
   const pendingCount = accounts.length - approvedCount - rejectedCount
 
-  const sortedAccounts = sortDir == null ? accounts : [...accounts].sort((a, b) =>
-    sortDir === 'desc' ? b.overall - a.overall : a.overall - b.overall
-  )
-  const cycleSort = () => setSortDir(d => d === null ? 'desc' : d === 'desc' ? 'asc' : null)
+  // Shared sort/filter engine — same behavior as the Results table. Default to
+  // the account's stored order (no sort) until a header is clicked.
+  const { processed: sortedAccounts, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
+    useTableControls(accounts, { defaultSortId: null, defaultSortDir: 'desc' })
 
   return (
     <div className="min-h-screen bg-paper px-[48px] py-[40px]">
@@ -810,7 +762,7 @@ export default function ReviewPage({ reviewId, onBack }) {
                 <Table2 size={13} /> Table
               </button>
             </div>
-            <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+            <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} />
           </div>
         </div>
         <div className="mt-4 px-4 py-3 bg-surface border border-card-edge rounded-[12px] group/brief">
@@ -945,27 +897,29 @@ export default function ReviewPage({ reviewId, onBack }) {
         const gridTemplate = buildGridTemplate(activeCols)
         const tableMinWidth = 160 + activeCols.reduce((s, id) => s + parseInt(TABLE_ROW_COLS[id].min), 0) + 130 + (activeCols.length + 1) * 12
         return (
-        <div className="overflow-x-auto">
-        <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white" style={{ minWidth: tableMinWidth }}>
+        <div className="overflow-auto max-h-[70vh] border border-card-edge rounded-[14px] bg-white">
+        <div style={{ minWidth: tableMinWidth }}>
           <div
-            className="grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em] items-center"
+            className="sticky top-0 z-20 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em] items-center"
             style={{ gridTemplateColumns: gridTemplate }}
           >
-            <span>Account</span>
-            {activeCols.map(id => (
-              id === 'overall' ? (
-                <button
+            <span className="sticky left-0 z-10 bg-surface">Account</span>
+            {activeCols.map(id => {
+              const meta = TABLE_COLUMNS.find(c => c.id === id)
+              return (
+                <ColumnHeaderCell
                   key={id}
-                  onClick={cycleSort}
-                  className="flex items-center justify-center gap-1 hover:text-ink transition-colors"
-                >
-                  {TABLE_ROW_COLS[id].label}
-                  {sortDir === 'desc' ? <ChevronDown size={11} /> : sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronUp size={11} className="opacity-20" />}
-                </button>
-              ) : (
-                <span key={id} className={TABLE_ROW_COLS[id].center ? 'text-center' : ''}>{TABLE_ROW_COLS[id].label}</span>
+                  col={{ id, label: TABLE_ROW_COLS[id].label, type: meta?.type }}
+                  align={TABLE_ROW_COLS[id].center ? 'center' : 'left'}
+                  sortId={sortId}
+                  sortDir={sortDir}
+                  onToggleSort={toggleSort}
+                  distinctValues={distinctValues(id)}
+                  activeFilter={filters[id] || []}
+                  onFilterChange={setFilter}
+                />
               )
-            ))}
+            })}
             <span />
           </div>
           {sortedAccounts.map((account) => (

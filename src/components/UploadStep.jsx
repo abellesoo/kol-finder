@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { Upload, FileSpreadsheet, X, ChevronRight, Link2, Loader2, AlertCircle } from 'lucide-react'
 import { startSeederScrape, startThreadsSeederScrape, fetchThreadsProfileItems, pollUntilDone, getDatasetItems, runWithConcurrency } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
@@ -66,26 +66,44 @@ function StepProgress({ current }) {
   )
 }
 
-export default function UploadStep({ onFiles, onScrapedItems }) {
-  const [tab, setTab] = useState('upload') // 'upload' | 'scrape'
+export default function UploadStep({ onFiles, onScrapedItems, embedded = false, initialScrape = null, onScrapeChange }) {
+  const [tab, setTab] = useState(initialScrape?.tab || 'upload') // 'upload' | 'scrape'
 
   // Upload tab state
   const inputRef = useRef(null)
   const [files, setFiles] = useState([])
   const [parsing, setParsing] = useState(false)
 
-  // Scrape tab state
-  const [platforms, setPlatforms] = useState({ instagram: true, threads: false })
-  const [scrapeInput, setScrapeInput] = useState('')
+  // Scrape tab state — seedable from a databank entry (initialScrape) so a
+  // repeat run for the same brand doesn't have to re-type the URLs / terms.
+  const [platforms, setPlatforms] = useState(initialScrape?.platforms || { instagram: true, threads: false })
+  const [scrapeInput, setScrapeInput] = useState(initialScrape?.scrapeInput || '')
   // Threads keyword tracks (one term per line). Pain-point = problems the
   // product solves (掉髮); genre = recurring content habits (olive young).
-  const [painpointInput, setPainpointInput] = useState('')
-  const [genreInput, setGenreInput] = useState('')
-  const [resultsLimit, setResultsLimit] = useState(200)
+  const [painpointInput, setPainpointInput] = useState(initialScrape?.painpointInput || '')
+  const [genreInput, setGenreInput] = useState(initialScrape?.genreInput || '')
+  const [resultsLimit, setResultsLimit] = useState(initialScrape?.resultsLimit ?? 200)
   const [scrapeStatus, setScrapeStatus] = useState('idle') // idle | running | error
   const [scrapeError, setScrapeError] = useState(null)
   // Live "what's happening now" line shown under the button while running.
   const [scrapeProgress, setScrapeProgress] = useState('')
+
+  // Apply a databank prefill pushed after mount (new object identity = a load).
+  useEffect(() => {
+    if (!initialScrape) return
+    setTab(initialScrape.tab || 'scrape')
+    setPlatforms(initialScrape.platforms || { instagram: true, threads: false })
+    setScrapeInput(initialScrape.scrapeInput || '')
+    setPainpointInput(initialScrape.painpointInput || '')
+    setGenreInput(initialScrape.genreInput || '')
+    setResultsLimit(initialScrape.resultsLimit ?? 200)
+  }, [initialScrape])
+
+  // Report the current scrape inputs upward so the databank can snapshot them
+  // even after this step unmounts (once data exists, the parent collapses it).
+  useEffect(() => {
+    onScrapeChange?.({ tab, platforms, scrapeInput, painpointInput, genreInput, resultsLimit })
+  }, [tab, platforms, scrapeInput, painpointInput, genreInput, resultsLimit, onScrapeChange])
 
   const parseTerms = (text) => [...new Set(text.split('\n').map((l) => l.trim()).filter(Boolean))]
 
@@ -332,15 +350,17 @@ export default function UploadStep({ onFiles, onScrapedItems }) {
   const isLoading = scrapeStatus === 'running'
 
   return (
-    <div className="px-8 py-8">
-      <div className="max-w-[720px]">
-        <StepProgress current={1} />
+    <div className={embedded ? '' : 'px-8 py-8'}>
+      <div className={embedded ? '' : 'max-w-[720px]'}>
+        {!embedded && <StepProgress current={1} />}
+        {!embedded && (
         <div className="mb-8">
           <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-2">Get your dataset</h1>
           <p className="text-muted text-[14px]">
             Have an existing Apify export? Upload it. Starting a new scrape? Paste URLs or hashtags directly.
           </p>
         </div>
+        )}
 
         {/* Tab switcher */}
         <div className="flex items-center gap-1 bg-[#E9E4D9] rounded-[11px] p-1 mb-6">

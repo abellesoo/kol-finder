@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, Columns, SendHorizonal } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, SendHorizonal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { mergeReviewEntry, reviewKey, campaignDmDraft } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
-import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS, DEFAULT_SELECTED_COLUMNS } from '../lib/columnDefs'
+import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
+import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
+import ColumnPicker from './table/ColumnPicker'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -13,60 +15,6 @@ const DM_STATUS_STYLES = {
   sent:        'bg-blue-100 text-blue-700',
   replied:     'bg-green-100 text-green-700',
   no_response: 'bg-rose/10 text-rose/70',
-}
-
-function ColumnPicker({ selected, onChange }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const toggle = (id) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((c) => c !== id))
-    } else {
-      const order = TABLE_COLUMNS.map(c => c.id)
-      onChange([...selected, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)))
-    }
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 px-4 py-2 border border-[#E1DBCD] rounded-[10px] text-[13px] text-body hover:border-ink/30 hover:text-ink transition-all bg-white"
-      >
-        <Columns size={14} />
-        Export columns
-        {selected.length < TABLE_COLUMNS.length && (
-          <span className="font-mono text-[10px] bg-ink text-white rounded-full px-1.5 py-0.5 leading-none">
-            {selected.length}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-card-edge rounded-[12px] shadow-lg z-10 p-3">
-          <p className="text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-2">Export columns</p>
-          <div className="space-y-1">
-            {TABLE_COLUMNS.map((col) => (
-              <label key={col.id} className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface cursor-pointer">
-                <input type="checkbox" checked={selected.includes(col.id)} onChange={() => toggle(col.id)} className="accent-ink w-[15px] h-[15px] rounded" />
-                <span className="font-mono text-[11px] text-body">{col.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="flex gap-2 mt-3 pt-2 border-t border-mist">
-            <button onClick={() => onChange(TABLE_COLUMNS.map((c) => c.id))} className="text-[11px] text-faint hover:text-ink transition-colors">Select all</button>
-            <button onClick={() => onChange([])} className="text-[11px] text-faint hover:text-ink transition-colors ml-auto">Clear</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 function formatDate(isoStr) {
@@ -80,7 +28,12 @@ export default function ReadyToSendPage() {
   const [items, setItems] = useState([])
   const [sessionMeta, setSessionMeta] = useState({})
   const [copiedUser, setCopiedUser] = useState(null)
-  const [selectedColumns, setSelectedColumns] = useState(DEFAULT_SELECTED_COLUMNS)
+  // Column visibility is remembered across tabs + reloads (Phase 4).
+  const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
+  const handleColumnsChange = useCallback((next) => {
+    setSelectedColumns(next)
+    saveColumnPrefs(next)
+  }, [])
 
   const load = useCallback(async () => {
     if (!supabase) { setLoading(false); return }
@@ -184,7 +137,7 @@ export default function ReadyToSendPage() {
           <p className="text-[14px] text-muted">Copy each DM draft and open the Instagram profile to send.</p>
         </div>
         <div className="flex items-center gap-2">
-          <ColumnPicker selected={selectedColumns} onChange={setSelectedColumns} />
+          <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} label="Export columns" />
           <button
             onClick={() => {
               const results = items.map((item) => item.accountData || { username: item.username })

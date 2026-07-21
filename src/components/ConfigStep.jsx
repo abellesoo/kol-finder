@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, forwardRef, useImperativeHandle } from 'react'
 import { Settings, ChevronRight, Sparkles, Loader2, Save, Trash2, Check } from 'lucide-react'
 import { parseBrief } from '../lib/apifyApi'
 import { loadPresets, savePreset, deletePreset } from '../lib/configPresets'
@@ -49,7 +49,7 @@ function StepProgress({ current }) {
   )
 }
 
-export default function ConfigStep({ fileNames = [], influencerCount, onStart }) {
+function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false }, ref) {
   const [sessionTitle, setSessionTitle] = useState('')
   const [niches, setNiches] = useState(['beauty', 'skincare'])
   // Per-campaign relevancy vocabulary. The six fixed niches can't express a
@@ -115,6 +115,13 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
     const p = presets.find((x) => x.name === name)
     if (p) applyPreset(p.config)
   }
+
+  // Let the CombinedStep read/write the whole step-2 form for the shared input
+  // databank (applyConfig reuses the same setter fan-out as preset loading).
+  useImperativeHandle(ref, () => ({
+    getConfig: gatherConfig,
+    applyConfig: applyPreset,
+  }))
 
   const handleSavePreset = () => {
     const name = presetName.trim() || brandName.trim()
@@ -189,7 +196,8 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
     return lines.join('\n')
   }
 
-  const canStart = niches.length > 0
+  const hasData = influencerCount > 0
+  const canStart = niches.length > 0 && (!embedded || hasData)
 
   const handleStart = () => {
     onStart({
@@ -206,23 +214,30 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
   }
 
   return (
-    <div className="px-8 py-8">
-      <div className="max-w-[720px]">
-        <StepProgress current={2} />
-        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">Configure your search</h1>
-        <p className="text-muted text-[14px] mb-8">
-          Found <span className="font-mono font-semibold text-ink">{influencerCount}</span> unique accounts
-          {fileNames.length > 0 && (
-            <> from{' '}
-              {fileNames.length === 1
-                ? <span className="font-mono text-body">{fileNames[0]}</span>
-                : <span className="font-mono text-body">{fileNames.length} files</span>
-              }
-            </>
-          )}
-        </p>
+    <div className={embedded ? '' : 'px-8 py-8'}>
+      <div className={embedded ? '' : 'max-w-[720px]'}>
+        {!embedded && <StepProgress current={2} />}
+        {!embedded && (
+          <>
+            <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">Configure your search</h1>
+            <p className="text-muted text-[14px] mb-8">
+              Found <span className="font-mono font-semibold text-ink">{influencerCount}</span> unique accounts
+              {fileNames.length > 0 && (
+                <> from{' '}
+                  {fileNames.length === 1
+                    ? <span className="font-mono text-body">{fileNames[0]}</span>
+                    : <span className="font-mono text-body">{fileNames.length} files</span>
+                  }
+                </>
+              )}
+            </p>
+          </>
+        )}
 
-        {/* Presets — reuse a saved setup instead of re-typing every run */}
+        {/* Presets — reuse a saved setup instead of re-typing every run. Hidden
+            when embedded: the CombinedStep's shared Databank bar supersedes this
+            browser-local, step-2-only picker. */}
+        {!embedded && (
         <section className="mb-8 flex flex-wrap items-center gap-2 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
           <span className="font-mono text-[10px] tracking-[.14em] text-faint uppercase flex-shrink-0">Presets</span>
           {presets.length > 0 ? (
@@ -271,6 +286,7 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
             </button>
           </div>
         </section>
+        )}
 
         {/* Session title */}
         <section className="mb-8">
@@ -594,10 +610,12 @@ export default function ConfigStep({ fileNames = [], influencerCount, onStart })
               : 'bg-mist text-faint cursor-not-allowed'
             }`}
         >
-          Start scoring {influencerCount} accounts
+          {embedded && !hasData ? 'Add your data to start' : `Start scoring ${influencerCount} accounts`}
           <ChevronRight size={16} />
         </button>
       </div>
     </div>
   )
 }
+
+export default forwardRef(ConfigStep)

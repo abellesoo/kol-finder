@@ -3,6 +3,7 @@ import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, Sparkles
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
+import { useUrlParam } from '../lib/useUrlParam'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
 import ColumnPicker from './table/ColumnPicker'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
@@ -391,6 +392,9 @@ export default function ResultsStep({ results, influencers, config, sessionId })
 
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
+  // Content-format filter — replaces the old Step-2 "require video" scoring
+  // nudge. Purely a results view filter, shareable via the URL.
+  const [videoFilter, setVideoFilter] = useUrlParam('results_video', 'all') // 'all' | 'video' | 'novideo'
   const [expandedRow, setExpandedRow] = useState(null)
   // Column visibility is remembered across tabs + reloads (Phase 4).
   const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
@@ -543,8 +547,10 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   const preFiltered = useMemo(() => {
     let list = enriched.filter((r) => r.overall >= minScore)
     if (filterFlag !== 'all') list = list.filter((r) => (r.flags || []).includes(filterFlag))
+    if (videoFilter === 'video') list = list.filter((r) => (r.flags || []).includes('video-creator'))
+    else if (videoFilter === 'novideo') list = list.filter((r) => !(r.flags || []).includes('video-creator'))
     return list
-  }, [enriched, filterFlag, minScore])
+  }, [enriched, filterFlag, minScore, videoFilter])
 
   const { processed: filtered, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
     useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc', urlSync: true, urlKey: 'results' })
@@ -874,6 +880,20 @@ export default function ResultsStep({ results, influencers, config, sessionId })
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 mb-6">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-faint font-mono">Content:</span>
+          <div className="flex items-center bg-mist rounded-[9px] p-1 gap-1">
+            {[['all', 'All'], ['video', 'Video only'], ['novideo', 'Non-video']].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setVideoFilter(val)}
+                className={`px-2.5 py-1 rounded-[7px] text-[12px] font-medium transition-all ${videoFilter === val ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[11px] text-faint font-mono">Min score:</span>
           <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}

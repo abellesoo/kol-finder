@@ -61,7 +61,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   const [targetKeywords, setTargetKeywords] = useState('')
   const [excludeKeywords, setExcludeKeywords] = useState('')
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
-  const [requireVideo, setRequireVideo] = useState(true)
   const [minEngagement, setMinEngagement] = useState(0)
   // Structured campaign-brief fields. They assemble into the single
   // `campaignBrief` string DeepSeek consumes (assembleBrief), so nothing
@@ -89,7 +88,7 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   // Everything the operator fills — the shape a preset stores and restores.
   const gatherConfig = () => ({
     niches, targetAudience, targetKeywords, excludeKeywords,
-    locationTarget, requireVideo, minEngagement,
+    locationTarget, minEngagement,
     brandName, brandBackground, newProduct, collabFormat, products, briefNotes,
   })
 
@@ -100,7 +99,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     setTargetKeywords(c.targetKeywords ?? '')
     setExcludeKeywords(c.excludeKeywords ?? '')
     setLocationTarget(c.locationTarget ?? 'Hong Kong')
-    setRequireVideo(c.requireVideo ?? true)
     setMinEngagement(c.minEngagement ?? 0)
     setBrandName(c.brandName ?? '')
     setBrandBackground(c.brandBackground ?? '')
@@ -207,7 +205,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
       targetKeywords: targetKeywords.trim(),
       excludeKeywords: excludeKeywords.trim(),
       locationTarget,
-      requireVideo,
       minEngagement,
       campaignBrief: assembleBrief(),
     })
@@ -387,26 +384,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
                 {loc}
               </button>
             ))}
-          </div>
-        </section>
-
-        {/* Content format */}
-        <section className="mb-8">
-          <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-3">
-            Content format
-          </label>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setRequireVideo(!requireVideo)}
-              className={`relative w-10 h-6 rounded-full transition-all flex-shrink-0
-                ${requireVideo ? 'bg-ink' : 'bg-mist'}`}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all
-                ${requireVideo ? 'left-5' : 'left-1'}`} />
-            </button>
-            <span className="text-[13.5px] text-body">
-              Prioritise accounts that post Reels / video content
-            </span>
           </div>
         </section>
 

@@ -18,7 +18,7 @@ const TABLE = 'input_databank'
 const STEP1_FIELDS = ['tab', 'platforms', 'scrapeInput', 'painpointInput', 'genreInput', 'resultsLimit']
 const STEP2_FIELDS = [
   'niches', 'targetAudience', 'targetKeywords', 'excludeKeywords',
-  'locationTarget', 'requireVideo', 'minEngagement',
+  'locationTarget', 'minEngagement',
   'brandName', 'brandBackground', 'newProduct', 'collabFormat', 'products', 'briefNotes',
 ]
 

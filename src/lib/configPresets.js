@@ -12,7 +12,7 @@ const PRESETS_KEY = 'config_presets_v1'
 // explicit list so an unrelated ConfigStep state field can't leak into a preset.
 const PRESET_FIELDS = [
   'niches', 'targetAudience', 'targetKeywords', 'excludeKeywords',
-  'locationTarget', 'requireVideo', 'minEngagement',
+  'locationTarget', 'minEngagement',
   'brandName', 'brandBackground', 'newProduct', 'collabFormat', 'products', 'briefNotes',
 ]
 

@@ -60,6 +60,23 @@ function parseKeywordList(input) {
   return arr.map((s) => String(s).trim().toLowerCase()).filter(Boolean)
 }
 
+// Target audience is free-form prose ("20–45 歲女性, 辦公室 OL, gym 女生…"), so it
+// needs broader tokenising than the keyword parser: split on whitespace and CJK
+// punctuation too, then drop noise (very short tokens, pure numbers, stopwords).
+// The surviving terms are matched like campaign keywords so the audience
+// description sharpens the seeding score.
+const AUDIENCE_STOPWORDS = new Set(['and', 'the', 'for', 'with', '歲', '的', '同', '或', '都', '但', '想', '嘅', '啲'])
+function parseAudienceTerms(input) {
+  if (!input) return []
+  return [...new Set(
+    String(input)
+      .toLowerCase()
+      .split(/[\n,，、;；:：.。!！?？\s（）()【】\[\]／/|]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 2 && !/^\d+$/.test(s) && !AUDIENCE_STOPWORDS.has(s))
+  )]
+}
+
 // Relevancy Score: baseline 3, then adjusted by niche fit. Built-in niche
 // keywords give +1 per hit in target niches and -1 per off-niche category.
 // The operator's own campaign keywords carry more weight than the fixed niche
@@ -103,6 +120,12 @@ function scoreRelevancy(inf, config) {
   const targetFound = textContainsAny(allText, targetKeywords)
   hits += targetFound.length * TARGET_KEYWORD_WEIGHT
   signals.push(...targetFound)
+
+  // Target audience terms — weighted the same as campaign keywords so the
+  // "who it's for" description meaningfully shapes the seeding rank.
+  const audienceFound = textContainsAny(allText, parseAudienceTerms(config.targetAudience))
+  hits += audienceFound.length * TARGET_KEYWORD_WEIGHT
+  signals.push(...audienceFound)
 
   // Exclude keywords: strong negative per matched term.
   const excludeFound = textContainsAny(allText, excludeKeywords)
@@ -200,10 +223,10 @@ export async function scoreInfluencers(influencers, config) {
     const relevancy = scoreRelevancy(inf, config)
     const botRisk = scoreBotRisk(inf)
 
-    // Apply the two config options that were previously collected but ignored:
-    // locationTarget and requireVideo. Baked into the relevancy sub-score so the
-    // effect survives ResultsStep's live engagement re-score (which only
-    // recomputes engagement and preserves relevancy).
+    // Apply the location config option. Baked into the relevancy sub-score so
+    // the effect survives ResultsStep's live engagement re-score (which only
+    // recomputes engagement and preserves relevancy). Content format no longer
+    // affects the score — it's a Results-step filter (video-creator flag) now.
     let relevancyScore = relevancy.score
     const configFlags = []
     if (config.locationTarget && inf.accountLocation) {
@@ -218,10 +241,6 @@ export async function scoreInfluencers(influencers, config) {
       } else if (region) {
         configFlags.push('off-location')
       }
-    }
-    if (config.requireVideo && (inf.videoRatio || 0) < 50) {
-      relevancyScore -= 1
-      configFlags.push('no-video')
     }
     // Threads: an account surfaced by MULTIPLE search terms is far likelier a
     // genre creator than a one-off poster. Baked into relevancy (like the

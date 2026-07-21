@@ -15,6 +15,7 @@ import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluenc
 import { updateSessionLiveStats } from '../lib/sessionHistory'
 import { supabase } from '../lib/supabase'
 import TableErrorBoundary from './TableErrorBoundary'
+import StepProgress from './core/StepProgress'
 
 const COLUMN_INFO = {
   overall: {
@@ -362,39 +363,6 @@ function readCache() {
 }
 function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
-}
-
-function StepProgress({ current, onGoToSetup }) {
-  const steps = [
-    { num: 1, label: 'Set up', onClick: onGoToSetup },
-    { num: 2, label: 'Results' },
-  ]
-  return (
-    <div className="flex items-center mb-6">
-      {steps.map((s, i) => {
-        const clickable = Boolean(s.onClick) && s.num !== current
-        return (
-          <div key={s.num} className="flex items-center">
-            <button
-              type="button"
-              onClick={clickable ? s.onClick : undefined}
-              disabled={!clickable}
-              title={clickable ? 'Back to set-up — these results are kept' : undefined}
-              className={`flex items-center gap-2 group ${clickable ? '' : 'cursor-default'}`}
-            >
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 transition-colors ${
-                s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
-              } ${clickable ? 'group-hover:bg-ink group-hover:text-white' : ''}`}>{s.num}</span>
-              <span className={`text-[12.5px] font-medium whitespace-nowrap transition-colors ${s.num === current ? 'text-ink' : 'text-faint'} ${clickable ? 'group-hover:text-ink' : ''}`}>{s.label}</span>
-            </button>
-            {i < steps.length - 1 && (
-              <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 export default function ResultsStep({ results, influencers, config, sessionId, onBackToSetup }) {
@@ -767,10 +735,16 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
   return (
     <div className="px-10 py-8 w-full">
 
-      <StepProgress current={2} onGoToSetup={onBackToSetup} />
+      <StepProgress
+        current={2}
+        steps={[
+          { num: 1, label: 'Set up', onClick: onBackToSetup, hint: 'Back to set-up — these results are kept' },
+          { num: 2, label: 'Results' },
+        ]}
+      />
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-8 anim-rise">
         <div>
           <h1 className="text-[32px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-[13.5px] text-muted">
@@ -924,7 +898,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
       )}
       {aiStatus === 'done' && !aiError && (
         <div className="mb-4 px-4 py-3 bg-accent-dim/20 border border-accent/20 rounded-[12px] text-[12px] text-body">
-          AI fit scores are advisory — they learn from your team's past approve/reject decisions. Tick <strong>Blend into Overall</strong> above once you trust them to fold them into the ranking. Expand a row to see the reasoning.
+          AI fit scores are advisory — they learn from your team's past approve/reject decisions. Tick <strong>Blend into Overall</strong> above once you trust them to fold them into the ranking (it reweights Overall to 35% Engagement · 25% Relevancy · 40% AI fit). Expand a row to see the reasoning.
         </div>
       )}
       {shareStatus === 'error' && (
@@ -938,6 +912,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
       )}
 
       <TableErrorBoundary>
+        <div className="anim-rise anim-d2">
         <ResultsTable
           selectedColumns={selectedColumns}
           filtered={filtered}
@@ -957,6 +932,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
           onToggleSelect={handleToggleSelect}
           selectionMode={selectionMode}
         />
+        </div>
       </TableErrorBoundary>
 
       <p className="mt-4 text-[11px] text-faint font-mono text-center">

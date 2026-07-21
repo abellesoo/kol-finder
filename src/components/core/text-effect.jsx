@@ -1,4 +1,4 @@
-import { motion, useInView } from 'motion/react'
+import { motion, useInView, useReducedMotion } from 'motion/react'
 import { useRef } from 'react'
 
 const PRESETS = {
@@ -28,10 +28,16 @@ export function TextEffect({
 }) {
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true })
+  const reducedMotion = useReducedMotion()
 
   const variants = PRESETS[preset] ?? PRESETS.fade
 
   const words = String(children).split(' ')
+
+  // OS-level reduced motion: render the text plainly, no per-char choreography.
+  if (reducedMotion) {
+    return <Tag ref={ref} className={className}>{children}</Tag>
+  }
 
   if (per === 'char') {
     // Build a flat char list but track which word each char belongs to

@@ -28,6 +28,9 @@ export default {
         faint: '#A89E8C',
         body: '#5C5340',
         rose: '#B06070',
+        // AA-compliant variant for small error text (≥4.5:1 on paper/white);
+        // plain `rose` sits at ~4.4:1 and is kept for larger/decorative uses.
+        'rose-strong': '#9E4C5C',
         sage: '#4A7C59',
       },
     },

@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { CheckCircle2, Database, SlidersHorizontal, Save, Trash2, Loader2 } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Database, SlidersHorizontal, Save, Trash2, Loader2, X } from 'lucide-react'
 import UploadStep from './UploadStep'
 import ConfigStep from './ConfigStep'
+import StepProgress from './core/StepProgress'
+import { TextEffect } from './core/text-effect'
 import {
   loadDatabank, saveDatabankEntry, deleteBrand, deletePreset,
   brandToForm, presetToForm, presetToScrape, touchPreset,
@@ -15,36 +17,6 @@ import {
 //
 // A shared input databank sits across the top: load a saved brand/campaign to
 // prefill BOTH steps, or save the current inputs for next time.
-function TwoStepProgress({ current, onGoToResults }) {
-  const steps = [
-    { num: 1, label: 'Set up' },
-    { num: 2, label: 'Results', onClick: onGoToResults },
-  ]
-  return (
-    <div className="flex items-center mb-8">
-      {steps.map((s, i) => {
-        const clickable = Boolean(s.onClick) && s.num !== current
-        return (
-          <div key={s.num} className="flex items-center">
-            <button
-              type="button"
-              onClick={clickable ? s.onClick : undefined}
-              disabled={!clickable}
-              title={clickable ? 'Back to your results' : undefined}
-              className={`flex items-center gap-2 group ${clickable ? '' : 'cursor-default'}`}
-            >
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 transition-colors ${
-                s.num === current ? 'bg-accent text-white' : s.num < current ? 'bg-mist text-body' : 'bg-mist text-faint'
-              } ${clickable ? 'group-hover:bg-ink group-hover:text-white' : ''}`}>{s.num}</span>
-              <span className={`text-[12.5px] font-medium whitespace-nowrap transition-colors ${s.num === current ? 'text-ink' : 'text-faint'} ${clickable ? 'group-hover:text-ink' : ''}`}>{s.label}</span>
-            </button>
-            {i < steps.length - 1 && <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 function ZoneHeader({ icon: Icon, title, hint, done }) {
   return (
@@ -60,45 +32,65 @@ function ZoneHeader({ icon: Icon, title, hint, done }) {
   )
 }
 
-// Shared, team-wide store of past run inputs, two levels deep. Picking a
-// brand prefills only the brand fields (background / products); picking one
-// of its saved runs prefills everything — scrape inputs and the full scoring
-// form. Saving files the current inputs under the form's Brand name, as a run
-// named in the text box ("Default" if left blank).
-function DatabankBar({ configRef, scrapeSnapshotRef, onLoadStep1 }) {
+// Relative "last used" label for launcher cards and run chips.
+function timeAgo(iso) {
+  const t = Date.parse(iso || '')
+  if (!t) return null
+  const days = Math.floor((Date.now() - t) / 86400000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days}d ago`
+  if (days < 35) return `${Math.floor(days / 7)}w ago`
+  return new Date(t).toLocaleDateString('en', { month: 'short', year: 'numeric' })
+}
+
+// Shared, team-wide store of past run inputs, presented as a "start from"
+// launcher: while there's no dataset yet it leads the page with one card per
+// brand — picking a card prefills the brand info (background / products) and
+// reveals its saved runs; picking a run prefills everything, scrape inputs
+// included, and the launcher collapses. Collapsed, it's a thin strip holding
+// the manual save controls: saving files the current inputs under the form's
+// Brand name, as a run named in the text box ("Default" if left blank).
+function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }) {
   const [brands, setBrands] = useState([])
-  const [brandId, setBrandId] = useState('')
-  const [presetId, setPresetId] = useState('')
+  const [activeBrandId, setActiveBrandId] = useState('')
   const [runName, setRunName] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null) // { kind: 'ok' | 'err', text }
+  const flashTimerRef = useRef(null)
+  // null = automatic (open while there's no dataset yet); boolean = user choice.
+  const [userOpen, setUserOpen] = useState(null)
 
   useEffect(() => { loadDatabank().then(setBrands).catch(() => {}) }, [])
+  useEffect(() => () => clearTimeout(flashTimerRef.current), [])
 
-  const flash = (kind, text) => { setMsg({ kind, text }); setTimeout(() => setMsg(null), 3000) }
-  const brand = brands.find((b) => b.id === brandId)
-
-  const handleLoadBrand = (id) => {
-    setBrandId(id)
-    setPresetId('')
-    const b = brands.find((x) => x.id === id)
-    if (!b) return
-    configRef.current?.applyConfig(brandToForm(b))
-    const runs = b.presets?.length || 0
-    flash('ok', runs > 0
-      ? `Loaded ${b.name}'s brand info — pick a saved run for the rest`
-      : `Loaded ${b.name}'s brand info`)
+  // Clear the previous timer so a rapid second message gets its full 3 seconds
+  // instead of being wiped by the first message's stale timeout.
+  const flash = (kind, text) => {
+    clearTimeout(flashTimerRef.current)
+    setMsg({ kind, text })
+    flashTimerRef.current = setTimeout(() => setMsg(null), 3000)
   }
 
-  const handleLoadPreset = (id) => {
-    setPresetId(id)
-    const preset = brand?.presets?.find((p) => p.id === id)
-    if (!preset) return
-    configRef.current?.applyConfig(presetToForm(brand, preset))
+  const open = brands.length > 0 && (userOpen ?? !hasData)
+  const activeBrand = brands.find((b) => b.id === activeBrandId)
+
+  const handlePickBrand = (b) => {
+    if (b.id === activeBrandId) { setActiveBrandId(''); return }
+    setActiveBrandId(b.id)
+    configRef.current?.applyConfig(brandToForm(b))
+    flash('ok', b.presets?.length > 0
+      ? `${b.name}'s brand info loaded — pick a run below for the rest`
+      : `${b.name}'s brand info loaded`)
+  }
+
+  const handlePickRun = (preset) => {
+    configRef.current?.applyConfig(presetToForm(activeBrand, preset))
     onLoadStep1(presetToScrape(preset))
     setRunName(preset.name)
     touchPreset(preset.id)
-    flash('ok', `Loaded "${brand.name} · ${preset.name}" into both steps`)
+    setUserOpen(false)
+    flash('ok', `Loaded "${activeBrand.name} · ${preset.name}" into both steps`)
   }
 
   const handleSave = async () => {
@@ -109,11 +101,7 @@ function DatabankBar({ configRef, scrapeSnapshotRef, onLoadStep1 }) {
       const presetName = runName.trim() || 'Default'
       const next = await saveDatabankEntry({ presetName, step1, step2 })
       setBrands(next)
-      const savedBrand = next.find((b) => b.name.toLowerCase() === (step2.brandName || '').trim().toLowerCase())
-      const savedPreset = savedBrand?.presets?.find((p) => p.name.toLowerCase() === presetName.toLowerCase())
-      if (savedBrand) setBrandId(savedBrand.id)
-      if (savedPreset) setPresetId(savedPreset.id)
-      flash('ok', `Saved "${savedBrand?.name} · ${presetName}"`)
+      flash('ok', `Saved "${(step2.brandName || '').trim()} · ${presetName}"`)
     } catch (e) {
       flash('err', e.message)
     } finally {
@@ -121,13 +109,11 @@ function DatabankBar({ configRef, scrapeSnapshotRef, onLoadStep1 }) {
     }
   }
 
-  const handleDeletePreset = async () => {
-    const preset = brand?.presets?.find((p) => p.id === presetId)
-    if (!preset || !window.confirm(`Delete run "${preset.name}" under ${brand.name}?`)) return
+  const handleDeleteRun = async (preset) => {
+    if (!window.confirm(`Delete run "${preset.name}" under ${activeBrand?.name}? The brand stays.`)) return
     setBusy(true)
     try {
-      setBrands(await deletePreset(presetId))
-      setPresetId('')
+      setBrands(await deletePreset(preset.id))
       flash('ok', 'Run deleted')
     } catch (e) {
       flash('err', e.message)
@@ -137,17 +123,16 @@ function DatabankBar({ configRef, scrapeSnapshotRef, onLoadStep1 }) {
   }
 
   const handleDeleteBrand = async () => {
-    if (!brand) return
-    const runs = brand.presets?.length || 0
+    if (!activeBrand) return
+    const runs = activeBrand.presets?.length || 0
     const warning = runs > 0
-      ? `Delete brand "${brand.name}" and its ${runs} saved run${runs > 1 ? 's' : ''}?`
-      : `Delete brand "${brand.name}"?`
+      ? `Delete brand "${activeBrand.name}" and its ${runs} saved run${runs > 1 ? 's' : ''}?`
+      : `Delete brand "${activeBrand.name}"?`
     if (!window.confirm(warning)) return
     setBusy(true)
     try {
-      setBrands(await deleteBrand(brandId))
-      setBrandId('')
-      setPresetId('')
+      setBrands(await deleteBrand(activeBrandId))
+      setActiveBrandId('')
       flash('ok', 'Brand deleted')
     } catch (e) {
       flash('err', e.message)
@@ -156,66 +141,168 @@ function DatabankBar({ configRef, scrapeSnapshotRef, onLoadStep1 }) {
     }
   }
 
+  const label = (
+    <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[.14em] text-faint uppercase flex-shrink-0">
+      <Database size={13} /> Databank
+    </span>
+  )
+  const msgEl = msg && (
+    <span
+      role="status"
+      aria-live="polite"
+      className={`text-[11px] anim-rise ${msg.kind === 'ok' ? 'text-sage' : 'text-rose-strong'}`}
+    >
+      {msg.text}
+    </span>
+  )
+
+  // ── Open: the launcher leads the page ──
+  if (open) {
+    return (
+      <div className="mb-8 px-5 py-4 bg-surface border border-card-edge rounded-[14px]">
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          {label}
+          <p className="text-[13px] text-body">Start from a saved brand — or skip and fill everything in fresh.</p>
+          <div className="flex items-center gap-3 ml-auto">
+            {msgEl}
+            <button
+              type="button"
+              onClick={() => setUserOpen(false)}
+              className="flex items-center gap-1 text-[12px] text-faint hover:text-ink transition-colors"
+            >
+              <X size={13} /> Start blank
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {brands.map((b) => {
+            const active = b.id === activeBrandId
+            const runs = b.presets?.length || 0
+            const used = timeAgo(b.presets?.[0]?.last_used_at || b.presets?.[0]?.updated_at || b.updated_at)
+            return (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => handlePickBrand(b)}
+                aria-pressed={active}
+                className={`text-left px-4 py-3 rounded-[12px] border bg-white transition-all hover:shadow-sm ${
+                  active ? 'border-ink ring-1 ring-ink/50' : 'border-card-edge hover:border-ink/40'
+                }`}
+              >
+                <p className="text-[13.5px] font-semibold text-ink truncate">{b.name}</p>
+                <p className="text-[11.5px] text-faint leading-snug line-clamp-2 min-h-[2.5em] mt-0.5">
+                  {b.background || 'No background saved'}
+                </p>
+                <p className="font-mono text-[10px] text-faint mt-2">
+                  {runs} run{runs === 1 ? '' : 's'}{used ? ` · ${used}` : ''}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+
+        {activeBrand && (
+          <div className="mt-4 pt-3 border-t border-mist/70">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <p className="text-[12.5px] text-body">
+                Brand info loaded. Pick a saved run to fill the scrape inputs + scoring form too:
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteBrand}
+                disabled={busy}
+                title={`Delete brand "${activeBrand.name}" and all its saved runs`}
+                aria-label={`Delete brand "${activeBrand.name}" and all its saved runs`}
+                className="ml-auto p-2 -my-1 rounded-[8px] text-faint hover:text-rose-strong hover:bg-rose-strong/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-strong/60 transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            {activeBrand.presets?.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {activeBrand.presets.map((p) => (
+                  <span key={p.id} className="flex items-center bg-white border border-card-edge rounded-[9px] pl-3 pr-1 py-1">
+                    <button
+                      type="button"
+                      onClick={() => handlePickRun(p)}
+                      className="text-[12.5px] text-ink hover:text-accent transition-colors"
+                    >
+                      {p.name}
+                      {timeAgo(p.last_used_at || p.updated_at) && (
+                        <span className="font-mono text-[10px] text-faint ml-1.5">{timeAgo(p.last_used_at || p.updated_at)}</span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRun(p)}
+                      disabled={busy}
+                      title={`Delete run "${p.name}" (the brand stays)`}
+                      aria-label={`Delete run "${p.name}" — the brand stays`}
+                      className="p-1.5 ml-0.5 rounded-[6px] text-faint hover:text-rose-strong hover:bg-rose-strong/10 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setUserOpen(false)}
+                  className="text-[12px] text-faint hover:text-ink underline underline-offset-2 ml-1"
+                >
+                  use brand info only →
+                </button>
+              </div>
+            ) : (
+              <p className="text-[12px] text-body">
+                No saved runs for this brand yet —{' '}
+                <button
+                  type="button"
+                  onClick={() => setUserOpen(false)}
+                  className="underline underline-offset-2 hover:text-ink transition-colors"
+                >
+                  continue with brand info only →
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Collapsed: a thin strip with the save controls ──
   return (
     <div className="mb-8 px-4 py-3 bg-surface border border-card-edge rounded-[12px] flex flex-wrap items-center gap-2">
-      <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[.14em] text-faint uppercase flex-shrink-0">
-        <Database size={13} /> Databank
-      </span>
+      {label}
       {brands.length > 0 ? (
-        <>
-          <select
-            value={brandId}
-            onChange={(e) => handleLoadBrand(e.target.value)}
-            className="px-2.5 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30"
-          >
-            <option value="">Brand…</option>
-            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          {brand && (
-            <button type="button" onClick={handleDeleteBrand} title={`Delete brand "${brand.name}"`} className="text-faint hover:text-red-500 transition-colors">
-              <Trash2 size={14} />
-            </button>
-          )}
-          {brand && (brand.presets?.length > 0 ? (
-            <>
-              <select
-                value={presetId}
-                onChange={(e) => handleLoadPreset(e.target.value)}
-                className="px-2.5 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30"
-              >
-                <option value="">Saved run…</option>
-                {brand.presets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {presetId && (
-                <button type="button" onClick={handleDeletePreset} title="Delete selected run" className="text-faint hover:text-red-500 transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </>
-          ) : (
-            <span className="text-[12px] text-faint">No saved runs for this brand yet.</span>
-          ))}
-        </>
+        <button
+          type="button"
+          onClick={() => setUserOpen(true)}
+          className="flex items-center gap-1 text-[12.5px] text-body hover:text-ink transition-colors"
+        >
+          Browse {brands.length} saved brand{brands.length > 1 ? 's' : ''} <ChevronRight size={13} />
+        </button>
       ) : (
-        <span className="text-[12px] text-faint">Nothing saved yet — fill in your run and save it to reuse next time.</span>
+        <span className="text-[12px] text-body">Nothing saved yet — fill in your run and save it to reuse next time.</span>
       )}
 
       <div className="flex items-center gap-2 ml-auto">
-        {msg && (
-          <span className={`text-[11px] ${msg.kind === 'ok' ? 'text-sage' : 'text-rose'}`}>{msg.text}</span>
-        )}
+        {msgEl}
         <input
           value={runName}
           onChange={(e) => setRunName(e.target.value)}
           placeholder="Run name (e.g. campaign)"
+          aria-label="Run name for saving these inputs"
+          title="Saving files these inputs under the form's Brand name — one brand can keep several runs."
           className="px-2.5 py-1.5 w-44 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30"
         />
         <button
           type="button"
           onClick={handleSave}
           disabled={busy}
-          title="Files under the Brand name filled in the form"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 transition-all disabled:opacity-50"
+          title="Saving files these inputs under the form's Brand name — one brand can keep several runs."
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 active:scale-[.97] transition-all disabled:opacity-50"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save inputs
         </button>
@@ -238,23 +325,42 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
   return (
     <div className="px-8 py-8">
       <div className="max-w-[1240px] mx-auto">
-        <TwoStepProgress current={1} onGoToResults={onViewResults} />
+        <StepProgress
+          current={1}
+          className="mb-8"
+          steps={[
+            { num: 1, label: 'Set up' },
+            { num: 2, label: 'Results', onClick: onViewResults, hint: 'Back to your results — nothing is lost' },
+          ]}
+        />
         <div className="mb-8">
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-2">Set up your run</h1>
-          <p className="text-muted text-[14px]">
+          <TextEffect
+            as="h1"
+            per="word"
+            preset="slide"
+            duration={0.3}
+            staggerDelay={0.06}
+            className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-2"
+          >
+            Set up your run
+          </TextEffect>
+          <p className="text-muted text-[14px] anim-rise anim-d2">
             Pick your data and tune the scoring — side by side. Score when you're ready.
           </p>
         </div>
 
-        <DatabankBar
-          configRef={configRef}
-          scrapeSnapshotRef={scrapeSnapshotRef}
-          onLoadStep1={setScrapePrefill}
-        />
+        <div className="anim-rise anim-d3">
+          <DatabankLauncher
+            configRef={configRef}
+            scrapeSnapshotRef={scrapeSnapshotRef}
+            onLoadStep1={setScrapePrefill}
+            hasData={hasData}
+          />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           {/* Left column — data source */}
-          <section className="lg:sticky lg:top-6">
+          <section className="lg:sticky lg:top-6 anim-rise anim-d4">
             <ZoneHeader
               icon={Database}
               title="Your data"
@@ -287,21 +393,25 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
             )}
           </section>
 
-          {/* Right column — scoring config (dimmed until data exists) */}
-          <section className={hasData ? '' : 'opacity-45 pointer-events-none select-none'}>
-            <ZoneHeader
-              icon={SlidersHorizontal}
-              title="Configure scoring"
-              hint={hasData ? 'Tune how accounts are ranked, then score' : 'Unlocks once you add data on the left'}
-            />
-            <ConfigStep
-              ref={configRef}
-              fileNames={fileNames}
-              influencerCount={influencers.length}
-              onStart={onStart}
-              embedded
-            />
-          </section>
+          {/* Right column — scoring config (dimmed until data exists). The
+              entrance animation lives on a wrapper: riseIn's fill-mode would
+              otherwise pin opacity at 1 and defeat the conditional dimming. */}
+          <div className="anim-rise anim-d5">
+            <section className={hasData ? '' : 'opacity-45 pointer-events-none select-none'}>
+              <ZoneHeader
+                icon={SlidersHorizontal}
+                title="Configure scoring"
+                hint={hasData ? 'Tune how accounts are ranked, then score' : 'Unlocks once you add data on the left'}
+              />
+              <ConfigStep
+                ref={configRef}
+                fileNames={fileNames}
+                influencerCount={influencers.length}
+                onStart={onStart}
+                embedded
+              />
+            </section>
+          </div>
         </div>
       </div>
     </div>

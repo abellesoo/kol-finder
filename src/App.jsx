@@ -17,6 +17,7 @@ import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems, classify
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession, loadSessionFull } from './lib/sessionHistory'
 import { readUrlState, popStashedDeepLink, syncUrl } from './lib/urlState'
+import StepProgress from './components/core/StepProgress'
 
 const NAV_GROUPS = [
   {
@@ -191,8 +192,13 @@ function MainApp({ user, role, onSignOut }) {
   // Keep the URL in sync with the current view. Push a history entry when the
   // page identity changes (so back/forward walk between views); replace when
   // only secondary state changes (e.g. a scoring run finishing gains a session id).
+  // The seeder's Set up ↔ Results position counts as page identity: it has its
+  // own navigation affordances, so the back button must walk it too. The
+  // transient 'scoring' interstitial groups with setup so it never gets its own
+  // history entry.
+  const seederView = mode === 'seeder' && step === 'results' ? 'results' : 'setup'
   useEffect(() => {
-    const pageKey = `${mode}:${openReviewId || ''}:${openCampaignId || ''}`
+    const pageKey = `${mode}:${openReviewId || ''}:${openCampaignId || ''}:${mode === 'seeder' ? seederView : ''}`
     const replace = prevPageKeyRef.current === null || prevPageKeyRef.current === pageKey
     prevPageKeyRef.current = pageKey
     syncUrl(
@@ -201,10 +207,11 @@ function MainApp({ user, role, onSignOut }) {
         reviewId: openReviewId,
         campaignId: openCampaignId,
         sessionId: mode === 'seeder' ? currentSessionId : null,
+        view: seederView,
       },
       { replace }
     )
-  }, [mode, openReviewId, openCampaignId, currentSessionId])
+  }, [mode, openReviewId, openCampaignId, currentSessionId, seederView])
 
   // Browser back/forward: re-read the URL into view state.
   useEffect(() => {
@@ -212,36 +219,44 @@ function MainApp({ user, role, onSignOut }) {
       const s = resolveUrlState(readUrlState(), role)
       // Mark this page as already current so the sync effect replaces instead
       // of pushing a duplicate history entry on top of the one we navigated to.
-      prevPageKeyRef.current = `${s.mode}:${s.reviewId || ''}:${s.campaignId || ''}`
+      const popView = s.mode === 'seeder' ? (s.view === 'setup' ? 'setup' : 'results') : ''
+      prevPageKeyRef.current = `${s.mode}:${s.reviewId || ''}:${s.campaignId || ''}:${popView}`
       setMode(s.mode)
       setOpenReviewId(s.reviewId || null)
       setOpenCampaignId(s.campaignId || null)
-      if (s.sessionId && s.sessionId !== currentSessionId) {
-        loadSessionFull(s.sessionId)
-          .then((session) => session && handleLoadSeederSession(session))
-          .catch(console.error)
+      if (s.mode === 'seeder') {
+        if (s.sessionId && s.sessionId !== currentSessionId) {
+          loadSessionFull(s.sessionId)
+            .then((session) => session && handleLoadSeederSession(session, popView))
+            .catch(console.error)
+        } else if (popView === 'results' && results.length > 0) {
+          setStep('results')
+        } else {
+          // Setup view, or a results entry whose data is gone (fresh reload).
+          setStep(influencers.length > 0 ? 'config' : 'upload')
+        }
       }
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [role, currentSessionId])
+  }, [role, currentSessionId, results.length, influencers.length])
 
   // Deep-linked seeder session (?page=seeder&session=<id>): load its results once on mount.
   useEffect(() => {
     if (!initialUrlState.sessionId) return
     loadSessionFull(initialUrlState.sessionId)
-      .then((session) => session && handleLoadSeederSession(session))
+      .then((session) => session && handleLoadSeederSession(session, initialUrlState.view))
       .catch(console.error)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleLoadSeederSession = (session) => {
+  const handleLoadSeederSession = (session, view = 'results') => {
     setFileNames(session.fileNames)
     setConfig(session.config)
     setInfluencers(session.influencers)
     setResults(session.results)
     setCurrentSessionId(session.id)
-    setStep('results')
+    setStep(view === 'setup' ? 'config' : 'results')
     setMode('seeder')
   }
 
@@ -427,17 +442,11 @@ function MainApp({ user, role, onSignOut }) {
           <>
             {step === 'scoring' && (
               <div className="px-8 py-8">
-                <div className="flex items-center mb-8">
-                  {[{ num: 1, label: 'Set up' }, { num: 2, label: 'Results' }].map((s, i, arr) => (
-                    <div key={s.num} className="flex items-center">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold flex-shrink-0 ${s.num === 2 ? 'bg-accent text-white' : 'bg-mist text-body'}`}>{s.num}</span>
-                        <span className={`text-[12.5px] font-medium whitespace-nowrap ${s.num === 2 ? 'text-ink' : 'text-faint'}`}>{s.label}</span>
-                      </div>
-                      {i < arr.length - 1 && <div className="w-8 h-px bg-mist mx-3 flex-shrink-0" />}
-                    </div>
-                  ))}
-                </div>
+                <StepProgress
+                  current={2}
+                  className="mb-8"
+                  steps={[{ num: 1, label: 'Set up' }, { num: 2, label: 'Results' }]}
+                />
                 <div className="max-w-sm">
                   <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-6">Scoring accounts</p>
                   {progress.error ? (

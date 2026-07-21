@@ -5,10 +5,11 @@
 //   ?page=review&id=<shared_results id>    → review detail
 //   ?page=campaign&id=<campaign id>        → campaign detail
 //   ?page=seeder&session=<session id>      → a saved seeder run's results
+//   ?page=seeder&session=<id>&view=setup   → same run, but on the Set-up screen
 //
 // Params we don't own (e.g. Supabase's OAuth ?code=) are preserved untouched.
 
-const OWN_PARAMS = ['page', 'id', 'session']
+const OWN_PARAMS = ['page', 'id', 'session', 'view']
 const STASH_KEY = 'kol_post_login_url'
 
 // Session ids are Date.now() numbers; local-storage history looks them up with
@@ -25,11 +26,18 @@ export function readUrlState(search = window.location.search) {
   if (page === 'review') return id ? { mode: 'review_detail', reviewId: id } : { mode: 'review_queue' }
   if (page === 'campaign') return id ? { mode: 'campaign_detail', campaignId: id } : { mode: 'campaigns' }
   const session = params.get('session')
-  if (page === 'seeder' && session) return { mode: 'seeder', sessionId: coerceSessionId(session) }
+  if (page === 'seeder' && session) {
+    return {
+      mode: 'seeder',
+      sessionId: coerceSessionId(session),
+      // A session link opens on its results unless it explicitly says setup.
+      view: params.get('view') === 'setup' ? 'setup' : 'results',
+    }
+  }
   return { mode: page }
 }
 
-function buildSearch({ mode, reviewId, campaignId, sessionId }) {
+function buildSearch({ mode, reviewId, campaignId, sessionId, view }) {
   const params = new URLSearchParams(window.location.search)
   OWN_PARAMS.forEach((p) => params.delete(p))
   if (mode === 'review_detail' && reviewId) {
@@ -40,7 +48,11 @@ function buildSearch({ mode, reviewId, campaignId, sessionId }) {
     params.set('id', String(campaignId))
   } else {
     params.set('page', mode)
-    if (mode === 'seeder' && sessionId) params.set('session', String(sessionId))
+    if (mode === 'seeder' && sessionId) {
+      params.set('session', String(sessionId))
+      // Only the non-default view is spelled out, so existing links stay valid.
+      if (view === 'setup') params.set('view', 'setup')
+    }
   }
   return `?${params.toString()}`
 }

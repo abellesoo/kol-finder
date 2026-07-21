@@ -1,5 +1,6 @@
 
 import { useState } from 'react'
+import { TextEffect } from './core/text-effect'
 
 function Section({ label, title, children }) {
   return (
@@ -103,7 +104,16 @@ export default function InstructionsPage() {
       {/* Intro — one-liner, no wall of text */}
       <div className="mb-8">
         <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">About this tool</p>
-        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-4">KOL Finder — Seeding Studio</h1>
+        <TextEffect
+          as="h1"
+          per="word"
+          preset="slide"
+          duration={0.3}
+          staggerDelay={0.05}
+          className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-4"
+        >
+          KOL Finder — Seeding Studio
+        </TextEffect>
         <p className="text-body leading-relaxed mb-3">
           Your Instagram KOL seeding workflow, start to finish: <strong>find</strong> accounts, <strong>score &amp; rank</strong> them automatically, <strong>review</strong> as a team, send your <strong>DM outreach</strong>, then <strong>track</strong> every seeded KOL through to their published post (that last part lives in the <strong>Campaigns</strong> tab).
         </p>
@@ -123,7 +133,7 @@ export default function InstructionsPage() {
             ['Shortlist & reach out', 'Sort and filter the table, approve your picks, move them to Ready to Send.'],
             ['Export', 'Download a formatted XLSX to share with your team.'],
           ].map(([t, d], i) => (
-            <li key={t} className="flex gap-3">
+            <li key={t} className={`flex gap-3 anim-rise anim-d${i + 1}`}>
               <span className="shrink-0 w-5 h-5 rounded-full bg-ink/10 text-ink text-[10px] font-mono font-semibold flex items-center justify-center mt-px">{i + 1}</span>
               <p className="text-[13px] text-body leading-relaxed"><strong>{t}</strong> — {d}</p>
             </li>
@@ -187,7 +197,7 @@ export default function InstructionsPage() {
                 </li>
               </ul>
               <p className="text-[13px] text-body leading-relaxed">
-                Ran this brand before? The <strong>Databank</strong> bar at the top saves you the typing: pick the <strong>brand</strong> to prefill its background and products, then pick one of its <strong>saved runs</strong> to reload the scrape inputs and the full scoring form. When you save, the current inputs file under the form's brand name — name the run after the campaign, so one brand can keep several setups.
+                Ran this brand before? The <strong>Databank</strong> launcher at the top of an empty Set-up page shows a card per saved brand: click a card to prefill its background and products, then click one of its <strong>saved runs</strong> to reload the scrape inputs and the full scoring form too. Once you're working it collapses to a thin strip — that's where <strong>Save inputs</strong> lives; the current inputs file under the form's brand name, so name the run after the campaign and one brand can keep several setups.
               </p>
             </div>
           </li>

@@ -13,6 +13,27 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Entrance choreography — one rise per element, staggered with .anim-d*.
+   transform/opacity only (no layout), ease-out entering, ≤350ms. */
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Kept outside @layer so Tailwind never purges them — delay classes are
+   composed dynamically (e.g. `anim-d${i + 1}`) and wouldn't be detected. */
+.anim-rise { animation: riseIn 0.35s ease-out both; }
+.anim-d1 { animation-delay: 0.05s; }
+.anim-d2 { animation-delay: 0.1s; }
+.anim-d3 { animation-delay: 0.16s; }
+.anim-d4 { animation-delay: 0.22s; }
+.anim-d5 { animation-delay: 0.28s; }
+.anim-d6 { animation-delay: 0.34s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise { animation: none; }
+}
+
 @layer components {
   .score-badge {
     @apply inline-flex items-center justify-center w-[38px] h-[38px] rounded-full font-mono text-[13px] font-semibold leading-none;

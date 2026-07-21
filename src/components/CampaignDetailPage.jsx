@@ -583,7 +583,7 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
 // board view to keep the table lean.
 function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onSetFormats }) {
   const { processed: sortedKols, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
-    useTableControls(kols, { defaultSortId: null, accessors: CAMPAIGN_ACCESSORS })
+    useTableControls(kols, { defaultSortId: null, accessors: CAMPAIGN_ACCESSORS, urlSync: true, urlKey: 'campaign' })
 
   return (
     <div className="overflow-auto max-h-[70vh] border border-card-edge rounded-[14px] bg-white">

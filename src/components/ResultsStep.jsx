@@ -547,7 +547,7 @@ export default function ResultsStep({ results, influencers, config, sessionId })
   }, [enriched, filterFlag, minScore])
 
   const { processed: filtered, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
-    useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc' })
+    useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc', urlSync: true, urlKey: 'results' })
 
   const highCount = enriched.filter((r) => r.overall >= 70).length
   const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length

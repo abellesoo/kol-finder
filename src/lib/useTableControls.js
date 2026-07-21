@@ -1,15 +1,98 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { COLUMN_ACCESSORS } from './columnDefs'
+
+// --- Shareable-link (URL) sync ------------------------------------------------
+// When a table opts in (urlSync), its sort + per-column filters are mirrored into
+// the page's query string under a per-table namespace (e.g. `review_sort`,
+// `review_f_account_location`). Opening that URL restores the exact same view, so
+// a filtered/sorted table can be copied and shared. We only write params that
+// DIFFER from the table's defaults, so untouched tables leave the URL clean.
+//
+// Params are namespaced so multiple tables never collide, and we touch only our
+// own keys — `page`/`id`/`session` (owned by urlState.js) and any other params
+// are preserved. Writes use replaceState so live filtering never spams history
+// or trips the app router's popstate handler.
+
+function readUrlTableState(prefix, defaultSortId, defaultSortDir) {
+  const params = new URLSearchParams(window.location.search)
+  let sortId = defaultSortId
+  let sortDir = defaultSortDir
+  const sortRaw = params.get(`${prefix}sort`)
+  if (sortRaw != null) {
+    if (sortRaw === 'none') {
+      sortId = null
+    } else {
+      const [id, dir] = sortRaw.split(':')
+      sortId = id || null
+      sortDir = dir === 'asc' ? 'asc' : 'desc'
+    }
+  }
+  const filters = {}
+  const fpref = `${prefix}f_`
+  for (const key of new Set([...params.keys()])) {
+    if (key.startsWith(fpref)) {
+      const vals = params.getAll(key).filter(Boolean)
+      if (vals.length) filters[key.slice(fpref.length)] = vals
+    }
+  }
+  return { sortId, sortDir, filters }
+}
+
+function writeUrlTableState(prefix, { sortId, sortDir, filters, defaultSortId, defaultSortDir }) {
+  const params = new URLSearchParams(window.location.search)
+  const sortParam = `${prefix}sort`
+  const fpref = `${prefix}f_`
+  // Clear our previously-written params (a plain delete removes all repeats).
+  for (const key of new Set([...params.keys()])) {
+    if (key === sortParam || key.startsWith(fpref)) params.delete(key)
+  }
+  // Sort — encode only when it differs from the table default. A cleared sort
+  // that differs from a non-null default is encoded as `none` so it reproduces.
+  if (sortId !== defaultSortId || (sortId && sortDir !== defaultSortDir)) {
+    params.set(sortParam, sortId ? `${sortId}:${sortDir}` : 'none')
+  }
+  for (const [colId, vals] of Object.entries(filters)) {
+    for (const v of vals) params.append(`${fpref}${colId}`, v)
+  }
+  const qs = params.toString()
+  const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
+  if (next !== window.location.pathname + window.location.search + window.location.hash) {
+    window.history.replaceState(window.history.state, '', next)
+  }
+}
 
 // Shared sort + per-column filter engine for the KOL tables. Each table feeds
 // its already-computed rows in and renders `processed`; the hook owns sort state
 // (one active numeric column, desc → asc → off) and category filters
 // ({ colId: string[] of selected values }). Sort/filter values are read through
-// COLUMN_ACCESSORS so every table behaves identically.
-export function useTableControls(rows, { defaultSortId = 'overall', defaultSortDir = 'desc', accessors = COLUMN_ACCESSORS } = {}) {
-  const [sortId, setSortId] = useState(defaultSortId)
-  const [sortDir, setSortDir] = useState(defaultSortDir)
-  const [filters, setFilters] = useState({}) // { [colId]: string[] }
+// COLUMN_ACCESSORS so every table behaves identically. Pass `urlSync: true` with
+// a unique `urlKey` to make the view shareable via the page URL.
+export function useTableControls(rows, {
+  defaultSortId = 'overall',
+  defaultSortDir = 'desc',
+  accessors = COLUMN_ACCESSORS,
+  urlSync = false,
+  urlKey = 'tbl',
+} = {}) {
+  const urlPrefix = `${urlKey}_`
+
+  // Seed initial state from the URL exactly once (shareable-link restore).
+  const initialRef = useRef(null)
+  if (initialRef.current === null) {
+    initialRef.current = urlSync
+      ? readUrlTableState(urlPrefix, defaultSortId, defaultSortDir)
+      : { sortId: defaultSortId, sortDir: defaultSortDir, filters: {} }
+  }
+
+  const [sortId, setSortId] = useState(initialRef.current.sortId)
+  const [sortDir, setSortDir] = useState(initialRef.current.sortDir)
+  const [filters, setFilters] = useState(initialRef.current.filters) // { [colId]: string[] }
+
+  // Mirror sort/filter changes into the URL so the link stays shareable.
+  useEffect(() => {
+    if (!urlSync) return
+    writeUrlTableState(urlPrefix, { sortId, sortDir, filters, defaultSortId, defaultSortDir })
+  }, [urlSync, urlPrefix, sortId, sortDir, filters, defaultSortId, defaultSortDir])
 
   // Header click on a numeric column: same column cycles desc → asc → off;
   // a new column starts at desc. Two flat setStates (no nested updater) so it

@@ -697,7 +697,7 @@ export default function ReviewPage({ reviewId, onBack }) {
   // loading → loaded transition (otherwise React errors with "rendered more
   // hooks than during the previous render").
   const { processed: sortedAccounts, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
-    useTableControls(accounts, { defaultSortId: null, defaultSortDir: 'desc' })
+    useTableControls(accounts, { defaultSortId: null, defaultSortDir: 'desc', urlSync: true, urlKey: 'review' })
 
   if (loading) {
     return (

@@ -7,7 +7,7 @@
 // engine works on every table.
 
 export const TABLE_COLUMNS = [
-  { id: 'brand',                 label: 'Brand',           width: '1fr', type: 'category',                                     exportIds: ['brand'] },
+  { id: 'brand',                 label: 'Source',          width: '1fr', type: 'category',                                     exportIds: ['brand'] },
   { id: 'overall',               label: 'Overall',         width: '1fr', type: 'number', sortKey: 'overall',      infoKey: 'overall',          exportIds: ['overall'] },
   { id: 'relevancy_score',       label: 'Relevancy',       width: '1fr', type: 'number', sortKey: 'relevancy',    infoKey: 'relevancy',        exportIds: ['relevancy_score'] },
   { id: 'engagement_score',      label: 'Eng. Score',      width: '1fr', type: 'number', sortKey: 'eng_score',    infoKey: 'engagement_score', exportIds: ['engagement_score'] },
@@ -43,7 +43,16 @@ export const COLUMN_ACCESSORS = {
   scraped_post_likes:    { sortValue: (r) => num(r.samplePostLikes) },
   scraped_post_comments: { sortValue: (r) => num(r.samplePostComments) },
   scraped_post_plays:    { sortValue: (r) => num(r.samplePostPlays) },
-  brand:                 { filterValues: (r) => (r.sourceBrand ? [String(r.sourceBrand)] : []) },
+  // IG rows carry a single brand handle; Threads rows carry the search
+  // keyword(s) that surfaced the account, joined as "增肌, 減脂". Split the
+  // Threads case so each keyword is its own filter option (and matches on its
+  // own) instead of appearing as one combined "增肌, 減脂" value.
+  brand:                 { filterValues: (r) => {
+    if (!r.sourceBrand) return []
+    return r.platform === 'threads'
+      ? String(r.sourceBrand).split(',').map((s) => s.trim()).filter(Boolean)
+      : [String(r.sourceBrand)]
+  } },
   account_location:      { filterValues: (r) => (r.accountLocation ? [String(r.accountLocation)] : []) },
   niche_signals:         { filterValues: (r) => (Array.isArray(r.nicheSignals) ? r.nicheSignals.map(String) : []) },
 }

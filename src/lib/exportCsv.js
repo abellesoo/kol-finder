@@ -1,7 +1,7 @@
 import { profileUrl } from './platforms'
 
 export const EXPORT_COLUMNS = [
-  { id: 'brand',             label: 'Brand',              getValue: (r, inf)       => inf.sourceBrand || '' },
+  { id: 'brand',             label: 'Source',             getValue: (r, inf)       => inf.sourceBrand || '' },
   { id: 'username',          label: 'username',           getValue: (r)            => r.username },
   { id: 'fullName',          label: 'fullName',           getValue: (r, inf)       => inf.fullName || '' },
   { id: 'platform',          label: 'platform',           getValue: (r, inf)       => r.platform || inf.platform || 'instagram' },

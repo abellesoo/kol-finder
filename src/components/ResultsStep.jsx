@@ -744,7 +744,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
       />
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 anim-rise">
+      <div className="relative z-30 flex items-start justify-between mb-8 anim-rise">
         <div>
           <h1 className="text-[32px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-[13.5px] text-muted">

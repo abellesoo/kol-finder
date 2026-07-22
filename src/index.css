@@ -22,7 +22,9 @@
 
 /* Kept outside @layer so Tailwind never purges them — delay classes are
    composed dynamically (e.g. `anim-d${i + 1}`) and wouldn't be detected. */
-.anim-rise { animation: riseIn 0.35s ease-out both; }
+/* `backwards`, not `both`: a lingering fill-forwards transform keeps a
+   stacking context alive and traps dropdowns below later siblings. */
+.anim-rise { animation: riseIn 0.35s ease-out backwards; }
 .anim-d1 { animation-delay: 0.05s; }
 .anim-d2 { animation-delay: 0.1s; }
 .anim-d3 { animation-delay: 0.16s; }

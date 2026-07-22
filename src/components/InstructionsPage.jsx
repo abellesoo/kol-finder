@@ -128,7 +128,7 @@ export default function InstructionsPage() {
         <ol className="space-y-2.5">
           {[
             ['Get accounts in', 'Upload an Apify .xlsx export, or paste competitor URLs / hashtags to scrape.'],
-            ['Set your brief', 'Pick target niches, add keywords + audience terms, and write the campaign brief.'],
+            ['Set your brief', 'Pick the brand (it sets the target niches + scoring formula), add keywords + audience terms, and write the campaign brief.'],
             ['Start scoring', 'Every account gets ranked by Engagement + Relevancy — instantly, and free.'],
             ['Shortlist & reach out', 'Sort and filter the table, approve your picks, move them to Ready to Send.'],
             ['Export', 'Download a formatted XLSX to share with your team.'],
@@ -180,7 +180,7 @@ export default function InstructionsPage() {
             <div className="flex-1">
               <p className="text-[16px] font-bold text-ink mb-1">Define your brief</p>
               <p className="text-[13px] text-body leading-relaxed mb-3">
-                Everything lives on one <strong>Set up your run</strong> screen — intake on one side, scoring setup on the other — so you can tune things while your data loads. Pick your <strong>target niches</strong> first (beauty, skincare, lifestyle…), then:
+                Everything lives on one <strong>Set up your run</strong> screen — intake on one side, scoring setup on the other — so you can tune things while your data loads. Pick your <strong>brand</strong> first (it sets the target niches and scoring formula for you), then:
               </p>
               <ul className="space-y-2 text-[13px] text-body leading-relaxed mb-3">
                 <li className="flex gap-2">
@@ -315,10 +315,10 @@ export default function InstructionsPage() {
             range="0 – 10"
             formula="3 + niche hits + ((in-niche keyword + audience term) hits × 1.5) − off-niche categories − (exclude keyword hits × 3)   ·   +1 when location matches"
             description={<>
-              <p className="mb-3">Every account starts at a baseline of 3. Its hashtags, captions, display name, and bio get scanned against six built-in niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category with any match at all deducts −1 (flat per category, not per word). The score is capped 0–10.</p>
+              <p className="mb-3">Every account starts at a baseline of 3. Its hashtags, captions, display name, and bio get scanned against the brand's niche keyword lists. Each keyword match in a <em>target niche</em> adds +1; each <em>off-niche</em> category with any match at all deducts −1 (flat per category, not per word). The score is capped 0–10.</p>
               <div className="border border-card-edge rounded-[10px] bg-surface px-4 py-3 mb-3">
                 <p className="text-[11px] font-mono text-faint uppercase tracking-[.12em] mb-2">Per-campaign signals (Set up your run screen)</p>
-                <p className="mb-2">Six built-in niches can't describe every product (a 減脂 protein shake, say). That's what your own signals are for:</p>
+                <p className="mb-2">The built-in niches can't describe every product (a 減脂 protein shake, say). That's what your own signals are for:</p>
                 <ul className="list-disc ml-4 space-y-1">
                   <li><strong>In-niche keywords</strong> you type (e.g. 減脂, 高蛋白, 健身, 代餐) count <strong>+1.5 each</strong> — they outrank the built-in dictionary because they describe <em>this</em> campaign.</li>
                   <li><strong>Target audience</strong> terms (who the product is for) also count <strong>+1.5 each</strong>. The free text gets split into terms and matched the same way — so stick to short, comma-separated terms (e.g. <code className="font-mono text-[11px] bg-white px-1 rounded">健康, gym, OL, 低卡, 減脂</code>). Long run-on phrases match less reliably.</li>
@@ -336,12 +336,14 @@ export default function InstructionsPage() {
                   </thead>
                   <tbody>
                     {[
-                      ['beauty',    'makeup, lipstick, foundation, eyeshadow, blush, 化妝, 唇膏, 眼影'],
-                      ['skincare',  'skincare, serum, moisturizer, spf, retinol, acne, 護膚, 精華, 防曬'],
-                      ['lifestyle', 'lifestyle, daily, vlog, life, 生活, 日常, 分享'],
-                      ['fashion',   'fashion, style, outfit, ootd, wear, 穿搭, 時尚, 造型'],
-                      ['health',    'health, wellness, yoga, gym, fitness, workout, 健康, 健身, 瑜伽'],
-                      ['food',      'food, eat, restaurant, recipe, foodie, 美食, 食物, 餐廳'],
+                      ['skincare',    'skincare, serum, moisturizer, cleanser, spf, toner, retinol, acne, 護膚, 精華, 防曬'],
+                      ['haircare',    'hair, shampoo, conditioner, scalp, hairstyle, 護髮, 洗頭水, 頭髮, 髮膜, 頭皮'],
+                      ['bodycare',    'body, bodycare, slimming, guasha, firming, lotion, 身體, 瘦身, 緊緻, 刮痧, 按摩'],
+                      ['makeup',      'makeup, lip, lipstick, foundation, cushion, eyeshadow, blush, tint, 化妝, 唇膏, 氣墊, 彩妝'],
+                      ['personal',    'grooming, hygiene, deodorant, oral, toothpaste, sanitary, self-care, 個人護理, 衛生, 口腔, 牙膏'],
+                      ['supplements', 'supplement, collagen, vitamin, gummies, ingestible, nutrition, 保健, 膠原蛋白, 維他命, 內服'],
+                      ['sports',      'sports, fitness, gym, workout, running, yoga, training, marathon, 運動, 健身, 瑜伽, 跑步'],
+                      ['feminine',    'feminine, femcare, intimate, menstrual, probiotic, 女性, 私密, 婦科, 經期'],
                     ].map(([niche, kws], i) => (
                       <tr key={niche} className={i % 2 === 0 ? 'bg-white' : 'bg-surface/50'}>
                         <td className="font-mono text-body px-3 py-1.5 border-b border-mist/40 last:border-0 align-top">{niche}</td>

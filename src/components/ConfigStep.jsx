@@ -1,16 +1,31 @@
-import { useState, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Settings, ChevronRight, Sparkles, Loader2, Save, Trash2, Check } from 'lucide-react'
 import { parseBrief } from '../lib/apifyApi'
 import { loadPresets, savePreset, deletePreset } from '../lib/configPresets'
+import { SCORING_PROFILES } from '../lib/scoreInfluencers'
+import { BRAND_CATALOG, getBrand } from '../lib/brandCatalog'
 
+// Portfolio-tailored niches — the verticals our 10 brands actually occupy (see
+// brandCatalog.js). Each id must equal the first word of its label (minus emoji)
+// so scoreRelevancy can match it back to NICHE_KEYWORDS.
 const NICHE_OPTIONS = [
-  { id: 'beauty', label: '💄 Beauty & Makeup' },
   { id: 'skincare', label: '🧴 Skincare' },
-  { id: 'lifestyle', label: '✨ Lifestyle' },
-  { id: 'fashion', label: '👗 Fashion' },
-  { id: 'health', label: '🌿 Health & Wellness' },
-  { id: 'food', label: '🍜 Food & Dining' },
+  { id: 'haircare', label: '💇 Haircare' },
+  { id: 'bodycare', label: '🛁 Bodycare' },
+  { id: 'makeup', label: '💄 Makeup' },
+  { id: 'personal', label: '🧼 Personal care' },
+  { id: 'supplements', label: '💊 Supplements' },
+  { id: 'sports', label: '🏃 Sports' },
+  { id: 'feminine', label: '🌸 Feminine wellness' },
 ]
+
+// Suggest a scoring profile from the picked niches: ingestible + feminine
+// wellness are the niche-critical verticals that need the relevancy-protected
+// blend; topical beauty is engagement-first. Fallback only — the brand pick
+// normally sets the formula directly, and the operator can always override.
+function suggestProfile(nicheIds) {
+  return nicheIds.some((id) => id === 'supplements' || id === 'feminine') ? 'health' : 'beauty'
+}
 
 const BRIEF_GUIDE = `Campaign Brief 點用
 ─────────────────────
@@ -113,7 +128,29 @@ function StepProgress({ current }) {
 
 function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false }, ref) {
   const [sessionTitle, setSessionTitle] = useState('')
-  const [niches, setNiches] = useState(['beauty', 'skincare'])
+  // The operator picks a brand; the brand drives niches + scoring formula. Niches
+  // are no longer hand-picked — they come from brandCatalog so the relevancy
+  // scorer always rewards the right vertical for that brand.
+  const [brandId, setBrandId] = useState('')
+  const [niches, setNiches] = useState([])
+  // Which scoring formula the run uses (see SCORING_PROFILES). Follows the niche
+  // selection until the operator (or a brand pick) sets one explicitly.
+  const [scoringProfile, setScoringProfile] = useState(() => suggestProfile([]))
+  const profileTouched = useRef(false)
+  useEffect(() => {
+    if (!profileTouched.current) setScoringProfile(suggestProfile(niches))
+  }, [niches])
+  const chooseProfile = (id) => { profileTouched.current = true; setScoringProfile(id) }
+  // Picking a brand sets its mapped niches and its default formula in one go.
+  // The formula stays overridable afterward (chooseProfile pins the operator's
+  // choice), so a brand is a starting point, not a lock.
+  const chooseBrand = (id) => {
+    setBrandId(id)
+    const brand = getBrand(id)
+    if (!brand) return
+    setNiches(brand.niches)
+    chooseProfile(brand.scoringProfile)
+  }
   // Per-campaign relevancy vocabulary. The six fixed niches can't express a
   // specific product (減脂 protein shake, etc.), so the operator types the
   // in-niche signals to reward and the wrong-vertical signals to penalise.
@@ -144,8 +181,8 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   // The brief is decomposed back into structured fields so saved presets and
   // databank rows keep the schema they've always had.
   const gatherConfig = () => ({
-    niches, targetAudience, targetKeywords, excludeKeywords,
-    locationTarget, minEngagement,
+    brandId, niches, targetAudience, targetKeywords, excludeKeywords,
+    locationTarget, minEngagement, scoringProfile,
     ...briefToFields(brief),
   })
 
@@ -160,6 +197,9 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   const applyPreset = (c) => {
     if (!c) return
     const setters = {
+      // brandId is set directly (not via chooseBrand) so a preset's own saved
+      // niches/profile win over the brand defaults instead of being clobbered.
+      brandId: setBrandId,
       niches: setNiches,
       targetAudience: setTargetAudience,
       targetKeywords: setTargetKeywords,
@@ -170,6 +210,9 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     for (const [key, set] of Object.entries(setters)) {
       if (c[key] !== undefined) set(c[key])
     }
+    // A preset that stored a profile pins it (counts as a manual choice); one
+    // saved before this feature existed leaves the niche auto-suggest in charge.
+    if (c.scoringProfile !== undefined) chooseProfile(c.scoringProfile)
     if (c.campaignBrief !== undefined) {
       setBrief(c.campaignBrief)
     } else if (BRIEF_KEYS.some((k) => c[k] !== undefined)) {
@@ -233,11 +276,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     }
   }
 
-  const toggleNiche = (id) => {
-    setNiches((prev) =>
-      prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]
-    )
-  }
 
   const hasData = influencerCount > 0
   const canStart = niches.length > 0 && (!embedded || hasData)
@@ -245,12 +283,14 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   const handleStart = () => {
     onStart({
       sessionTitle: sessionTitle.trim(),
+      brandId,
       niches: niches.map((id) => NICHE_OPTIONS.find((n) => n.id === id)?.label || id),
       targetAudience: targetAudience.trim(),
       targetKeywords: targetKeywords.trim(),
       excludeKeywords: excludeKeywords.trim(),
       locationTarget,
       minEngagement,
+      scoringProfile,
       campaignBrief: brief.trim(),
     })
   }
@@ -345,25 +385,80 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
           />
         </section>
 
-        {/* Niche */}
+        {/* Brand — the run is set up per brand. Picking one maps to its target
+            niches and default scoring formula (see brandCatalog.js), so niches
+            aren't hand-picked anymore. */}
         <section className="mb-8">
           <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-3">
-            Target niches
+            Brand
+            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">
+              sets the target niches and scoring formula for this run
+            </span>
           </label>
           <div className="flex flex-wrap gap-2">
-            {NICHE_OPTIONS.map((n) => (
+            {BRAND_CATALOG.map((b) => (
               <button
-                key={n.id}
-                onClick={() => toggleNiche(n.id)}
+                key={b.id}
+                type="button"
+                onClick={() => chooseBrand(b.id)}
                 className={`px-3 py-1.5 rounded-full text-[13px] border transition-all
-                  ${niches.includes(n.id)
+                  ${brandId === b.id
                     ? 'bg-ink border-ink text-white'
                     : 'bg-white border-[#E1DBCD] text-[#6C6555] hover:border-ink/30'
                   }`}
+                title={b.tag}
               >
-                {n.label}
+                {b.name}
               </button>
             ))}
+          </div>
+          {/* The niches the picked brand maps to — shown read-only for
+              transparency; the relevancy scorer uses exactly these. */}
+          {niches.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[12px] text-faint">
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase">Target niches</span>
+              {niches.map((id) => (
+                <span key={id} className="px-2 py-0.5 rounded-full bg-mist text-body text-[12px]">
+                  {NICHE_OPTIONS.find((n) => n.id === id)?.label || id}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Scoring formula — which formula ranks the results. Defaults from the
+            brand above, overridable per run. */}
+        <section className="mb-8">
+          <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
+            Scoring formula
+            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">
+              how the Overall score ranks accounts · suggested from your niches
+            </span>
+          </label>
+          <div className="grid sm:grid-cols-2 gap-2 mt-2">
+            {Object.values(SCORING_PROFILES).map((p) => {
+              const active = scoringProfile === p.id
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => chooseProfile(p.id)}
+                  className={`text-left px-3.5 py-3 rounded-[12px] border transition-all
+                    ${active
+                      ? 'bg-ink border-ink text-white'
+                      : 'bg-white border-[#E1DBCD] text-[#6C6555] hover:border-ink/30'
+                    }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[13px] font-medium">
+                    {active && <Check size={13} />}
+                    {p.label}
+                  </div>
+                  <p className={`mt-1 text-[11.5px] leading-snug ${active ? 'text-white/75' : 'text-faint'}`}>
+                    {p.blurb}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </section>
 

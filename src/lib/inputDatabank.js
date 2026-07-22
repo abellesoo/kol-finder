@@ -23,7 +23,8 @@ import { supabase } from './supabase'
 // in brands columns, never inside step2.
 const STEP1_FIELDS = ['tab', 'platforms', 'scrapeInput', 'painpointInput', 'genreInput', 'resultsLimit']
 const CAMPAIGN_FIELDS = [
-  'niches', 'targetAudience', 'targetKeywords', 'excludeKeywords',
+  'brandId', 'niches', 'scoringProfile',
+  'targetAudience', 'targetKeywords', 'excludeKeywords',
   'locationTarget', 'minEngagement',
   'newProduct', 'collabFormat', 'briefNotes',
 ]
@@ -31,7 +32,8 @@ const CAMPAIGN_FIELDS = [
 // Defaults for a full preset load: an old row missing a newer field must reset
 // that field, not leave whatever the previous brand's run put there.
 const CAMPAIGN_DEFAULTS = {
-  niches: [], targetAudience: '', targetKeywords: '', excludeKeywords: '',
+  brandId: '', niches: [], scoringProfile: 'health',
+  targetAudience: '', targetKeywords: '', excludeKeywords: '',
   locationTarget: 'Hong Kong', minEngagement: 0,
   newProduct: '', collabFormat: '', briefNotes: '',
 }

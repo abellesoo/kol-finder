@@ -1,12 +1,18 @@
 import { classifyRegion } from './parseXlsx'
 
+// Portfolio-tailored niche dictionaries — the verticals our brands occupy (see
+// brandCatalog.js). Keys match the niche ids in ConfigStep's NICHE_OPTIONS.
+// Kept deliberately distinct so an overlapping term doesn't trigger an off-niche
+// deduction on an adjacent vertical.
 const NICHE_KEYWORDS = {
-  beauty: ['makeup', 'lipstick', 'foundation', 'eyeshadow', 'blush', 'mascara', 'concealer', 'beauty', '化妝', '唇膏', '眼影', '粉底'],
-  skincare: ['skincare', 'serum', 'moisturizer', 'spf', 'sunscreen', 'toner', 'retinol', 'acne', 'skin', '護膚', '精華', '保濕', '防曬'],
-  lifestyle: ['lifestyle', 'daily', 'vlog', 'life', '生活', '日常', '分享'],
-  fashion: ['fashion', 'style', 'outfit', 'ootd', 'wear', '穿搭', '時尚', '造型'],
-  health: ['health', 'wellness', 'yoga', 'gym', 'fitness', 'workout', 'nutrition', '健康', '健身', '瑜伽'],
-  food: ['food', 'eat', 'restaurant', 'recipe', 'cooking', 'foodie', '美食', '食物', '餐廳', '食'],
+  skincare: ['skincare', 'serum', 'moisturizer', 'moisturiser', 'cleanser', 'spf', 'sunscreen', 'toner', 'retinol', 'acne', 'skin', 'essence', 'ampoule', '護膚', '精華', '保濕', '防曬', '爽膚水', '潔面', '面霜', '安瓶'],
+  haircare: ['hair', 'haircare', 'shampoo', 'conditioner', 'scalp', 'hairstyle', 'hairstyling', 'hairtok', '護髮', '洗頭水', '頭髮', '髮膜', '頭皮', '染髮'],
+  bodycare: ['bodycare', 'body', 'bodylotion', 'slimming', 'guasha', 'firming', 'cellulite', 'lotion', '身體', '瘦身', '緊緻', '刮痧', '按摩', '身體乳'],
+  makeup: ['makeup', 'lip', 'lips', 'lipstick', 'foundation', 'cushion', 'eyeshadow', 'blush', 'mascara', 'concealer', 'tint', 'cosmetics', 'mua', '化妝', '唇膏', '眼影', '粉底', '氣墊', '腮紅', '彩妝', '唇釉'],
+  personal: ['grooming', 'hygiene', 'deodorant', 'oral', 'toothpaste', 'sanitary', 'selfcare', 'self-care', 'shower', '個人護理', '衛生', '口腔', '牙膏', '除臭', '梳洗'],
+  supplements: ['supplement', 'supplements', 'collagen', 'vitamin', 'vitamins', 'gummies', 'ingestible', 'nutrition', '保健', '膠原蛋白', '維他命', '營養', '內服', '食療'],
+  sports: ['sports', 'sport', 'fitness', 'gym', 'workout', 'running', 'yoga', 'pilates', 'athlete', 'training', 'exercise', 'marathon', '運動', '健身', '瑜伽', '跑步', '訓練', '鍛鍊'],
+  feminine: ['feminine', 'femcare', 'intimate', 'menstrual', 'period', 'gynecology', 'vaginal', 'probiotic', 'probiotics', '女性', '私密', '婦科', '經期', '陰道'],
 }
 
 function escapeRegex(s) {
@@ -135,25 +141,65 @@ function scoreRelevancy(inf, config) {
   return { score, signals: [...new Set(signals)].slice(0, 5) }
 }
 
-// Off-niche floor + overall blend, shared so the initial score (here) and the
-// live-median re-score in ResultsStep stay identical.
-//
-// Base overall = 50% Engagement + 50% Relevancy (each 0–10 → 0–100). Relevancy
-// was only 20% before, which let a high-engagement wrong-niche creator top the
-// list — the exact failure that seeded makeup accounts onto a protein campaign.
-// When AI blend is on and a fit score exists: 35% Eng + 25% Rel + 40% AI fit.
-//
-// The floor is the safety net: a creator whose relevancy fell BELOW baseline
-// (net off-niche / excluded matches) is capped, so reach alone can't lift a
-// wrong-vertical account into the shortlist.
 export const RELEVANCY_FLOOR = 3
 export const OFF_NICHE_CAP = 40
-export function computeOverall(engScore, relScore, aiScore = null, blendAi = false) {
+
+// Selectable scoring profiles. Different campaign types need a different balance
+// between reach and niche fit, so the operator picks one per run.
+//
+//  · beauty  — the original engagement-first blend (80% Engagement / 20%
+//    Relevancy, no off-niche cap, no business demotion). For beauty/lifestyle
+//    seeding a big, lively audience IS the value and almost any on-vibe creator
+//    is "relevant enough", so raw engagement should lead.
+//  · health  — the relevancy-protected blend (50/50, plus the off-niche cap and
+//    business/venue demotion). Health/supplement/niche-critical campaigns must
+//    NOT surface a lively wrong-vertical creator (a makeup account on a protein
+//    campaign — the exact failure the cap was built for).
+//
+// The off-niche cap is the safety net: a creator whose relevancy fell BELOW
+// baseline (net off-niche / excluded matches) is capped so reach alone can't
+// lift a wrong-vertical account into the shortlist. Only the health profile
+// applies it.
+export const SCORING_PROFILES = {
+  beauty: {
+    id: 'beauty',
+    label: 'Beauty / lifestyle — engagement-first',
+    blurb: 'Rewards reach and lively audiences (80/20). Best when almost any on-vibe creator works.',
+    engWeight: 8, relWeight: 2,
+    aiWeights: { eng: 5, rel: 1, ai: 4 },
+    offNicheCap: false,
+    demoteBusiness: false,
+  },
+  health: {
+    id: 'health',
+    label: 'Health / niche-critical — relevancy-protected',
+    blurb: 'Balances fit and reach (50/50), caps off-niche accounts, and demotes business/venue pages.',
+    engWeight: 5, relWeight: 5,
+    aiWeights: { eng: 3.5, rel: 2.5, ai: 4 },
+    offNicheCap: true,
+    demoteBusiness: true,
+  },
+}
+export const DEFAULT_PROFILE = 'health'
+
+// Accepts a profile id ('beauty'/'health'), a profile object, or nothing;
+// always returns a valid profile object.
+export function resolveProfile(profile) {
+  if (profile && typeof profile === 'object') return profile
+  return SCORING_PROFILES[profile] || SCORING_PROFILES[DEFAULT_PROFILE]
+}
+
+// Overall blend, shared so the initial score (here) and the live-median re-score
+// in ResultsStep stay identical. The chosen profile picks the blend weights and
+// whether the off-niche cap applies. Each sub-score is 0–10; the weights sum to
+// 10 so the result lands on 0–100.
+export function computeOverall(engScore, relScore, aiScore = null, blendAi = false, profile = DEFAULT_PROFILE) {
+  const p = resolveProfile(profile)
   const raw = (blendAi && aiScore != null)
-    ? engScore * 3.5 + relScore * 2.5 + aiScore * 4
-    : engScore * 5 + relScore * 5
+    ? engScore * p.aiWeights.eng + relScore * p.aiWeights.rel + aiScore * p.aiWeights.ai
+    : engScore * p.engWeight + relScore * p.relWeight
   let overall = Math.round(raw)
-  if (relScore < RELEVANCY_FLOOR) overall = Math.min(overall, OFF_NICHE_CAP)
+  if (p.offNicheCap && relScore < RELEVANCY_FLOOR) overall = Math.min(overall, OFF_NICHE_CAP)
   return overall
 }
 
@@ -223,11 +269,12 @@ function buildFlags(inf, relevancyScore, botScore, config) {
   const flags = []
   // videoRatio is a percentage (0–100) from parseXlsx, not a 0–1 fraction.
   if ((inf.videoRatio || 0) >= 50) flags.push('video-creator')
+  // Strong niche fit → tag which of the run's target niches applied, using the
+  // niche id (first word of the label, minus emoji) so this tracks whatever
+  // taxonomy the brand catalog defines.
   if (relevancyScore.score >= 7) {
-    const niches = config.niches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0])
-    if (niches.some((n) => ['beauty', 'makeup'].includes(n))) flags.push('beauty-niche')
-    if (niches.some((n) => n === 'skincare')) flags.push('skincare-niche')
-    if (niches.some((n) => n === 'lifestyle')) flags.push('lifestyle-niche')
+    const nicheIds = new Set(config.niches.map((n) => n.replace(/^[^\w]+ /, '').toLowerCase().split(' ')[0]))
+    for (const id of nicheIds) flags.push(`${id}-niche`)
   }
   if ((inf.paidCount || 0) > 0) flags.push('paid-collab-history')
   // Both suspicious tiers (6 and 8) flag; healthy/neutral tiers (1,3,5) don't.
@@ -248,6 +295,7 @@ function buildFlags(inf, relevancyScore, botScore, config) {
 }
 
 export async function scoreInfluencers(influencers, config) {
+  const profile = resolveProfile(config.scoringProfile)
   return influencers.map((inf) => {
     const engagement = scoreEngagement(inf)
     const relevancy = scoreRelevancy(inf, config)
@@ -286,14 +334,16 @@ export async function scoreInfluencers(influencers, config) {
     // live engagement re-score in ResultsStep.
     const businessAccount = isBusinessAccount(inf)
     if (businessAccount) {
-      relevancyScore = Math.min(relevancyScore, 2)
+      // Only the relevancy-protected profile demotes businesses below the floor;
+      // the flag is always recorded so a reviewer sees it under either profile.
+      if (profile.demoteBusiness) relevancyScore = Math.min(relevancyScore, 2)
       configFlags.push('business-account')
     }
     relevancyScore = Math.max(0, Math.min(10, relevancyScore))
     const relevancyAdjusted = { score: relevancyScore, signals: relevancy.signals }
 
-    // 50% Engagement + 50% Relevancy, with the off-niche cap (see computeOverall).
-    const overall = computeOverall(engagement.score, relevancyScore)
+    // Blended per the chosen scoring profile (see computeOverall).
+    const overall = computeOverall(engagement.score, relevancyScore, null, false, profile)
 
     const flags = [...buildFlags(inf, relevancyAdjusted, botRisk, config), ...configFlags]
 

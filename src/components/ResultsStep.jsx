@@ -21,9 +21,11 @@ const COLUMN_INFO = {
   overall: {
     title: 'Overall Score (0–100)',
     lines: [
-      '50% Engagement Score + 50% Relevancy Score.',
+      'Blend depends on the run\'s scoring profile:',
+      '· Beauty / engagement-first — 80% Engagement + 20% Relevancy.',
+      '· Health / relevancy-protected — 50% Engagement + 50% Relevancy.',
       'Each sub-score is 0–10; combined and scaled to 0–100.',
-      'Capped at 40 when Relevancy < 3 (off-niche floor).',
+      'Relevancy-protected profile caps at 40 when Relevancy < 3 (off-niche floor).',
       '· 70+ = strong match',
       '· 45–69 = possible',
       '· <45 = low fit',
@@ -496,9 +498,9 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
         ? computeLiveEngagementScore(medLikes, medViews, medComments, followerCount)
         : (r.scores?.engagement ?? 0)
       const relScore = r.scores?.relevancy ?? 0
-      // Same blend + off-niche cap as the initial score (computeOverall):
-      // 50% Eng / 50% Rel, or 35/25/40 with Eng/Rel/AI-fit when blend is on.
-      const overall = computeOverall(engScore, relScore, ai?.score ?? null, blendAi)
+      // Same blend + off-niche cap as the initial score (computeOverall), using
+      // this run's scoring profile so the live re-score matches the seed score.
+      const overall = computeOverall(engScore, relScore, ai?.score ?? null, blendAi, config?.scoringProfile)
       return {
         ...r, ...inf,
         // Explicit: `...inf` would otherwise clobber a persisted r.followerCount

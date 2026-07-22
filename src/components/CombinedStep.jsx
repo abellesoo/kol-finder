@@ -51,6 +51,8 @@ function timeAgo(iso) {
 // included, and the launcher collapses. Collapsed, it's a thin strip holding
 // the manual save controls: saving files the current inputs under the form's
 // Brand name, as a run named in the text box ("Default" if left blank).
+// Manual saving is optional — CombinedStep also auto-saves the inputs under
+// the session name whenever a scoring run starts.
 function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }) {
   const [brands, setBrands] = useState([])
   const [activeBrandId, setActiveBrandId] = useState('')
@@ -284,7 +286,7 @@ function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }
           Browse {brands.length} saved brand{brands.length > 1 ? 's' : ''} <ChevronRight size={13} />
         </button>
       ) : (
-        <span className="text-[12px] text-body">Nothing saved yet — fill in your run and save it to reuse next time.</span>
+        <span className="text-[12px] text-body">Nothing saved yet — inputs file themselves here when you score (or save them now).</span>
       )}
 
       <div className="flex items-center gap-2 ml-auto">
@@ -321,6 +323,23 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
   const onScrapeChange = useCallback((s) => { scrapeSnapshotRef.current = s }, [])
   // Object pushed into UploadStep to prefill it when a databank entry loads.
   const [scrapePrefill, setScrapePrefill] = useState(null)
+
+  // Scoring is the moment the inputs are final, so file them in the databank
+  // automatically, keyed by the session name — the run is reusable without a
+  // separate "Save inputs" click. Fire-and-forget: a save failure (offline, no
+  // Supabase) must never block scoring. Skipped when the brief has no brand
+  // line, since the databank files everything by brand.
+  const handleStart = useCallback((cfg) => {
+    const step2 = configRef.current?.getConfig() || {}
+    if (String(step2.brandName || '').trim()) {
+      saveDatabankEntry({
+        presetName: cfg.sessionTitle || 'Default',
+        step1: scrapeSnapshotRef.current || {},
+        step2,
+      }).catch((e) => console.error('Databank auto-save failed', e))
+    }
+    onStart(cfg)
+  }, [onStart])
 
   return (
     <div className="px-8 py-8">
@@ -407,7 +426,7 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
                 ref={configRef}
                 fileNames={fileNames}
                 influencerCount={influencers.length}
-                onStart={onStart}
+                onStart={handleStart}
                 embedded
               />
             </section>

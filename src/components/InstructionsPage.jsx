@@ -197,7 +197,7 @@ export default function InstructionsPage() {
                 </li>
               </ul>
               <p className="text-[13px] text-body leading-relaxed">
-                Ran this brand before? The <strong>Databank</strong> launcher at the top of an empty Set-up page shows a card per saved brand: click a card to prefill its background and products, then click one of its <strong>saved runs</strong> to reload the scrape inputs and the full scoring form too. Once you're working it collapses to a thin strip — that's where <strong>Save inputs</strong> lives; the current inputs file under the form's brand name, so name the run after the campaign and one brand can keep several setups.
+                Ran this brand before? The <strong>Databank</strong> launcher at the top of an empty Set-up page shows a card per saved brand: click a card to prefill its background and products, then click one of its <strong>saved runs</strong> to reload the scrape inputs and the full scoring form too. There's nothing to save manually — the moment you hit <strong>Start scoring</strong>, your inputs file themselves under the brief's brand name as a run named after the session, so one brand keeps a setup per campaign.
               </p>
             </div>
           </li>

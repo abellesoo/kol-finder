@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { CheckCircle2, ChevronRight, Database, SlidersHorizontal, Save, Trash2, Loader2, X } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Database, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import UploadStep from './UploadStep'
 import ConfigStep from './ConfigStep'
 import StepProgress from './core/StepProgress'
@@ -48,15 +48,12 @@ function timeAgo(iso) {
 // launcher: while there's no dataset yet it leads the page with one card per
 // brand — picking a card prefills the brand info (background / products) and
 // reveals its saved runs; picking a run prefills everything, scrape inputs
-// included, and the launcher collapses. Collapsed, it's a thin strip holding
-// the manual save controls: saving files the current inputs under the form's
-// Brand name, as a run named in the text box ("Default" if left blank).
-// Manual saving is optional — CombinedStep also auto-saves the inputs under
-// the session name whenever a scoring run starts.
-function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }) {
+// included, and the launcher collapses to a thin browse strip. There is no
+// manual save: CombinedStep files the inputs here automatically (under the
+// session name) whenever a scoring run starts.
+function DatabankLauncher({ configRef, onLoadStep1, hasData }) {
   const [brands, setBrands] = useState([])
   const [activeBrandId, setActiveBrandId] = useState('')
-  const [runName, setRunName] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null) // { kind: 'ok' | 'err', text }
   const flashTimerRef = useRef(null)
@@ -89,26 +86,9 @@ function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }
   const handlePickRun = (preset) => {
     configRef.current?.applyConfig(presetToForm(activeBrand, preset))
     onLoadStep1(presetToScrape(preset))
-    setRunName(preset.name)
     touchPreset(preset.id)
     setUserOpen(false)
     flash('ok', `Loaded "${activeBrand.name} · ${preset.name}" into both steps`)
-  }
-
-  const handleSave = async () => {
-    setBusy(true)
-    try {
-      const step1 = scrapeSnapshotRef.current || {}
-      const step2 = configRef.current?.getConfig() || {}
-      const presetName = runName.trim() || 'Default'
-      const next = await saveDatabankEntry({ presetName, step1, step2 })
-      setBrands(next)
-      flash('ok', `Saved "${(step2.brandName || '').trim()} · ${presetName}"`)
-    } catch (e) {
-      flash('err', e.message)
-    } finally {
-      setBusy(false)
-    }
   }
 
   const handleDeleteRun = async (preset) => {
@@ -273,7 +253,7 @@ function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }
     )
   }
 
-  // ── Collapsed: a thin strip with the save controls ──
+  // ── Collapsed: a thin browse strip. Saving is automatic on score. ──
   return (
     <div className="mb-8 px-4 py-3 bg-surface border border-card-edge rounded-[12px] flex flex-wrap items-center gap-2">
       {label}
@@ -286,28 +266,13 @@ function DatabankLauncher({ configRef, scrapeSnapshotRef, onLoadStep1, hasData }
           Browse {brands.length} saved brand{brands.length > 1 ? 's' : ''} <ChevronRight size={13} />
         </button>
       ) : (
-        <span className="text-[12px] text-body">Nothing saved yet — inputs file themselves here when you score (or save them now).</span>
+        <span className="text-[12px] text-body">Nothing saved yet — your inputs file themselves here when you score.</span>
       )}
-
       <div className="flex items-center gap-2 ml-auto">
         {msgEl}
-        <input
-          value={runName}
-          onChange={(e) => setRunName(e.target.value)}
-          placeholder="Run name (e.g. campaign)"
-          aria-label="Run name for saving these inputs"
-          title="Saving files these inputs under the form's Brand name — one brand can keep several runs."
-          className="px-2.5 py-1.5 w-44 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30"
-        />
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={busy}
-          title="Saving files these inputs under the form's Brand name — one brand can keep several runs."
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[8px] text-[12px] hover:bg-ink/80 active:scale-[.97] transition-all disabled:opacity-50"
-        >
-          {busy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} Save inputs
-        </button>
+        {brands.length > 0 && (
+          <span className="text-[11px] text-faint">Inputs save automatically when you score</span>
+        )}
       </div>
     </div>
   )
@@ -325,10 +290,10 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
   const [scrapePrefill, setScrapePrefill] = useState(null)
 
   // Scoring is the moment the inputs are final, so file them in the databank
-  // automatically, keyed by the session name — the run is reusable without a
-  // separate "Save inputs" click. Fire-and-forget: a save failure (offline, no
-  // Supabase) must never block scoring. Skipped when the brief has no brand
-  // line, since the databank files everything by brand.
+  // automatically, keyed by the session name — this is the only way runs get
+  // saved (there is no manual save button). Fire-and-forget: a save failure
+  // (offline, no Supabase) must never block scoring. Skipped when the brief
+  // has no brand line, since the databank files everything by brand.
   const handleStart = useCallback((cfg) => {
     const step2 = configRef.current?.getConfig() || {}
     if (String(step2.brandName || '').trim()) {
@@ -371,7 +336,6 @@ export default function CombinedStep({ influencers, fileNames, onFiles, onScrape
         <div className="anim-rise anim-d3">
           <DatabankLauncher
             configRef={configRef}
-            scrapeSnapshotRef={scrapeSnapshotRef}
             onLoadStep1={setScrapePrefill}
             hasData={hasData}
           />

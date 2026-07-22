@@ -100,7 +100,7 @@ export async function loadDatabank() {
 export async function saveDatabankEntry({ presetName, step1, step2 }) {
   if (!supabase) throw new Error('Databank needs Supabase — not configured in this environment.')
   const brandName = String(step2?.brandName || '').trim()
-  if (!brandName) throw new Error('Fill in the Brand name field (品牌) first — entries are filed by brand.')
+  if (!brandName) throw new Error('Brief needs a 「品牌：…」 line first (自動整理 adds it for you) — entries are filed by brand.')
 
   const { data: brand, error: brandError } = await supabase
     .from('brands')

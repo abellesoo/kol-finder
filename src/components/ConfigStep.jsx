@@ -14,15 +14,77 @@ const NICHE_OPTIONS = [
 
 const BRIEF_GUIDE = `Campaign Brief 點用
 ─────────────────────
-DM 入面所有品牌／產品資料都只會用你喺下面填嘅內容——DeepSeek 唔會自己作成分或數字。所以每個賣點都要喺度寫齊。
+DM 入面所有品牌／產品資料都只會用呢個箱入面嘅內容——DeepSeek 唔會自己作成分或數字。AI 相關度評分都會參考呢份 brief。
 
+・成個 brief 一個箱搞掂：WhatsApp／文件直接貼落嚟，撳「自動整理」，DeepSeek 會執成統一格式（品牌／品牌背景／新品／合作形式／產品詳情）。
 ・自我介紹會自動變成「我係 [品牌] 嘅 Marketing」，唔使自己寫。
 ・開場係固定一句「你嘅 content style 好啱我哋品牌」，唔會逐個 KOL 個人化——一個 campaign 出一封 DM，approve 之後大家共用。
+・呢步可以留空——去到 Review 頁出 DM 之前都仲可以補返。
 
 三個提示：
-1. 賣點冇填就唔會出現喺 DM（防止作大成分／功效）。
+1. 賣點冇寫就唔會出現喺 DM（防止作大成分／功效）。
 2. 美白／醫美級字眼照官方 listing 原文寫，唔好自己加大——香港《商品說明條例》有風險。
-3. 一件或多件產品都得，撳「+ 加多件產品」加。`
+3. 想儲入 Databank 就要有「品牌：」一行（自動整理會幫你加）。`
+
+// Assemble structured brief fields into the labelled text the DM prompt
+// expects. Empty fields are dropped so a half-filled brief stays clean.
+// Selling points are one per line; each gets a ・ bullet (any existing bullet
+// char is stripped first).
+function assembleBrief(f) {
+  const lines = []
+  if ((f.brandName || '').trim()) lines.push(`品牌：${f.brandName.trim()}`)
+  if ((f.brandBackground || '').trim()) lines.push(`品牌背景：${f.brandBackground.trim()}`)
+  if ((f.newProduct || '').trim()) lines.push(`新品：${f.newProduct.trim()}`)
+  if ((f.collabFormat || '').trim()) lines.push(`合作形式：${f.collabFormat.trim()}`)
+  const blocks = (f.products || [])
+    .filter((p) => (p.name || '').trim() || (p.points || '').trim())
+    .map((p) => {
+      const pts = (p.points || '')
+        .split('\n')
+        .map((s) => s.trim().replace(/^[・·•\-\s]+/, ''))
+        .filter(Boolean)
+        .map((s) => `・${s}`)
+      return [`【${(p.name || '').trim()}】`, ...pts].join('\n')
+    })
+  if (blocks.length) {
+    lines.push('產品詳情：')
+    lines.push(blocks.join('\n'))
+  }
+  if ((f.briefNotes || '').trim()) lines.push(f.briefNotes.trim())
+  return lines.join('\n')
+}
+
+// Inverse of assembleBrief: pull the structured fields back out of the
+// labelled brief text. Presets and the brand databank still store this shape
+// (the databank files entries by brand name), so the one-box UI stays
+// compatible with both without touching their storage. Unlabelled lines fall
+// through to briefNotes, so a freeform un-tidied brief loses nothing.
+function briefToFields(text) {
+  const f = { brandName: '', brandBackground: '', newProduct: '', collabFormat: '', products: [], briefNotes: '' }
+  let inProducts = false
+  let current = null
+  const notes = []
+  for (const raw of String(text || '').split('\n')) {
+    const line = raw.trim()
+    if (!line) continue
+    let m
+    if ((m = line.match(/^品牌[：:]\s*(.*)$/))) { f.brandName = m[1]; inProducts = false; continue }
+    if ((m = line.match(/^品牌背景[：:]\s*(.*)$/))) { f.brandBackground = m[1]; inProducts = false; continue }
+    if ((m = line.match(/^新品[：:]\s*(.*)$/))) { f.newProduct = m[1]; inProducts = false; continue }
+    if ((m = line.match(/^合作形式[：:]\s*(.*)$/))) { f.collabFormat = m[1]; inProducts = false; continue }
+    if (/^產品詳情[：:]?$/.test(line)) { inProducts = true; current = null; continue }
+    if ((m = line.match(/^【(.+)】$/))) { current = { name: m[1], points: '' }; f.products.push(current); inProducts = true; continue }
+    if (inProducts && current && /^[・·•\-]/.test(line)) {
+      const pt = line.replace(/^[・·•\-\s]+/, '')
+      current.points = current.points ? `${current.points}\n${pt}` : pt
+      continue
+    }
+    notes.push(line)
+  }
+  f.briefNotes = notes.join('\n')
+  if (!f.products.length) f.products = [{ name: '', points: '' }]
+  return f
+}
 
 function StepProgress({ current }) {
   const steps = [
@@ -62,19 +124,12 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   const [excludeKeywords, setExcludeKeywords] = useState('')
   const [locationTarget, setLocationTarget] = useState('Hong Kong')
   const [minEngagement, setMinEngagement] = useState(0)
-  // Structured campaign-brief fields. They assemble into the single
-  // `campaignBrief` string DeepSeek consumes (assembleBrief), so nothing
-  // downstream (worker DM prompt, storage, display) has to change.
-  const [brandName, setBrandName] = useState('')
-  const [brandBackground, setBrandBackground] = useState('')
-  const [newProduct, setNewProduct] = useState('')
-  const [collabFormat, setCollabFormat] = useState('')
-  const [products, setProducts] = useState([{ name: '', points: '' }])
-  const [briefNotes, setBriefNotes] = useState('')
+  // The campaign brief is ONE freeform box. 自動整理 (handleTidyBrief) sends it
+  // to DeepSeek and rewrites the box in the labelled format the DM prompt
+  // expects; briefToFields() parses that format back out whenever presets or
+  // the databank need the structured shape.
+  const [brief, setBrief] = useState('')
   const [showBriefGuide, setShowBriefGuide] = useState(false)
-
-  // Paste-to-fill: paste a freeform brief, DeepSeek splits it into the fields below.
-  const [pasteText, setPasteText] = useState('')
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState('')
   const [parsedOk, setParsedOk] = useState(false)
@@ -86,17 +141,22 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
   const [saveMsg, setSaveMsg] = useState('')
 
   // Everything the operator fills — the shape a preset stores and restores.
+  // The brief is decomposed back into structured fields so saved presets and
+  // databank rows keep the schema they've always had.
   const gatherConfig = () => ({
     niches, targetAudience, targetKeywords, excludeKeywords,
     locationTarget, minEngagement,
-    brandName, brandBackground, newProduct, collabFormat, products, briefNotes,
+    ...briefToFields(brief),
   })
+
+  const BRIEF_KEYS = ['brandName', 'brandBackground', 'newProduct', 'collabFormat', 'products', 'briefNotes']
 
   // Applies only the keys present in `c`, so callers control the granularity:
   // the databank sends just the three brand fields for a brand-only load, or a
   // complete config (defaults pre-merged in inputDatabank.js) for a full load.
-  // Local presets always pass the full gatherConfig() shape, so nothing changes
-  // for them.
+  // Structured brief keys are merged over whatever the box currently parses to
+  // and re-rendered as text — a brand-only load swaps the brand lines while
+  // keeping the campaign half of the brief.
   const applyPreset = (c) => {
     if (!c) return
     const setters = {
@@ -106,15 +166,18 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
       excludeKeywords: setExcludeKeywords,
       locationTarget: setLocationTarget,
       minEngagement: setMinEngagement,
-      brandName: setBrandName,
-      brandBackground: setBrandBackground,
-      newProduct: setNewProduct,
-      collabFormat: setCollabFormat,
-      briefNotes: setBriefNotes,
-      products: (v) => setProducts(v?.length ? v : [{ name: '', points: '' }]),
     }
     for (const [key, set] of Object.entries(setters)) {
       if (c[key] !== undefined) set(c[key])
+    }
+    if (c.campaignBrief !== undefined) {
+      setBrief(c.campaignBrief)
+    } else if (BRIEF_KEYS.some((k) => c[k] !== undefined)) {
+      setBrief((prev) => {
+        const merged = briefToFields(prev)
+        for (const k of BRIEF_KEYS) if (c[k] !== undefined) merged[k] = c[k]
+        return assembleBrief(merged)
+      })
     }
   }
 
@@ -131,8 +194,12 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     applyConfig: applyPreset,
   }))
 
+  // Brand name pulled live from the brief's 品牌： line — default preset name
+  // and the databank both file by it.
+  const briefBrand = briefToFields(brief).brandName
+
   const handleSavePreset = () => {
-    const name = presetName.trim() || brandName.trim()
+    const name = presetName.trim() || briefBrand
     if (!name) { setSaveMsg('Name it (or fill Brand) first'); return }
     setPresets(savePreset(name, gatherConfig()))
     setPresetName('')
@@ -147,17 +214,17 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     setSelectedPreset('')
   }
 
-  const handleParseBrief = async () => {
-    if (!pasteText.trim()) return
+  // Auto-tidy: DeepSeek splits whatever's in the box into structured fields,
+  // then assembleBrief renders them back as the labelled format — same box,
+  // now clean. Never wipes the operator's text on a failed parse.
+  const handleTidyBrief = async () => {
+    if (!brief.trim()) return
     setParseError(''); setParsedOk(false); setParsing(true)
     try {
-      const r = await parseBrief(pasteText)
-      setBrandName(r.brandName || '')
-      setBrandBackground(r.brandBackground || '')
-      setNewProduct(r.newProduct || '')
-      setCollabFormat(r.collabFormat || '')
-      setProducts(r.products?.length ? r.products : [{ name: '', points: '' }])
-      setBriefNotes(r.briefNotes || '')
+      const r = await parseBrief(brief)
+      const tidied = assembleBrief(r)
+      if (!tidied.trim()) throw new Error('DeepSeek 讀唔到呢份 brief — 檢查下內容再試')
+      setBrief(tidied)
       setParsedOk(true)
     } catch (e) {
       setParseError(e.message || 'Could not read that brief')
@@ -172,38 +239,6 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     )
   }
 
-  const updateProduct = (i, field, value) =>
-    setProducts((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)))
-  const addProduct = () => setProducts((prev) => [...prev, { name: '', points: '' }])
-  const removeProduct = (i) => setProducts((prev) => prev.filter((_, idx) => idx !== i))
-
-  // Re-create the labelled brief shape DeepSeek expects. Empty fields are
-  // dropped so a half-filled brief stays clean. Selling points are one per
-  // line; each gets a ・ bullet (any existing bullet char is stripped first).
-  const assembleBrief = () => {
-    const lines = []
-    if (brandName.trim()) lines.push(`品牌：${brandName.trim()}`)
-    if (brandBackground.trim()) lines.push(`品牌背景：${brandBackground.trim()}`)
-    if (newProduct.trim()) lines.push(`新品：${newProduct.trim()}`)
-    if (collabFormat.trim()) lines.push(`合作形式：${collabFormat.trim()}`)
-    const blocks = products
-      .filter((p) => p.name.trim() || p.points.trim())
-      .map((p) => {
-        const pts = p.points
-          .split('\n')
-          .map((s) => s.trim().replace(/^[・·•\-\s]+/, ''))
-          .filter(Boolean)
-          .map((s) => `・${s}`)
-        return [`【${p.name.trim()}】`, ...pts].join('\n')
-      })
-    if (blocks.length) {
-      lines.push('產品詳情：')
-      lines.push(blocks.join('\n'))
-    }
-    if (briefNotes.trim()) lines.push(briefNotes.trim())
-    return lines.join('\n')
-  }
-
   const hasData = influencerCount > 0
   const canStart = niches.length > 0 && (!embedded || hasData)
 
@@ -216,7 +251,7 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
       excludeKeywords: excludeKeywords.trim(),
       locationTarget,
       minEngagement,
-      campaignBrief: assembleBrief(),
+      campaignBrief: brief.trim(),
     })
   }
 
@@ -281,7 +316,7 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
               type="text"
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
-              placeholder={brandName.trim() || 'Name (e.g. brand)'}
+              placeholder={briefBrand || 'Name (e.g. brand)'}
               className="w-[150px] px-2.5 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
             />
             <button
@@ -414,14 +449,14 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
           </div>
         </section>
 
-        {/* Campaign brief */}
+        {/* Campaign brief — one box; 自動整理 reformats it via DeepSeek */}
         <section className="mb-10">
           <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-1">
             Campaign brief
-            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">optional · used for DM generation</span>
+            <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">optional · feeds AI fit scoring + the DM draft · can still add or edit in Review</span>
           </label>
           <p className="text-[12px] text-faint mb-2">
-            Describe the brand aesthetic, campaign goals, and content style you're looking for. Used to generate personalised DM drafts for approved accounts.
+            乜都貼得：WhatsApp brief、文件、自己打幾句都得。撳「自動整理」DeepSeek 會執成統一格式（品牌／新品／賣點），記得執完檢查一下。
           </p>
           <button
             type="button"
@@ -436,155 +471,33 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
             </div>
           )}
 
-          <div className="space-y-3.5 px-4 py-4 bg-surface border border-card-edge rounded-[12px]">
-            {/* Paste-to-fill — paste any brief, DeepSeek splits it into the fields below */}
-            <div className="pb-3.5 border-b border-mist">
-              <label className="block text-[12px] font-medium text-body mb-1">
-                貼上你嘅 brief <span className="text-faint font-normal">· Paste your brief, auto-fill the fields</span>
-              </label>
-              <p className="text-[11px] text-faint mb-2">
-                有現成 brief（WhatsApp／文件）就直接貼落嚟，撳自動填入，DeepSeek 會幫你拆返落下面每格。記得填完檢查一下。
-              </p>
-              <textarea
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                rows={3}
-                placeholder="貼上品牌同產品資料，例：Wellage 係韓國醫美大廠 Hugel 旗下品牌，新推出「生維 C」系列登陸萬寧，主打一夜急救煥膚…"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
-              />
-              <div className="flex items-center gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={handleParseBrief}
-                  disabled={parsing || !pasteText.trim()}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors
-                    ${parsing || !pasteText.trim()
-                      ? 'bg-mist text-faint cursor-not-allowed'
-                      : 'bg-accent text-white hover:bg-accent/80'
-                    }`}
-                >
-                  {parsing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                  {parsing ? '整緊…' : '自動填入 · Auto-fill'}
-                </button>
-                {parseError && <span className="text-[11.5px] text-rose">{parseError}</span>}
-                {parsedOk && !parseError && (
-                  <span className="flex items-center gap-1 text-[11.5px] text-sage">
-                    <Check size={12} /> 已填入下面，記得檢查
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-1">
-                品牌 <span className="text-faint font-normal">· Brand name</span>
-              </label>
-              <input
-                type="text"
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-                placeholder="例：Wellage 唯拉珠"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
-              />
-              <p className="text-[11px] text-faint mt-1">自我介紹會自動變成「我係 {brandName.trim() || '[品牌]'} 嘅 Marketing」</p>
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-1">
-                品牌背景 <span className="text-faint font-normal">· Brand background (一句)</span>
-              </label>
-              <input
-                type="text"
-                value={brandBackground}
-                onChange={(e) => setBrandBackground(e.target.value)}
-                placeholder="例：韓國醫美大廠 Hugel 旗下品牌"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-1">
-                新品 <span className="text-faint font-normal">· 系列／產品名 + 上架渠道 + 主打賣點</span>
-              </label>
-              <textarea
-                value={newProduct}
-                onChange={(e) => setNewProduct(e.target.value)}
-                rows={2}
-                placeholder="例：「生維 C」系列登陸萬寧，主打一夜急救煥膚、7 日無針急救冷白皮"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-1">
-                合作形式 <span className="text-faint font-normal">· Collaboration format</span>
-              </label>
-              <input
-                type="text"
-                value={collabFormat}
-                onChange={(e) => setCollabFormat(e.target.value)}
-                placeholder="例：寄產品體驗，Feed／Reels feature 都可以"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-2">
-                產品詳情 <span className="text-faint font-normal">· 每件：名稱 + 賣點（一行一個賣點）</span>
-              </label>
-              <div className="space-y-3">
-                {products.map((p, i) => (
-                  <div key={i} className="px-3 py-3 bg-white border border-mist rounded-[10px]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-mono text-[10px] tracking-[.12em] text-faint uppercase flex-shrink-0">產品 {i + 1}</span>
-                      {products.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeProduct(i)}
-                          className="ml-auto text-[11px] text-faint hover:text-red-500 transition-colors"
-                        >
-                          移除
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      value={p.name}
-                      onChange={(e) => updateProduct(i, 'name', e.target.value)}
-                      placeholder="產品名稱，例：維C高效亮白七日套裝"
-                      className="w-full px-3 py-2 mb-2 border border-mist rounded-[8px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 placeholder:text-faint"
-                    />
-                    <textarea
-                      value={p.points}
-                      onChange={(e) => updateProduct(i, 'points', e.target.value)}
-                      rows={2}
-                      placeholder="一行一個賣點，例：&#10;醫美等級濃度 30% 生維 C，改善暗啞&#10;即開即用高濃度維他命 C 膠囊，減低氧化"
-                      className="w-full px-3 py-2 border border-mist rounded-[8px] text-[13px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
-                    />
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={addProduct}
-                className="mt-2 text-[12px] text-accent hover:text-accent/70 transition-colors font-medium"
-              >
-                + 加多件產品
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-body mb-1">
-                其他備註 <span className="text-faint font-normal">· optional</span>
-              </label>
-              <textarea
-                value={briefNotes}
-                onChange={(e) => setBriefNotes(e.target.value)}
-                rows={2}
-                placeholder="任何上面冇涵蓋嘅補充（語氣、活動期、優惠等）"
-                className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-none placeholder:text-faint"
-              />
-            </div>
+          <textarea
+            value={brief}
+            onChange={(e) => { setBrief(e.target.value); setParsedOk(false) }}
+            rows={10}
+            placeholder={'貼上或者打低品牌同產品資料，例：\n\nWellage 係韓國醫美大廠 Hugel 旗下品牌，新推出「生維 C」系列登陸萬寧，主打一夜急救煥膚。想搵 KOL 寄產品體驗，Feed／Reels feature 都可以。\n維C高效亮白七日套裝：醫美等級濃度 30% 生維 C，改善暗啞；即開即用高濃度維他命 C 膠囊，減低氧化'}
+            className="w-full px-3.5 py-3 border border-mist rounded-[12px] text-[13.5px] text-ink bg-white focus:outline-none focus:border-ink/30 resize-y leading-relaxed placeholder:text-faint"
+          />
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              type="button"
+              onClick={handleTidyBrief}
+              disabled={parsing || !brief.trim()}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition-colors
+                ${parsing || !brief.trim()
+                  ? 'bg-mist text-faint cursor-not-allowed'
+                  : 'bg-accent text-white hover:bg-accent/80'
+                }`}
+            >
+              {parsing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {parsing ? '整緊…' : '自動整理 · Auto-tidy'}
+            </button>
+            {parseError && <span className="text-[11.5px] text-rose">{parseError}</span>}
+            {parsedOk && !parseError && (
+              <span className="flex items-center gap-1 text-[11.5px] text-sage">
+                <Check size={12} /> 已整理好，記得檢查
+              </span>
+            )}
           </div>
         </section>
 

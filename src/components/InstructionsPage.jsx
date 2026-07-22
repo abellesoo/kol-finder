@@ -193,7 +193,7 @@ export default function InstructionsPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-faint shrink-0">•</span>
-                  <span>Write your <strong>Campaign brief</strong> — it powers each approved account's personalised DM draft. Fill in all five fields (brand name, background, product + where sold + hook, collab format, selling points). DeepSeek only uses what you write here — it won't invent claims. Stuck? Click <strong>How to fill this in →</strong> for a worked example.</span>
+                  <span>Paste your <strong>Campaign brief</strong> into the one box — anything works (WhatsApp brief, a doc, a few typed lines), then hit <strong>自動整理 Auto-tidy</strong> and DeepSeek reformats it into the standard shape (brand / background / new product / collab format / selling points). It feeds the AI fit score and powers the campaign's DM draft. DeepSeek only uses what's in the box — it won't invent claims. It's optional here: you can still add or edit the brief on the Review page before generating DMs.</span>
                 </li>
               </ul>
               <p className="text-[13px] text-body leading-relaxed">

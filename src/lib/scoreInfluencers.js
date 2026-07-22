@@ -189,6 +189,36 @@ function hasAffiliateLink(inf) {
   return AFFILIATE_LINK_PATTERNS.some((d) => haystack.includes(d))
 }
 
+// Business/venue account detection. Keyword relevancy can't tell a gym's own
+// marketing account from a fitness creator — the business is MAXIMALLY on-niche
+// by its own vocabulary (name, bio and captions saturated with "fitness/健身"),
+// which is exactly how @247fitness_hongkong scored 100 on a fitness campaign.
+// So detect businesses structurally, not by niche:
+//  - decisive markers (branch/opening-hours/"Ltd" in the name or bio) flag alone;
+//  - otherwise TWO independent signal families must fire, so a creator with
+//    "fitness" in their handle, or a personal trainer who takes bookings, isn't
+//    misflagged on a single weak hit.
+// Scopes are deliberately narrow: name words only against username+fullName,
+// decisive markers only against name+bio — a follower's caption that merely
+// MENTIONS a venue never fires.
+const BUSINESS_NAME_WORDS = /(^|[^a-z0-9])(official|studio|salon|clinic|center|centre|academy|agency|company|shop|store|boutique|bakery|cafe|restaurant|hotel|gym|fitness|spa|hq)([^a-z0-9]|$)/i
+const BUSINESS_NAME_WORDS_CJK = /健身中心|健身室|工作室|專門店|會所|中心|公司|門市/
+const BUSINESS_DECISIVE = /分店|門市|營業時間|有限公司|opening hours|official account|官方帳號|官方账号/i
+const BUSINESS_CONTACT = /whatsapp|wa\.me\/|hotline|預約|報名|查詢|book now|walk[- ]?in|免費試堂|membership|會籍/i
+const BUSINESS_VOICE = /我們|我哋|our (members|team|store|studio|gym|branch|coaches)|join us/i
+
+export function isBusinessAccount(inf) {
+  const name = `${inf.username || ''} ${inf.fullName || ''}`
+  const nameBio = `${name} ${inf.bio || ''}`
+  const bioCaptions = [inf.bio || '', ...(inf.sampleCaptions || [])].join(' ')
+  if (BUSINESS_DECISIVE.test(nameBio)) return true
+  let families = 0
+  if (BUSINESS_NAME_WORDS.test(name) || BUSINESS_NAME_WORDS_CJK.test(name)) families++
+  if (BUSINESS_CONTACT.test(bioCaptions)) families++
+  if (BUSINESS_VOICE.test(bioCaptions)) families++
+  return families >= 2
+}
+
 function buildFlags(inf, relevancyScore, botScore, config) {
   const flags = []
   // videoRatio is a percentage (0–100) from parseXlsx, not a 0–1 fraction.
@@ -249,6 +279,16 @@ export async function scoreInfluencers(influencers, config) {
       relevancyScore += 1
       configFlags.push('multi-keyword')
     }
+    // A business/venue account isn't a seedable creator no matter how on-niche
+    // its vocabulary is — it IS the niche. Pushing relevancy under the floor
+    // triggers the OFF_NICHE_CAP in computeOverall, and (like the config
+    // adjustments above) baking it into relevancy means the cap survives the
+    // live engagement re-score in ResultsStep.
+    const businessAccount = isBusinessAccount(inf)
+    if (businessAccount) {
+      relevancyScore = Math.min(relevancyScore, 2)
+      configFlags.push('business-account')
+    }
     relevancyScore = Math.max(0, Math.min(10, relevancyScore))
     const relevancyAdjusted = { score: relevancyScore, signals: relevancy.signals }
 
@@ -258,6 +298,7 @@ export async function scoreInfluencers(influencers, config) {
     const flags = [...buildFlags(inf, relevancyAdjusted, botRisk, config), ...configFlags]
 
     const verdictParts = []
+    if (businessAccount) verdictParts.push('looks like a business/venue account, not a creator')
     if (relevancyScore >= 7) verdictParts.push('strong niche fit')
     else if (relevancyScore >= 5) verdictParts.push('some niche relevancy')
     else verdictParts.push('weak niche relevancy')

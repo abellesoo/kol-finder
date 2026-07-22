@@ -307,7 +307,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
               {r.fullName && <p className="text-xs text-ink/40 truncate">{r.fullName}</p>}
               <div className="flex flex-wrap gap-1 mt-1">
                 {(r.flags || []).slice(0, 3).map((f) => (
-                  <span key={f} className={`tag ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
+                  <span key={f} className={`tag ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' || f === 'business-account' ? 'tag-bot' : ''}`}>{f}</span>
                 ))}
               </div>
             </div>

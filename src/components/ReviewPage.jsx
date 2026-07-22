@@ -217,7 +217,7 @@ function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
           {account.fullName && <p className="text-[12px] text-faint">{account.fullName}</p>}
           <div className="flex flex-wrap gap-1 mt-1.5">
             {(account.flags || []).map((f) => (
-              <span key={f} className={`tag text-[10px] ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' ? 'tag-bot' : ''}`}>{f}</span>
+              <span key={f} className={`tag text-[10px] ${f === 'video-creator' ? 'tag-video' : f === 'bot-risk' || f === 'business-account' ? 'tag-bot' : ''}`}>{f}</span>
             ))}
           </div>
         </div>

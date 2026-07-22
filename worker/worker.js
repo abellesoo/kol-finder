@@ -1019,6 +1019,7 @@ ${candidateLines}
 
 # How to score (audience fit first)
 - Judge primarily by the creator's actual content niche and who follows them. Ask: would this creator's audience plausibly buy THIS product?
+- An account that IS a business, brand, store, gym, clinic, or venue — rather than a person who creates content — is not a seedable creator at all: score 0–15 regardless of niche match. Watch for brand-name usernames, branch/opening-hours/booking info in the bio, corporate "we" voice, or a business-account flag.
 - A creator in a DIFFERENT vertical scores low even with excellent engagement. Example: a makeup/skincare creator for a food, fitness, or nutrition product is a mismatch — score it low. High reach in the wrong niche is still the wrong niche.
 - rule_score reflects reach and engagement, NOT niche fit. Treat it as weak evidence and do not anchor on it.
 - Use the full range. Anchors: 80–100 = squarely in-niche, audience is the target buyer; 50–65 = adjacent/lifestyle overlap, plausible but not core; 25–45 = weak or tangential fit; 0–20 = wrong niche or excluded category.

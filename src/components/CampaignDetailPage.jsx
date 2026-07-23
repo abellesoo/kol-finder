@@ -12,14 +12,14 @@ import {
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
   tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
-  getScoringByHandle, getReviewMetaByHandle, buildCampaignSheetValues, updateCampaignSetup,
+  getScoringByHandle, getReviewMetaByHandle, buildCampaignSheetValues, updateCampaignSetup, saveDmMessages,
   getBrandById, updateBrandFacts, setCampaignAssignee, listAssignableUsers,
 } from '../lib/campaigns'
 import { listSessionsForCampaign } from '../lib/sessionHistory'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import AssigneePicker from './core/AssigneePicker'
 import { assembleBrief, briefToFields } from '../lib/brief'
-import { runVerification, draftNudge, syncCampaignSheet, parseBrief } from '../lib/apifyApi'
+import { runVerification, draftNudge, syncCampaignSheet, parseBrief, generateDmMessages } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
@@ -825,6 +825,7 @@ function CampaignSetupPanel({ campaign, onSaved }) {
         await updateBrandFacts(campaign.brand_id, { background: bf.brandBackground, products: bf.products })
       }
       const updated = await updateCampaignSetup(campaign.id, {
+        product: bf.newProduct || null, // fills the Shipment Record "Product" column
         default_step2: {
           ...s2, ...derived,
           targetAudience: form.targetAudience,
@@ -992,6 +993,91 @@ function CampaignSetupPanel({ campaign, onSaved }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function normDm(dm) {
+  const p = (x) => ({ en: x?.en || '', zh: x?.zh || '' })
+  const o = dm || {}
+  return { initial: p(o.initial), reply: p(o.reply), followup: p(o.followup) }
+}
+
+// Generate + edit the Initial/Reply/Follow-up outreach copy (EN + ZH) that syncs
+// to the sheet's "DM messages" tab. Generation pulls context from the same brief
+// the scoring uses; edits are saved to campaigns.dm_messages.
+function DmMessagesPanel({ campaign, onSaved }) {
+  const s2 = campaign.default_step2 || {}
+  const [dm, setDm] = useState(() => normDm(campaign.dm_messages))
+  const [brief, setBrief] = useState('')
+  const [gen, setGen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [ok, setOk] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const seed = (b) => { if (alive) setBrief(briefSeed(b || {}, s2, campaign.brand)) }
+    if (!campaign.brand_id) { seed({}); return }
+    getBrandById(campaign.brand_id).then(seed).catch(() => seed({}))
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign.id])
+
+  const generate = async () => {
+    setGen(true); setErr(null); setOk(false)
+    try {
+      const { dm_messages } = await generateDmMessages(campaign.id, brief)
+      setDm(normDm(dm_messages))
+      onSaved?.({ ...campaign, dm_messages })
+    } catch (e) { setErr(e.message) } finally { setGen(false) }
+  }
+  const save = async () => {
+    setBusy(true); setErr(null); setOk(false)
+    try {
+      const updated = await saveDmMessages(campaign.id, dm)
+      onSaved?.(updated); setOk(true)
+    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+  const setField = (k, lang, v) => setDm((d) => ({ ...d, [k]: { ...d[k], [lang]: v } }))
+
+  const ROWS = [['initial', 'Initial DM'], ['reply', 'Reply'], ['followup', 'Follow-up']]
+  const ta = 'w-full px-2.5 py-2 border border-mist rounded-[9px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/40'
+  const lbl = 'font-mono text-[9px] tracking-[.1em] uppercase text-faint'
+  return (
+    <div className="mb-6 px-5 py-4 bg-surface border border-card-edge rounded-[14px]">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[14px] font-semibold text-ink">DM messages</h3>
+        <button onClick={generate} disabled={gen}
+          className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink hover:text-accent transition-colors disabled:opacity-50">
+          {gen ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Generate from brief
+        </button>
+      </div>
+      <p className="text-[11.5px] text-faint mb-3">
+        Outreach copy pushed to the sheet's <span className="font-medium text-body">DM messages</span> tab. Edit freely, then Save.
+      </p>
+      {err && <p className="text-[12px] text-rose mb-2">{err}</p>}
+      <div className="space-y-3">
+        {ROWS.map(([k, label]) => (
+          <div key={k} className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>{label} · 英</label>
+              <textarea rows={3} className={ta} value={dm[k].en} onChange={(e) => setField(k, 'en', e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>{label} · 中</label>
+              <textarea rows={3} className={ta} value={dm[k].zh} onChange={(e) => setField(k, 'zh', e.target.value)} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 mt-3">
+        <button onClick={save} disabled={busy}
+          className="px-3 py-1.5 rounded-[9px] bg-ink text-white text-[12.5px] font-medium disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        {ok && <span className="text-[12px] text-sage">Saved</span>}
+      </div>
     </div>
   )
 }
@@ -1403,6 +1489,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
       </div>
 
       <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
+      <DmMessagesPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
       <SessionsPanel
         sessions={sessions}
         onOpenSession={(id) => onOpenSession?.(id)}

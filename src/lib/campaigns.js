@@ -214,6 +214,20 @@ export async function updateCampaignSetup(id, fields) {
   return data
 }
 
+// Save the generated DM outreach copy (Initial/Reply/Follow-up × EN/ZH) shown on
+// the campaign's "DM messages" sheet tab.
+export async function saveDmMessages(id, dm) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('campaigns')
+    .update({ dm_messages: dm || {} })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
 export async function setCampaignStatus(id, status) {
   if (!supabase) throw new Error('Supabase not configured')
   const { error } = await supabase.from('campaigns').update({ status }).eq('id', id)

@@ -321,6 +321,21 @@ export async function draftNudge({ handle, brand, market }) {
   return res.json()
 }
 
+// Generate the Initial/Reply/Follow-up DM copy (EN + ZH) from the campaign brief;
+// the worker saves it to campaigns.dm_messages. Returns { dm_messages }.
+export async function generateDmMessages(campaignId, brief) {
+  const res = await fetch(`${PROXY}/draft-dm-messages`, {
+    method: 'POST',
+    headers: await workerHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ campaignId, brief }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`DM generate failed (${res.status}): ${text || 'no response body'}`)
+  }
+  return res.json()
+}
+
 // Create-or-sync the campaign's Google Sheet (one-way push). `workbook` is the
 // { title, tabs } object from buildCampaignSheetValues. Returns { url, created }.
 export async function syncCampaignSheet(campaignId, workbook) {

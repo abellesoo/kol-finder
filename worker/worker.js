@@ -1245,6 +1245,47 @@ You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted
       return json({ draft, language }, 200, origin)
     }
 
+    // POST /draft-dm-messages
+    // Body: { campaignId, brief } — generate the Initial / Reply / Follow-up
+    // outreach copy (English + HK Traditional-Chinese) from the campaign brief,
+    // save to campaigns.dm_messages, and return it. Feeds the "DM messages" tab.
+    if (pathname === '/draft-dm-messages' && request.method === 'POST') {
+      const DEEPSEEK_KEY = env.DEEPSEEK_API_KEY
+      if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
+      const { campaignId, brief } = await request.json()
+      if (!campaignId) return json({ error: 'campaignId required' }, 400, origin)
+      const prompt = `You write influencer product-seeding outreach DMs for a Hong Kong marketing team.
+
+# Campaign brief
+${brief || '(no brief provided — write friendly generic gifting outreach)'}
+
+# Output
+Return ONLY valid JSON, no markdown, in exactly this shape:
+{"initial":{"en":"","zh":""},"reply":{"en":"","zh":""},"followup":{"en":"","zh":""}}
+- initial  = first cold outreach: warm intro, compliment their content, offer to gift the product, ask if they're open to a collab.
+- reply    = the message after the creator says yes: thank them, ask for mailing address, contact number, and IG handle so you can arrange the parcel.
+- followup = a gentle no-pressure nudge if there was no reply.
+- "en" = natural, friendly English. "zh" = Hong Kong-style Traditional Chinese with a natural spoken Cantonese tone (口語化), light emoji ok.
+- Keep each message 2-4 sentences. Use {name} for the creator and {product} for the product where it reads naturally. No markdown, no labels inside the text.`
+      try {
+        const res = await fetch(DEEPSEEK_API, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: DEEPSEEK_MODEL, max_tokens: 1200, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
+        })
+        if (!res.ok) return json({ error: `DeepSeek error ${res.status}: ${await res.text()}` }, 502, origin)
+        const content = (await res.json()).choices?.[0]?.message?.content?.trim() || '{}'
+        let dm
+        try { dm = JSON.parse(content) } catch { return json({ error: 'AI returned unparseable output', raw: content.slice(0, 500) }, 502, origin) }
+        const norm = (o) => ({ en: String(o?.en || ''), zh: String(o?.zh || '') })
+        dm = { initial: norm(dm.initial), reply: norm(dm.reply), followup: norm(dm.followup) }
+        await sbUpdate(env, 'campaigns', `id=eq.${campaignId}`, { dm_messages: dm })
+        return json({ dm_messages: dm }, 200, origin)
+      } catch (e) {
+        return json({ error: String(e.message || e) }, 502, origin)
+      }
+    }
+
     // POST /campaign-sheet
     // Body: { campaignId, title, values } — create the campaign's Google Sheet on
     // first call (then reuse it) and overwrite it with `values` (2D array, first

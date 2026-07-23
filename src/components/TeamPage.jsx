@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import PageHeader from './core/PageHeader'
+import Loading from './core/Loading'
+import EmptyState from './core/EmptyState'
 
 const ROLE_LABELS = { assistant_bm: 'Assistant BM', brand_manager: 'Brand Manager', admin: 'Admin' }
 const ROLE_STYLES = {
@@ -55,32 +58,32 @@ export default function TeamPage() {
 
   return (
     <div className="px-[48px] py-[40px] max-w-3xl mx-auto w-full">
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Admin</p>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">Team</h1>
-          <p className="text-[14px] text-muted mt-1">Manage who can access the seeding tool and what they can do.</p>
-        </div>
-        <button
-          onClick={fetchUsers}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 border border-card-edge rounded-[10px] text-[12px] text-faint hover:text-ink hover:border-ink/30 transition-all disabled:opacity-40"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        className="mb-8"
+        label="Admin"
+        title="Team"
+        count={!loading && supabase && users.length ? users.length : null}
+        subtitle="Manage who can access the seeding tool and what they can do."
+        actions={
+          <button
+            onClick={fetchUsers}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 border border-card-edge rounded-[10px] text-[12px] text-faint hover:text-ink hover:border-ink/30 transition-all disabled:opacity-40"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        }
+      />
 
       {loading ? (
-        <p className="text-[13.5px] text-muted">Loading...</p>
+        <Loading label="Loading team…" />
       ) : !supabase ? (
         <p className="text-[13.5px] text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
           Supabase not configured — team management unavailable locally
         </p>
       ) : users.length === 0 ? (
-        <p className="text-[13.5px] text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
-          No users yet
-        </p>
+        <EmptyState icon={Users} title="No users yet" description="People appear here the first time they sign in with a Markato account." />
       ) : (
         <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
           {users.map((u, i) => {

@@ -64,9 +64,9 @@ export const CONTENT_FORMATS = [
 // Badge palette matches the reference sheet.
 export const FORMAT_BADGE_CLS = {
   story: 'bg-rose/10 text-rose',
-  feed:  'bg-blue-100 text-blue-700',
+  feed:  'bg-info-tint text-info',
   reel:  'bg-accent/25 text-[#8A6A22]',
-  blog:  'bg-violet-100 text-violet-700',
+  blog:  'bg-plum-tint text-plum',
 }
 export function formatLabel(id) {
   return (CONTENT_FORMATS.find((f) => f.id === id) || {}).label || id
@@ -190,6 +190,7 @@ export async function createCampaign(fields) {
     mention_handles: fields.mention_handles || [],
     default_step1: fields.default_step1 || {},
     default_step2: fields.default_step2 || {},
+    product: fields.product?.trim() || null,
   }
   const { data, error } = await supabase.from('campaigns').insert(payload).select('*').single()
   if (error) throw new Error(error.message)
@@ -205,6 +206,7 @@ export async function updateCampaignSetup(id, fields) {
   if (fields.name !== undefined) patch.name = fields.name?.trim()
   if (fields.brand !== undefined) patch.brand = fields.brand?.trim() || null
   if (fields.brand_id !== undefined) patch.brand_id = fields.brand_id || null
+  if (fields.product !== undefined) patch.product = fields.product?.trim() || null
   if (fields.default_step1 !== undefined) patch.default_step1 = fields.default_step1 || {}
   if (fields.default_step2 !== undefined) patch.default_step2 = fields.default_step2 || {}
   const { data, error } = await supabase.from('campaigns').update(patch).eq('id', id).select('*').single()
@@ -216,6 +218,42 @@ export async function setCampaignStatus(id, status) {
   if (!supabase) throw new Error('Supabase not configured')
   const { error } = await supabase.from('campaigns').update({ status }).eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+// ── Assignment ───────────────────────────────────────────────────────────────
+// Assign a campaign to a brand manager (or null to unassign). Reviews and ops
+// for the campaign inherit this owner. Requires db/campaign_assignee.sql.
+export async function setCampaignAssignee(id, userId) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('campaigns')
+    .update({ assigned_to: userId || null })
+    .eq('id', id)
+    .select('id')
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) {
+    throw new Error('Assignment was blocked (0 rows updated) — check Supabase permissions')
+  }
+}
+
+// The team members a campaign can be assigned to (brand managers + admins).
+// Fetched via a SECURITY DEFINER RPC because users is self-read-only under RLS.
+// Cached module-side: several views (Campaigns, Review Queue, Dashboard) need
+// the same small roster, so they share one request per page load.
+let _assignablePromise = null
+export function listAssignableUsers({ force = false } = {}) {
+  if (!supabase) return Promise.resolve([])
+  if (force) _assignablePromise = null
+  if (!_assignablePromise) {
+    _assignablePromise = supabase
+      .rpc('list_assignable_users')
+      .then(({ data, error }) => {
+        if (error) { _assignablePromise = null; throw new Error(error.message) }
+        return data || []
+      })
+      .catch((e) => { _assignablePromise = null; throw e })
+  }
+  return _assignablePromise
 }
 
 // Delete a campaign. Its attached pipeline KOLs (campaign_kols → verified_posts,
@@ -646,44 +684,210 @@ export async function getScoringByHandle(kols) {
   return byHandle
 }
 
-// Assemble the 2D grid the worker writes to the campaign's Google Sheet: the
-// campaign-ops columns (from campaign_kols + verified_posts) plus the post's
-// engagement snapshot. scoreByHandle (from shared_results) supplies only the
-// full name — no scoring columns in the sheet by design. First row = headers.
-// Header names matter: the worker locates the Status/Tier dropdown columns and
-// the date columns by these exact strings (SHEET_DROPDOWNS/SHEET_DATE_COLUMNS
-// in worker.js).
-export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreByHandle = {}) {
-  const headers = [
-    'Handle', 'Full name', 'Tier', 'Format', 'Status', 'Shipped', 'Tracking #',
-    'Deadline', 'Post URL', 'Posted at', 'Verified', 'Likes', 'Comments', 'Views',
-    'Eng. updated',
-  ]
-  const day = (v) => (v ? String(v).slice(0, 10) : '')
-  const rows = (kols || []).map((k) => {
-    const acc = scoreByHandle[normalizeHandle(k.kol_handle)] || {}
-    const post = (postsByKol[k.id] || [])[0] || null
-    return [
-      k.kol_handle,
-      acc.fullName || '',
-      k.tier ? tierLabel(k.tier) : '', // blank (not '—') so the dropdown stays clean
-      (k.content_formats || []).map(formatLabel).join(', '),
-      SHEET_STATE_LABELS[k.state] || k.state,
-      day(k.shipped_at),
-      // Leading ' keeps an all-digit waybill number as text under USER_ENTERED
-      // (otherwise Sheets renders it 1.23E+11).
-      k.tracking_number ? (/^\d+$/.test(k.tracking_number) ? `'${k.tracking_number}` : k.tracking_number) : '',
-      day(effectiveDeadline(k, campaign)),
-      post?.post_url || '',
-      day(post?.posted_at),
-      post ? (post.human_verified ? 'Yes' : 'Detected') : '',
-      post?.likes_count ?? '',
-      post?.comments_count ?? '',
-      post?.views_count ?? '',
-      day(post?.engagement_updated_at),
-    ].map((v) => (v == null ? '' : String(v)))
-  })
-  return { title: `${campaign.name} Seeding`, values: [headers, ...rows] }
+// Also pull each KOL's review metadata (dm_status) from shared_results.review_state,
+// keyed by normalized handle — drives the Reach-Out / Plan status columns. Keys in
+// review_state are the reviewKey ("username" or "threads:username"); we strip the
+// platform prefix so it lines up with kol_handle.
+export async function getReviewMetaByHandle(kols) {
+  if (!supabase) return {}
+  const runIds = [...new Set((kols || []).map((k) => k.kol_run_id).filter(Boolean))]
+  if (!runIds.length) return {}
+  const { data, error } = await supabase.from('shared_results').select('id, review_state').in('id', runIds)
+  if (error) throw new Error(error.message)
+  const byHandle = {}
+  for (const row of data || []) {
+    for (const [key, v] of Object.entries(row.review_state || {})) {
+      if (key.startsWith('__') || !v || typeof v !== 'object') continue
+      const h = normalizeHandle(String(key).replace(/^threads:/, ''))
+      if (h && !byHandle[h]) byHandle[h] = v
+    }
+  }
+  return byHandle
+}
+
+// ── Sheet vocabulary + colours (from Annabelle's "Marketing Campaign Template") ─
+// The worker replicates the dropdown chip colours with per-value cell background
+// (conditional formatting) since the Sheets API can't set chip colours directly.
+export const SHEET_TITLE_SUFFIX = '_Marketing Plan'
+const HEADER_FILL = '#434343'
+// Light fills so black text stays readable; "Not sent" is the lone dark chip.
+const CLR = {
+  grey: '#EFEFEF', red: '#F4CCCC', redStrong: '#EA9999', orange: '#FCE5CD',
+  yellow: '#FFF2CC', blue: '#CFE2F3', blueStrong: '#9FC5E8', green: '#D9EAD3',
+  pink: '#EAD1DC', purple: '#D9D2E9', black: '#434343',
+}
+export const CATEGORY_OPTIONS = ['Fashion', 'Beauty', 'Lifestyle', 'Foodie']
+const CATEGORY_COLORS = { Fashion: CLR.red, Beauty: CLR.orange, Lifestyle: CLR.blue, Foodie: CLR.green }
+const FORMAT_OPTIONS = ['story', 'reel', 'feed (post)', '4 week boosting', 'blog']
+const FORMAT_COLORS = { story: CLR.red, reel: CLR.yellow, 'feed (post)': CLR.blue, '4 week boosting': CLR.orange, blog: CLR.pink }
+const PLAN_STATUS_OPTIONS = ['Reached out', 'Product shipped', 'WIP', '1st Draft', 'Pending Review', 'Ready to-launch', 'Launched', 'Paid']
+const PLAN_STATUS_COLORS = { 'Reached out': CLR.grey, 'Product shipped': CLR.blue, WIP: CLR.yellow, '1st Draft': CLR.orange, 'Pending Review': CLR.red, 'Ready to-launch': CLR.pink, Launched: CLR.green, Paid: CLR.redStrong }
+const PAYMENT_OPTIONS = ['Pending', 'Paid', 'No payment required']
+const PAYMENT_COLORS = { Pending: CLR.orange, Paid: CLR.redStrong, 'No payment required': CLR.grey }
+const SHIP_STATUS_OPTIONS = ['Not Yet Shipped', 'Shipped']
+const SHIP_STATUS_COLORS = { 'Not Yet Shipped': CLR.yellow, Shipped: CLR.purple }
+const REACHOUT_OPTIONS = ['Sent', 'Accept', 'Reject', 'Waiting for reply', 'To Review', 'Posted', 'Shipped', 'no reply after follow-up', 'Not sent']
+const REACHOUT_COLORS = { Sent: CLR.grey, Accept: CLR.green, Reject: CLR.red, 'Waiting for reply': CLR.blue, 'To Review': CLR.blueStrong, Posted: CLR.yellow, Shipped: CLR.purple, 'no reply after follow-up': CLR.blue, 'Not sent': CLR.black }
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// campaign_kols content_format ids → the sheet's Format vocab.
+const FORMAT_ID_TO_SHEET = { story: 'story', feed: 'feed (post)', reel: 'reel', blog: 'blog' }
+
+function platformOf(acc) {
+  return String(acc?.platform || '').toLowerCase().includes('thread') ? 'Threads' : 'IG'
+}
+function freePaid(k) { return k.tier === 'B' ? 'Paid' : 'Free' }
+function shippingAddress(k) {
+  return [k.recipient_address, k.recipient_district, k.recipient_area].filter(Boolean).join(', ')
+}
+function sheetFormats(k) {
+  return (k.content_formats || []).map((f) => FORMAT_ID_TO_SHEET[f] || f).join(', ')
+}
+// Best-effort auto-map of the creator's detected niche → the 4 template categories;
+// falls back to the brand's category, then blank (a manual dropdown pick).
+function categoryFor(acc, campaign) {
+  const tags = [].concat(acc.niche_signals || [], acc.niche_tags || []).join(' ').toLowerCase()
+  const brand = String(campaign?.brand || '').toLowerCase()
+  const t = `${tags} ${brand}`
+  if (/beauty|skincare|makeup|cosmet|derma/.test(t)) return 'Beauty'
+  if (/fashion|style|ootd|apparel|outfit/.test(t)) return 'Fashion'
+  if (/food|eat|restaurant|foodie|dining|cafe/.test(t)) return 'Foodie'
+  if (/life|travel|daily|vlog|mom|parent/.test(t)) return 'Lifestyle'
+  return ''
+}
+// approved ≠ "Reached out": approval only means the KOL appears on the sheet.
+// "Reached out" means the DM was actually sent (dm_status).
+function planStatus(k, dm) {
+  switch (k.state) {
+    case 'posted': return 'Launched'
+    case 'overdue':
+    case 'awaiting_post': return 'WIP'
+    case 'shipped': return 'Product shipped'
+    case 'approved': return dm === 'sent' || dm === 'replied' ? 'Reached out' : ''
+    default: return '' // opted_out & anything terminal → blank
+  }
+}
+function reachOutStatus(k, dm) {
+  if (k.state === 'posted') return 'Posted'
+  if (k.state === 'shipped') return 'Shipped'
+  if (k.state === 'opted_out') return 'Reject'
+  switch (dm) {
+    case 'sent': return 'Sent'
+    case 'replied': return 'Accept'
+    case 'no_response': return 'no reply after follow-up'
+    default: return 'Not sent'
+  }
+}
+const s = (v) => (v == null ? '' : v)
+const day = (v) => (v ? String(v).slice(0, 10) : '')
+// Leading ' keeps all-digit waybills as text under USER_ENTERED (else 1.23E+11).
+const asText = (v) => (v && /^\d+$/.test(String(v)) ? `'${v}` : s(v))
+
+// Build the multi-tab workbook the worker writes to the campaign's Google Sheet
+// ("<Campaign>_Marketing Plan"). Each tab carries its own styling metadata so the
+// worker stays generic:
+//   keyCol      – column used to preserve manual cells across re-syncs (by value)
+//   manualCols  – columns the sync must NOT overwrite (seeded on create, then owned
+//                 by the human in the sheet)
+//   dropdowns   – { colIndex: [options] }   colorRules – { colIndex: { value: hex } }
+//   dateCols    – columns to format as dates
+//   sectionRows – row indices (within rows[]) that are bold section separators
+//   greenCols   – columns filled pale-green (the Month block)
+//   blackBarTop – text for a black full-width bar inserted above the header
+//   headerFills – { colIndex: hex } per-column header colour overrides
+// One-way push; rows are ordered deterministically (bucket → handle) so manual
+// cells stay aligned with the same KOL across syncs.
+export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreByHandle = {}, reviewByHandle = {}) {
+  const items = (kols || [])
+    .map((k) => {
+      const h = normalizeHandle(k.kol_handle)
+      return { k, h, acc: scoreByHandle[h] || {}, rv: reviewByHandle[h] || {}, post: (postsByKol[k.id] || [])[0] || null }
+    })
+    .sort((a, b) => (a.h < b.h ? -1 : a.h > b.h ? 1 : 0))
+
+  // ── Tab: All approved ──────────────────────────────────────────────────────
+  const allApproved = {
+    name: 'All approved',
+    headers: ['IG/ Threads', 'Username', 'Category', 'Followers', 'Link to Account', 'Remarks', 'Shipping Address', 'Other brands', 'Free/ Paid', 'Amount (if paid)', 'Reach-Out Status'],
+    keyCol: 1,
+    manualCols: [5, 7], // Remarks, Other brands
+    dropdowns: { 2: CATEGORY_OPTIONS, 8: ['Free', 'Paid'], 10: REACHOUT_OPTIONS },
+    colorRules: { 2: CATEGORY_COLORS, 10: REACHOUT_COLORS },
+    headerFill: HEADER_FILL,
+    rows: items.map(({ k, acc, rv }) => [
+      platformOf(acc), k.kol_handle, categoryFor(acc, campaign), s(acc.follower_count),
+      acc.instagram_url || acc.profile_url || '', '', shippingAddress(k), '',
+      freePaid(k), k.tier === 'B' ? s(k.agreed_fee) : '', reachOutStatus(k, rv.dm_status),
+    ]),
+  }
+
+  // ── Tab: Marketing Plan Master (grouped by platform bucket) ─────────────────
+  const SECTIONS = ['IG Seeding', 'Threads Seeding', 'Reels', 'Media', 'Ad']
+  const bucketOf = ({ acc }) => (platformOf(acc) === 'Threads' ? 'Threads Seeding' : 'IG Seeding')
+  const planRows = []
+  const sectionRows = []
+  for (const sec of SECTIONS) {
+    sectionRows.push(planRows.length)
+    planRows.push(['', '', '', sec, '', '$0.00', '', '', '', '', '', '', ''])
+    if (sec === 'IG Seeding' || sec === 'Threads Seeding') {
+      items.filter((it) => bucketOf(it) === sec).forEach(({ k, rv, post }, i) => {
+        planRows.push([
+          '', '', i + 1, k.kol_handle, sheetFormats(k),
+          s(k.agreed_fee ?? k.product_value), planStatus(k, rv.dm_status),
+          day(post?.posted_at), post?.post_url || '', '',
+          s(k.notes), freePaid(k) === 'Free' ? 'No payment required' : 'Pending', '',
+        ])
+      })
+    }
+  }
+  if (planRows.length) planRows[0][0] = campaign?.start_date ? MONTHS[+campaign.start_date.slice(5, 7) - 1] || '' : ''
+  const planMaster = {
+    name: 'Marketing Plan Master',
+    headers: ['Month', 'Monthly Total', '#', 'Handle', 'Format', 'Budget', 'Status', 'Launch Date', 'Launch Link', 'Link', 'Remarks', 'Payment', 'Payment Details'],
+    keyCol: 3, // Handle
+    manualCols: [0, 1, 9, 11, 12], // Month, Monthly Total, Link, Payment, Payment Details
+    sectionRows,
+    greenCols: [0, 1],
+    dropdowns: { 4: FORMAT_OPTIONS, 6: PLAN_STATUS_OPTIONS, 11: PAYMENT_OPTIONS },
+    colorRules: { 4: FORMAT_COLORS, 6: PLAN_STATUS_COLORS, 11: PAYMENT_COLORS },
+    dateCols: [7], // Launch Date
+    headerFill: HEADER_FILL,
+    rows: planRows,
+  }
+
+  // ── Tab: Shipment Record (black "Date" bar above the header) ────────────────
+  const shipment = {
+    name: 'Shipment Record',
+    headers: ['#', 'Name', 'Address', 'Phone Number', 'Product', 'Status', 'Remarks', 'SF Tracking'],
+    blackBarTop: 'Date',
+    keyCol: 1, // Name (falls back to positional when blank)
+    manualCols: [6], // Remarks
+    dropdowns: { 5: SHIP_STATUS_OPTIONS },
+    colorRules: { 5: SHIP_STATUS_COLORS },
+    headerFill: HEADER_FILL,
+    rows: items.map(({ k }, i) => [
+      i + 1, s(k.recipient_name), shippingAddress(k), s(k.recipient_phone),
+      s(campaign?.product), k.shipped_at ? 'Shipped' : 'Not Yet Shipped', '', asText(k.tracking_number),
+    ]),
+  }
+
+  // ── Tab: DM messages (generated from the brief — filled in Phase B) ─────────
+  const dm = campaign?.dm_messages || {}
+  const dmTab = {
+    name: 'DM messages',
+    headers: ['Type', 'Reach-out Message 【英】', 'Reach-out Message 【中】'],
+    headerFills: { 1: '#4A86E8', 2: '#C27BA0' },
+    keyCol: 0,
+    manualCols: [],
+    headerFill: HEADER_FILL,
+    rows: [
+      ['Initial DM', s(dm.initial?.en), s(dm.initial?.zh)],
+      ['Reply', s(dm.reply?.en), s(dm.reply?.zh)],
+      ['Follow-up', s(dm.followup?.en), s(dm.followup?.zh)],
+    ],
+  }
+
+  return { title: `${campaign.name}${SHEET_TITLE_SUFFIX}`, tabs: [allApproved, planMaster, shipment, dmTab] }
 }
 
 export async function detachKol(kolId) {

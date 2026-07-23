@@ -6,6 +6,9 @@ import { startReelScraper, pollUntilDone, getDatasetItems } from '../lib/apifyAp
 import { computeStats } from '../lib/computeStats'
 import { profileUrl } from '../lib/platforms'
 import { supabase } from '../lib/supabase'
+import PageHeader from './core/PageHeader'
+import Loading from './core/Loading'
+import EmptyState from './core/EmptyState'
 
 // Pull a bare Instagram handle out of what the user typed — accepts "@handle",
 // "handle", or a pasted instagram.com/handle URL.
@@ -268,14 +271,13 @@ export default function VaultPage({ onNavigate }) {
 
   return (
     <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
-      <div className="mb-8">
-        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Creator Vault</p>
-        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">Saved creators</h1>
-        <p className="text-[13.5px] text-muted mt-2 max-w-xl">
-          Creators you’ve starred from a run or review. Reuse them in a campaign without re-scraping.
-          Metrics are a snapshot from when each was saved.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-8"
+        label="Creator Vault"
+        title="Saved creators"
+        count={!loading && !loadError && rows.length ? rows.length : null}
+        subtitle="Creators you’ve starred from a run or review. Reuse them in a campaign without re-scraping — metrics are a snapshot from when each was saved."
+      />
 
       {/* Controls */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -319,15 +321,16 @@ export default function VaultPage({ onNavigate }) {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 gap-2 text-faint">
-          <Loader2 size={14} className="animate-spin" /> <span className="text-sm">Loading…</span>
-        </div>
+        <Loading label="Loading vault…" />
       ) : loadError ? (
-        <div className="flex flex-col items-center py-16">
-          <X size={32} className="text-rose mb-4" />
-          <h2 className="text-[17px] font-semibold text-ink mb-2">Couldn’t load the vault</h2>
-          <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px]">Retry</button>
-        </div>
+        <EmptyState
+          icon={X}
+          title="Couldn’t load the vault"
+          description="Something went wrong reading your saved creators. Check your connection and try again."
+          action={
+            <button onClick={() => window.location.reload()} className="px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all">Retry</button>
+          }
+        />
       ) : showLookup ? (
         <div className="flex flex-col items-center py-16 text-center">
           <BookmarkPlus size={30} className="text-faint mb-4" />
@@ -364,60 +367,62 @@ export default function VaultPage({ onNavigate }) {
           )}
         </div>
       ) : rows.length === 0 ? (
-        <div className="flex flex-col items-center py-16 text-center">
-          <BookMarked size={30} className="text-faint mb-4" />
-          <h2 className="text-[17px] font-semibold text-ink mb-2">No saved creators yet</h2>
-          <p className="text-[13.5px] text-muted max-w-sm">
-            Search a handle above to add one, or on a Seeder results table or a review, click the bookmark next to a handle to save that creator here.
-          </p>
-        </div>
+        <EmptyState
+          icon={BookMarked}
+          title="No saved creators yet"
+          description="Search a handle above to add one — or click the bookmark beside any handle on a Seeder results table or a review to save that creator here."
+        />
       ) : filtered.length === 0 ? (
-        <div className="py-16 text-center text-[13.5px] text-muted">No creators match your filters.</div>
+        <EmptyState icon={Search} title="No matches" description="No saved creators match your search or niche filter. Try clearing the filter." />
       ) : (
         <div className="border border-mist rounded-[14px] overflow-hidden">
-          {/* Header */}
-          <div className="grid items-center gap-3 px-4 py-2.5 bg-surface border-b border-mist font-mono text-[9.5px] tracking-[.12em] text-faint uppercase"
-               style={{ gridTemplateColumns: '28px 2fr 1fr 1fr 0.8fr 2fr 1fr 32px' }}>
-            <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} className="w-4 h-4 accent-ink cursor-pointer" />
-            <span>Creator</span>
-            <span className="text-right">Followers</span>
-            <span className="text-right">Avg likes</span>
-            <span className="text-center">AI fit</span>
-            <span>Niches</span>
-            <span>Saved</span>
-            <span />
-          </div>
-          {filtered.map((r) => (
-            <div key={r.id}
-                 className="grid items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0 hover:bg-surface transition-colors"
-                 style={{ gridTemplateColumns: '28px 2fr 1fr 1fr 0.8fr 2fr 1fr 32px' }}>
-              <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="w-4 h-4 accent-ink cursor-pointer" />
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <a href={r.profile_url || profileUrl({ username: r.handle, platform: r.platform })} target="_blank" rel="noreferrer"
-                     className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1">
-                    @{r.handle} <ExternalLink size={11} className="opacity-40" />
-                  </a>
-                  {r.platform === 'threads' && (
-                    <span className="font-mono text-[9px] bg-ink/10 text-ink/70 px-1.5 py-0.5 rounded-[4px]">Threads</span>
-                  )}
+          <div className="overflow-x-auto">
+            <div className="min-w-[720px]">
+              {/* Header */}
+              <div className="grid items-center gap-3 px-4 py-2.5 bg-surface border-b border-mist font-mono text-[9.5px] tracking-[.12em] text-faint uppercase"
+                   style={{ gridTemplateColumns: '28px 2fr 1fr 1fr 0.8fr 2fr 1fr 32px' }}>
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} className="w-4 h-4 accent-ink cursor-pointer" />
+                <span>Creator</span>
+                <span className="text-right">Followers</span>
+                <span className="text-right">Avg likes</span>
+                <span className="text-center">AI fit</span>
+                <span>Niches</span>
+                <span>Saved</span>
+                <span />
+              </div>
+              {filtered.map((r) => (
+                <div key={r.id}
+                     className="grid items-center gap-3 px-4 py-3 border-b border-[#F0ECE2] last:border-0 hover:bg-surface transition-colors"
+                     style={{ gridTemplateColumns: '28px 2fr 1fr 1fr 0.8fr 2fr 1fr 32px' }}>
+                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} className="w-4 h-4 accent-ink cursor-pointer" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <a href={r.profile_url || profileUrl({ username: r.handle, platform: r.platform })} target="_blank" rel="noreferrer"
+                         className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1">
+                        @{r.handle} <ExternalLink size={11} className="opacity-40" />
+                      </a>
+                      {r.platform === 'threads' && (
+                        <span className="font-mono text-[9px] bg-ink/10 text-ink/70 px-1.5 py-0.5 rounded-[4px]">Threads</span>
+                      )}
+                    </div>
+                    {r.display_name && <p className="text-xs text-ink/40 truncate">{r.display_name}</p>}
+                  </div>
+                  <span className="font-mono text-[12.5px] text-ink text-right">{num(r.follower_count)}</span>
+                  <span className="font-mono text-[12.5px] text-ink text-right">{num(r.avg_likes)}</span>
+                  <span className="font-mono text-[12.5px] text-center text-body">{r.ai_score != null ? `${r.ai_score}/10` : '—'}</span>
+                  <div className="flex flex-wrap gap-1">
+                    {(r.niche_tags || []).slice(0, 3).map((t) => (
+                      <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>
+                    ))}
+                  </div>
+                  <span className="font-mono text-[11px] text-faint">{formatDate(r.created_at)}</span>
+                  <button onClick={() => handleRemove(r)} title="Remove from vault" className="text-faint hover:text-rose transition-colors flex justify-center">
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                {r.display_name && <p className="text-xs text-ink/40 truncate">{r.display_name}</p>}
-              </div>
-              <span className="font-mono text-[12.5px] text-ink text-right">{num(r.follower_count)}</span>
-              <span className="font-mono text-[12.5px] text-ink text-right">{num(r.avg_likes)}</span>
-              <span className="font-mono text-[12.5px] text-center text-body">{r.ai_score != null ? `${r.ai_score}/10` : '—'}</span>
-              <div className="flex flex-wrap gap-1">
-                {(r.niche_tags || []).slice(0, 3).map((t) => (
-                  <span key={t} className="font-mono text-[10px] bg-mist px-2 py-0.5 rounded-[5px] text-body">{t}</span>
-                ))}
-              </div>
-              <span className="font-mono text-[11px] text-faint">{formatDate(r.created_at)}</span>
-              <button onClick={() => handleRemove(r)} title="Remove from vault" className="text-faint hover:text-rose transition-colors flex justify-center">
-                <Trash2 size={14} />
-              </button>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       )}
 
@@ -440,7 +445,7 @@ export default function VaultPage({ onNavigate }) {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-[#2E7D5B] text-white px-4 py-2.5 rounded-full shadow-xl text-[13px]">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-sage text-white px-4 py-2.5 rounded-full shadow-xl text-[13px]">
           <Check size={14} /> {toast}
         </div>
       )}

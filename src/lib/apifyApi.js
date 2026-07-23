@@ -321,13 +321,13 @@ export async function draftNudge({ handle, brand, market }) {
   return res.json()
 }
 
-// Create-or-sync the campaign's Google Sheet (one-way push). `values` is the 2D
-// grid from buildCampaignSheetValues. Returns { url, created }.
-export async function syncCampaignSheet(campaignId, title, values) {
+// Create-or-sync the campaign's Google Sheet (one-way push). `workbook` is the
+// { title, tabs } object from buildCampaignSheetValues. Returns { url, created }.
+export async function syncCampaignSheet(campaignId, workbook) {
   const res = await fetch(`${PROXY}/campaign-sheet`, {
     method: 'POST',
     headers: await workerHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ campaignId, title, values }),
+    body: JSON.stringify({ campaignId, title: workbook.title, tabs: workbook.tabs }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')

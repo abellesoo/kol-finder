@@ -210,8 +210,8 @@ function AccountCard({ account, reviewEntry, onUpdate, selectedColumns, vaultedK
 
   return (
     <div className={`border rounded-[14px] overflow-hidden transition-all ${
-      isApproved ? 'border-[#BFD6C4] bg-[#F5F8F4]' :
-      isRejected ? 'border-[#E6CDD3] bg-[#FBF5F6] opacity-75' :
+      isApproved ? 'border-sage/30 bg-sage/[0.06]' :
+      isRejected ? 'border-rose/30 bg-rose/[0.05] opacity-75' :
       'border-card-edge bg-white'
     }`}>
       {/* Account header */}
@@ -397,7 +397,7 @@ function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns, vaul
     <>
       <div
         className={`group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
-          isApproved ? 'bg-[#F5F8F4]/50' : isRejected ? 'opacity-60' : ''
+          isApproved ? 'bg-sage/[0.05]' : isRejected ? 'opacity-60' : ''
         }`}
         style={{ gridTemplateColumns: gridTemplate }}
         onClick={() => setExpanded((v) => !v)}

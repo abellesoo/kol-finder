@@ -12,7 +12,7 @@ SUPABASE_URL = "https://hfhiunlqburusuwysyyr.supabase.co"
 GOOGLE_WORKSPACE_DOMAIN = "markato.com"
 # Phase 4: sheets are created inside this Shared Drive because service accounts
 # have no My Drive storage quota. Public value (a Drive folder id), safe to commit.
-GOOGLE_SHARED_DRIVE_ID = "0ABfdVzKMj04FUk9PVA"
+GOOGLE_SHARED_DRIVE_ID = "0AH4hB5O8CCl8Uk9PVA"
 
 # Phase 2 verification engine runs unattended twice a day (09:00 & 21:00 HK =
 # 01:00 & 13:00 UTC): scrape awaiting/overdue KOLs, match posts, flip to posted.

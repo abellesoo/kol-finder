@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Loader2, ArrowLeft, ExternalLink, UserPlus, X, RefreshCw, Trash2,
   Truck, CalendarClock, Search, ScanLine, CheckCircle2, Circle, Copy, Check,
@@ -12,11 +12,12 @@ import {
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
   tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
-  getScoringByHandle, buildCampaignSheetValues, updateCampaignSetup,
-  getBrandById, updateBrandFacts,
+  getScoringByHandle, getReviewMetaByHandle, buildCampaignSheetValues, updateCampaignSetup,
+  getBrandById, updateBrandFacts, setCampaignAssignee, listAssignableUsers,
 } from '../lib/campaigns'
 import { listSessionsForCampaign } from '../lib/sessionHistory'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
+import AssigneePicker from './core/AssigneePicker'
 import { assembleBrief, briefToFields } from '../lib/brief'
 import { runVerification, draftNudge, syncCampaignSheet, parseBrief } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
@@ -36,9 +37,9 @@ function todayStr() { return new Date().toISOString().slice(0, 10) }
 
 const STATE_META = {
   approved:      { label: 'Approved',      cls: 'bg-ink/10 text-ink/60' },
-  shipped:       { label: 'Shipped',       cls: 'bg-blue-100 text-blue-700' },
+  shipped:       { label: 'Shipped',       cls: 'bg-info-tint text-info' },
   awaiting_post: { label: 'Awaiting post', cls: 'bg-accent/25 text-[#8A6A22]' },
-  posted:        { label: 'Posted',        cls: 'bg-green-100 text-green-700' },
+  posted:        { label: 'Posted',        cls: 'bg-sage/12 text-sage' },
   overdue:       { label: 'Overdue',       cls: 'bg-rose/10 text-rose' },
   opted_out:     { label: 'Opted out',     cls: 'bg-ink/5 text-faint' },
 }
@@ -381,7 +382,7 @@ function AddressEditor({ kol, onSave }) {
     return (
       <button onClick={() => setOpen(true)} title={has ? 'Edit shipping address' : 'Add shipping address'}
         className="mt-2 flex items-center gap-1.5 max-w-full text-[11px] font-mono text-faint hover:text-ink transition-colors">
-        <MapPin size={11} className={`flex-shrink-0 ${has ? 'text-green-600' : ''}`} />
+        <MapPin size={11} className={`flex-shrink-0 ${has ? 'text-sage' : ''}`} />
         {has
           ? <span className="truncate">{[kol.recipient_name, kol.recipient_phone, kol.recipient_district, kol.recipient_address].filter(Boolean).join(' · ')}</span>
           : <span>Add shipping address</span>}
@@ -445,7 +446,7 @@ function VerifiedPost({ post, onConfirm }) {
       </div>
       <button onClick={confirm} disabled={busy}
         className={`flex items-center gap-1 flex-shrink-0 px-2 py-1 rounded-[7px] text-[11px] font-medium transition-colors disabled:opacity-50 ${
-          post.human_verified ? 'bg-green-100 text-green-700' : 'border border-mist text-muted hover:border-ink/30 hover:text-ink'}`}
+          post.human_verified ? 'bg-sage/12 text-sage' : 'border border-mist text-muted hover:border-ink/30 hover:text-ink'}`}
         title={post.human_verified ? 'Confirmed by a manager — click to un-confirm' : 'Confirm this is a genuine campaign post'}>
         {busy ? <Loader2 size={11} className="animate-spin" /> : post.human_verified ? <CheckCircle2 size={11} /> : <Circle size={11} />}
         {post.human_verified ? 'Verified' : 'Confirm'}
@@ -483,7 +484,7 @@ function NudgeBlock({ kol, nudges, onDraft, onMarkSent }) {
             <div className="flex items-center gap-1.5">
               <button onClick={() => copy(n)}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] text-muted hover:text-ink hover:bg-white transition-colors">
-                {copiedId === n.id ? <Check size={11} className="text-green-600" /> : <Copy size={11} />}
+                {copiedId === n.id ? <Check size={11} className="text-sage" /> : <Copy size={11} />}
                 {copiedId === n.id ? 'Copied' : 'Copy'}
               </button>
               {n.sent_manually_at ? (
@@ -655,7 +656,7 @@ function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTra
                       <button onClick={() => onConfirmPost(p, !p.human_verified)}
                         title={p.human_verified ? 'Verified — click to un-confirm' : 'Confirm this post'}
                         className={`inline-flex items-center px-1.5 py-0.5 rounded-[6px] text-[10px] ${
-                          p.human_verified ? 'bg-green-100 text-green-700' : 'border border-mist text-muted hover:text-ink'}`}>
+                          p.human_verified ? 'bg-sage/12 text-sage' : 'border border-mist text-muted hover:text-ink'}`}>
                         {p.human_verified ? <CheckCircle2 size={10} /> : <Circle size={10} />}
                       </button>
                     </div>
@@ -1011,7 +1012,25 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const [toast, setToast] = useState(null)
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  const [assignees, setAssignees] = useState([])
   const [view, setView] = useUrlParam('campaign_view', 'board') // 'board' | 'table' (shareable via URL)
+
+  useEffect(() => {
+    listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
+  }, [])
+
+  const handleAssign = async (userId) => {
+    if (!campaign) return
+    const prev = campaign.assigned_to || null
+    setCampaign((c) => ({ ...c, assigned_to: userId || null }))
+    try {
+      await setCampaignAssignee(campaign.id, userId)
+    } catch (e) {
+      console.error('Assign campaign failed', e)
+      setCampaign((c) => ({ ...c, assigned_to: prev }))
+      window.alert(e.message || 'Failed to change the owner — please try again.')
+    }
+  }
 
   const startRename = () => { setNameDraft(campaign?.name || ''); setRenaming(true) }
   const commitRename = async () => {
@@ -1165,9 +1184,12 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     setSheetBusy(true)
     setToast(null)
     try {
-      const scoreByHandle = await getScoringByHandle(kols)
-      const { title, values } = buildCampaignSheetValues(campaign, kols, postsByKol, scoreByHandle)
-      const { url, created } = await syncCampaignSheet(campaignId, title, values)
+      const [scoreByHandle, reviewByHandle] = await Promise.all([
+        getScoringByHandle(kols),
+        getReviewMetaByHandle(kols),
+      ])
+      const workbook = buildCampaignSheetValues(campaign, kols, postsByKol, scoreByHandle, reviewByHandle)
+      const { url, created } = await syncCampaignSheet(campaignId, workbook)
       setCampaign((c) => ({ ...c, sheet_url: url }))
       setToast({ type: 'success', message: created ? 'Google Sheet created & shared' : 'Sheet synced' })
     } catch (e) {
@@ -1176,6 +1198,30 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
       setSheetBusy(false)
     }
   }, [campaign, kols, postsByKol, campaignId])
+
+  // Auto-generate the campaign's sheet the first time it's opened without one, so
+  // starting a campaign gives it a sheet (in the shared Drive folder) unprompted.
+  // Silent — a failure (e.g. the Drive isn't set up yet) just retries next open;
+  // the manual "Sync sheet" button still surfaces errors.
+  const autoSheetTried = useRef(false)
+  useEffect(() => {
+    if (loading || !campaign || campaign.sheet_url || autoSheetTried.current) return
+    autoSheetTried.current = true
+    ;(async () => {
+      try {
+        const [scoreByHandle, reviewByHandle] = await Promise.all([
+          getScoringByHandle(kols),
+          getReviewMetaByHandle(kols),
+        ])
+        const workbook = buildCampaignSheetValues(campaign, kols, postsByKol, scoreByHandle, reviewByHandle)
+        const { url } = await syncCampaignSheet(campaignId, workbook)
+        setCampaign((c) => ({ ...c, sheet_url: url }))
+      } catch (e) {
+        autoSheetTried.current = false // let it retry on the next open
+        console.warn('Auto-generate campaign sheet skipped:', e.message)
+      }
+    })()
+  }, [loading, campaign, kols, postsByKol, campaignId])
 
   const handleSetFormats = useCallback(async (kol, formats) => {
     // optimistic
@@ -1295,6 +1341,10 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
               campaign.posting_deadline && `deadline ${formatDate(campaign.posting_deadline)}`,
             ].filter(Boolean).join(' · ')}
           </p>
+          <div className="flex items-center gap-2 mt-3">
+            <span className="font-mono text-[10px] tracking-[.14em] uppercase text-faint">Owner</span>
+            <AssigneePicker users={assignees} value={campaign.assigned_to || null} onChange={handleAssign} align="left" />
+          </div>
           {(campaign.mention_handles?.length > 0 || campaign.hashtags?.length > 0) && (
             <div className="flex items-center flex-wrap gap-1.5 mt-3">
               {(campaign.mention_handles || []).map((h) => <span key={`m-${h}`} className="tag">@{h}</span>)}
@@ -1302,7 +1352,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
             </div>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {total > 0 && (
             <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5 mr-1">
               <button onClick={() => setView('board')} title="Board view"

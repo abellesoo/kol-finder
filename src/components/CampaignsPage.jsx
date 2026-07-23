@@ -3,10 +3,11 @@ import {
   Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
   LayoutGrid, Table2, FileSpreadsheet, Trash2, AlertTriangle, Pencil, Check,
 } from 'lucide-react'
-import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup } from '../lib/campaigns'
+import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup, setCampaignAssignee, listAssignableUsers } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import { useUrlParam } from '../lib/useUrlParam'
 import ImportCampaignModal from './ImportCampaignModal'
+import AssigneePicker from './core/AssigneePicker'
 
 // Roll a campaign's per-state counts up to the numbers the table view shows.
 function campaignMetrics(c) {
@@ -48,7 +49,7 @@ function formatDate(isoStr) {
 // Counts we surface on a campaign card, in pipeline order.
 const COUNT_ORDER = [
   { key: 'approved', label: 'approved', cls: 'text-faint' },
-  { key: 'shipped', label: 'shipped', cls: 'text-blue-700' },
+  { key: 'shipped', label: 'shipped', cls: 'text-info' },
   { key: 'awaiting_post', label: 'awaiting', cls: 'text-[#8A6A22]' },
   { key: 'overdue', label: 'overdue', cls: 'text-rose/80' },
   { key: 'posted', label: 'posted', cls: 'text-sage font-medium' },
@@ -157,7 +158,25 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
   const [deleting, setDeleting] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
+  const [assignees, setAssignees] = useState([])
   const seedRunRef = useRef(null)
+
+  useEffect(() => {
+    listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
+  }, [])
+
+  // Optimistic assignee change — revert on failure.
+  const handleAssign = async (campaign, userId) => {
+    const prev = campaign.assigned_to || null
+    setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: userId || null } : c)))
+    try {
+      await setCampaignAssignee(campaign.id, userId)
+    } catch (e) {
+      console.error('Assign campaign failed', e)
+      setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: prev } : c)))
+      window.alert(e.message || 'Failed to change the owner — please try again.')
+    }
+  }
 
   const load = useCallback(async () => {
     if (!supabaseConfigured()) { setLoading(false); return }
@@ -346,6 +365,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
                 <th className="px-3 py-3 font-normal text-right">Posted</th>
                 <th className="px-3 py-3 font-normal text-right">Overdue</th>
                 <th className="px-3 py-3 font-normal text-right">Fulfilled</th>
+                <th className="px-3 py-3 font-normal">Owner</th>
                 <th className="px-3 py-3 font-normal">Status</th>
                 <th className="px-4 py-3 font-normal"></th>
               </tr>
@@ -384,6 +404,9 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
                     <td className="px-3 py-2.5 text-right font-mono text-sage">{m.posted || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-rose/80">{m.overdue || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-body">{m.total ? `${m.fulfilled}%` : '—'}</td>
+                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => handleAssign(c, uid)} align="left" />
+                    </td>
                     <td className="px-3 py-2.5">
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
                         c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{c.status}</span>
@@ -453,6 +476,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => handleAssign(c, uid)} />
                     <OpenSheetButton url={c.sheet_url} size="lg" />
                     <button onClick={() => onOpenCampaign(c.id)}
                       className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">

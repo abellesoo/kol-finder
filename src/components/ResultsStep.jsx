@@ -143,8 +143,8 @@ const rowKey = (r) => `${r.platform || 'instagram'}:${r.username}`
 
 const DM_STATUS_STYLES = {
   'not_sent':    'bg-ink/10 text-ink/50',
-  'sent':        'bg-blue-100 text-blue-700',
-  'replied':     'bg-green-100 text-green-700',
+  'sent':        'bg-info-tint text-info',
+  'replied':     'bg-sage/12 text-sage',
   'no_response': 'bg-rose/10 text-rose/70',
 }
 const DM_STATUS_LABELS = {
@@ -808,7 +808,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       {/* Header */}
       <div className="relative z-30 flex items-start justify-between mb-8 anim-rise">
         <div>
-          <h1 className="text-[32px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
+          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{filtered.length} accounts scored</h1>
           <p className="text-[13.5px] text-muted">
             <span className="text-sage font-semibold">{highCount} strong matches</span>
             {' · '}

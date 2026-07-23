@@ -27,6 +27,7 @@ const NAV_GROUPS = [
     label: 'Workspace',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'campaigns', label: 'Campaigns', icon: Rocket },
       { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
       { id: 'vault', label: 'Creator Vault', icon: BookMarked },
       { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
@@ -37,12 +38,6 @@ const NAV_GROUPS = [
     items: [
       { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
       { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { id: 'campaigns', label: 'Campaigns', icon: Rocket },
     ],
   },
   {
@@ -538,11 +533,11 @@ function MainApp({ user, role, onSignOut }) {
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
       <main className="flex-1 overflow-auto flex flex-col">
-        {mode === 'dashboard' && <DashboardPage onNavigate={handleNav} onOpenReview={handleOpenReview} onOpenCampaign={handleOpenCampaign} />}
+        {mode === 'dashboard' && <DashboardPage user={user} onNavigate={handleNav} onOpenReview={handleOpenReview} onOpenCampaign={handleOpenCampaign} />}
         {mode === 'help' && <InstructionsPage />}
         {mode === 'team' && role === 'admin' && <TeamPage />}
         {mode === 'review_queue' && (
-          <ReviewQueuePage onOpenReview={handleOpenReview} onStartCampaign={handleStartCampaign} />
+          <ReviewQueuePage onOpenReview={handleOpenReview} onStartCampaign={handleStartCampaign} userId={user?.id} />
         )}
         {mode === 'review_detail' && openReviewId && (
           <ReviewPage

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle, Rocket, FolderOpen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { listCampaigns, createCampaign } from '../lib/campaigns'
+import { listCampaigns, createCampaign, listAssignableUsers } from '../lib/campaigns'
 import { setResultCampaign, loadReviewSubmissions } from '../lib/reviewState'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
+import { AssigneeAvatar } from './core/AssigneePicker'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -32,11 +33,13 @@ function groupByCampaign(rows, campaigns) {
   return groups
 }
 
-export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
+export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rows, setRows] = useState([])
   const [campaigns, setCampaigns] = useState([])
+  const [assignees, setAssignees] = useState([])
+  const [mineOnly, setMineOnly] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
@@ -56,8 +59,32 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { listCampaigns().then(setCampaigns).catch((e) => console.error('Failed to load campaigns', e)) }, [])
+  useEffect(() => { listAssignableUsers().then(setAssignees).catch(() => setAssignees([])) }, [])
 
-  const groups = useMemo(() => groupByCampaign(rows, campaigns), [rows, campaigns])
+  // campaign id → owner (assigned_to), and id → user record for avatars.
+  const ownerByCampaign = useMemo(() => {
+    const m = new Map()
+    for (const c of campaigns) m.set(c.id, c.assigned_to || null)
+    return m
+  }, [campaigns])
+  const userById = useMemo(() => {
+    const m = new Map()
+    for (const u of assignees) m.set(u.id, u)
+    return m
+  }, [assignees])
+
+  // How many submissions belong to the current user (via their campaign's owner).
+  const mineCount = useMemo(
+    () => (userId ? rows.filter((r) => r.campaign_id && ownerByCampaign.get(r.campaign_id) === userId).length : 0),
+    [rows, ownerByCampaign, userId]
+  )
+
+  const visibleRows = useMemo(
+    () => (mineOnly && userId ? rows.filter((r) => r.campaign_id && ownerByCampaign.get(r.campaign_id) === userId) : rows),
+    [rows, mineOnly, userId, ownerByCampaign]
+  )
+
+  const groups = useMemo(() => groupByCampaign(visibleRows, campaigns), [visibleRows, campaigns])
 
   const moveRow = async (row, campaignId) => {
     await setResultCampaign(row.id, campaignId)
@@ -123,12 +150,34 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
           <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{rows.length} {rows.length === 1 ? 'submission' : 'submissions'}</h1>
           <p className="text-[14px] text-muted">All accounts sent for review, newest first.</p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
-        >
-          <RefreshCw size={13} /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {userId && mineCount > 0 && (
+            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5">
+              <button
+                onClick={() => setMineOnly(true)}
+                className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
+                  mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
+                }`}
+              >
+                Assigned to me <span className="tabular-nums opacity-70">{mineCount}</span>
+              </button>
+              <button
+                onClick={() => setMineOnly(false)}
+                className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
+                  !mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
+                }`}
+              >
+                Everyone
+              </button>
+            </div>
+          )}
+          <button
+            onClick={load}
+            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
+          >
+            <RefreshCw size={13} /> Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -143,13 +192,31 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
         </div>
       )}
 
+      {rows.length > 0 && visibleRows.length === 0 && mineOnly && !error && (
+        <div className="flex flex-col items-center py-24">
+          <CheckCircle2 size={32} className="text-faint mb-4" />
+          <h2 className="text-[17px] font-serif font-bold text-ink mb-2">Nothing assigned to you</h2>
+          <p className="text-[13.5px] text-muted text-center mb-5">No submissions on campaigns you own are waiting. Switch to Everyone to see the full queue.</p>
+          <button onClick={() => setMineOnly(false)} className="px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all">
+            Show everyone
+          </button>
+        </div>
+      )}
+
       <div className="space-y-8">
-        {groups.map((grp) => (
+        {groups.map((grp) => {
+          const owner = grp.id ? userById.get(ownerByCampaign.get(grp.id)) : null
+          return (
           <div key={grp.id || 'unassigned'}>
             <div className="flex items-center gap-2 mb-3">
-              <FolderOpen size={13} className={grp.id ? 'text-sage' : 'text-faint'} />
-              <p className="text-[13px] font-semibold text-ink">{grp.name}</p>
-              <span className="font-mono text-[10px] text-faint">{grp.items.length}</span>
+              <FolderOpen size={14} className={grp.id ? 'text-sage' : 'text-faint'} />
+              <p className="text-[15px] font-serif font-bold text-ink">{grp.name}</p>
+              <span className="font-mono text-[10px] text-faint tabular-nums">{grp.items.length}</span>
+              {owner && (
+                <span className="flex items-center gap-1.5 ml-1 text-[11px] text-faint">
+                  <AssigneeAvatar user={owner} size={18} /> {owner.email.split('@')[0]}
+                </span>
+              )}
             </div>
             <div className="space-y-3">
         {grp.items.map((row) => {
@@ -215,7 +282,8 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
         })}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {deleteTarget && (

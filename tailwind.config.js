@@ -32,6 +32,13 @@ export default {
         // plain `rose` sits at ~4.4:1 and is kept for larger/decorative uses.
         'rose-strong': '#9E4C5C',
         sage: '#4A7C59',
+        // Harmonized semantic status hues — desaturated to sit on the parchment
+        // palette rather than raw Tailwind blue/violet. `info` = in-transit /
+        // sent (shipped, DM sent); `plum` = blog format.
+        info: '#54707E',
+        'info-tint': '#E6ECEE',
+        plum: '#7A6383',
+        'plum-tint': '#ECE6EF',
       },
     },
   },

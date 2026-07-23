@@ -355,7 +355,7 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
                   type="button"
                   onClick={handleDeletePreset}
                   title={`Delete "${selectedPreset}"`}
-                  className="text-faint hover:text-red-500 transition-colors"
+                  className="text-faint hover:text-rose-strong transition-colors"
                 >
                   <Trash2 size={14} />
                 </button>

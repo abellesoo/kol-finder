@@ -12,8 +12,8 @@ const STATE_LABEL = {
   approved: 'Approved', shipped: 'Shipped', awaiting_post: 'Awaiting', posted: 'Posted', overdue: 'Overdue', opted_out: 'Opted out',
 }
 const STATE_CLS = {
-  approved: 'bg-ink/10 text-ink/60', shipped: 'bg-blue-100 text-blue-700',
-  awaiting_post: 'bg-accent/25 text-[#8A6A22]', posted: 'bg-green-100 text-green-700',
+  approved: 'bg-ink/10 text-ink/60', shipped: 'bg-info-tint text-info',
+  awaiting_post: 'bg-accent/25 text-[#8A6A22]', posted: 'bg-sage/12 text-sage',
   overdue: 'bg-rose/10 text-rose', opted_out: 'bg-ink/5 text-faint',
 }
 

@@ -14,8 +14,8 @@ const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
 const DM_STATUS_STYLES = {
   not_sent:    'bg-ink/10 text-ink/50',
-  sent:        'bg-blue-100 text-blue-700',
-  replied:     'bg-green-100 text-green-700',
+  sent:        'bg-info-tint text-info',
+  replied:     'bg-sage/12 text-sage',
   no_response: 'bg-rose/10 text-rose/70',
 }
 
@@ -253,7 +253,7 @@ export default function ReadyToSendPage() {
               {group.items.map((item) => (
                 <div
                   key={`${item.rowId}-${item.stateKey}`}
-                  className="border border-[#BFD6C4] bg-[#F5F8F4] rounded-[14px] px-5 py-4"
+                  className="border border-sage/30 bg-sage/[0.06] rounded-[14px] px-5 py-4"
                 >
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="min-w-0">

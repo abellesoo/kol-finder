@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, AlertCircle, Rocket } from 'lucide-react'
+import { ArrowRight, ClipboardCheck, Send, Rocket, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { reviewKey, campaignDmDraft, loadReviewSubmissions } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
@@ -20,17 +20,80 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function KpiCard({ label, value, sub }) {
+// Time-of-day greeting — the dashboard's first job is to feel like it knows who
+// just walked in.
+function greeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+// First name from Google OAuth metadata, falling back to the email prefix
+// (capitalized) so the greeting still lands even without a full_name.
+function firstName(user) {
+  const full = user?.user_metadata?.full_name
+  if (full) return full.trim().split(/\s+/)[0]
+  const local = user?.email?.split('@')[0]
+  if (local) return local.charAt(0).toUpperCase() + local.slice(1)
+  return 'there'
+}
+
+const todayLabel = () =>
+  new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+// One stage of the seeding pipeline. `fill` is the bar width relative to the
+// widest stage (Scored); `pct` is conversion from the previous stage.
+function FunnelStage({ label, value, fill, tone }) {
+  const barColor = tone === 'accent' ? 'var(--fn-accent)' : 'var(--fn-sage)'
   return (
-    <div className="border border-card-edge rounded-[14px] px-[18px] pt-[18px] pb-[16px] bg-white flex flex-col">
-      <p className="font-mono text-[9.5px] tracking-[.14em] uppercase text-faint mb-[14px]">{label}</p>
-      <p className="font-mono text-[30px] font-semibold tracking-[-0.02em] text-ink leading-none tabular-nums">{value}</p>
-      {sub && <p className="text-[12px] text-[#8E8775] mt-[8px]">{sub}</p>}
+    <div className="flex-1 min-w-0">
+      <p className="font-mono text-[9.5px] tracking-[.14em] uppercase text-faint">{label}</p>
+      <p className="font-serif font-bold text-[30px] leading-none tracking-[-0.01em] text-ink tabular-nums mt-2 mb-3">
+        {value.toLocaleString()}
+      </p>
+      <div className="h-2 bg-mist rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${fill}%`, background: barColor }} />
+      </div>
     </div>
   )
 }
 
-export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign }) {
+function Conversion({ pct, verb }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-1 pt-5 flex-shrink-0" style={{ width: 62 }}>
+      <ArrowRight size={14} className="text-card-edge mb-1" />
+      <span className="text-[13px] font-semibold text-sage tabular-nums leading-none">{pct == null ? '—' : `${pct}%`}</span>
+      <span className="text-[10px] text-faint mt-0.5">{verb}</span>
+    </div>
+  )
+}
+
+function ActionCard({ tone, icon: Icon, value, label, onClick }) {
+  const cls =
+    tone === 'amber'
+      ? 'bg-[#F6ECD6] border-[#E7D3A8]'
+      : 'bg-sage/8 border-sage/25'
+  const iconCls = tone === 'amber' ? 'bg-[#E6D4A8] text-[#8A6A22]' : 'bg-sage/15 text-sage'
+  const textCls = tone === 'amber' ? 'text-[#8A6A22]' : 'text-sage'
+  return (
+    <button
+      onClick={onClick}
+      className={`group flex items-center gap-4 px-[18px] py-4 rounded-[14px] border text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(34,30,24,0.06)] ${cls}`}
+    >
+      <span className={`w-[38px] h-[38px] rounded-[10px] grid place-items-center flex-shrink-0 ${iconCls}`}>
+        <Icon size={17} />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-serif font-bold text-[22px] leading-none text-ink tabular-nums">{value}</span>
+        <span className={`block text-[12.5px] mt-1 ${textCls}`}>{label}</span>
+      </span>
+      <ArrowRight size={16} className="ml-auto text-ink/30 group-hover:text-ink/60 transition-colors flex-shrink-0" />
+    </button>
+  )
+}
+
+export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCampaign }) {
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState([])
@@ -60,19 +123,28 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
       .finally(() => setLoading(false))
   }, [])
 
-  // KPIs from localStorage
+  // KPIs from session history
   const totalSessions = sessions.length
   const accountsScored = sessions.reduce((sum, s) => sum + (s.accountCount || 0), 0)
 
-  // KPIs + attention summary from Supabase campaigns
+  // Pipeline + attention numbers from the Supabase review submissions. "Mine"
+  // = submissions whose campaign is assigned to the current user (assignment
+  // lives on the campaigns table, inherited via campaign_id).
+  const userId = user?.id || null
+  const ownerByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || null]))
   let approved = 0
   let dmsSent = 0
   let pendingReview = 0
   let dmReady = 0
+  let pendingReviewMine = 0
+  let dmReadyMine = 0
+  let reviewedAccounts = 0
 
   campaigns.forEach((c) => {
     const rs = c.review_state || {}
     const accounts = c.accounts || []
+    reviewedAccounts += accounts.length
+    const mine = !!(userId && c.campaign_id && ownerByCampaign.get(c.campaign_id) === userId)
     // One DM draft per campaign — an approved account is "ready" when the
     // campaign has a draft and its own DM hasn't gone out yet.
     const hasDraft = !!campaignDmDraft(rs)
@@ -80,29 +152,58 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
       const entry = rs[reviewKey(a)]
       if (!entry?.status || entry.status === 'pending') {
         pendingReview++
+        if (mine) pendingReviewMine++
       } else if (entry.status === 'approved') {
         approved++
         const dmStatus = entry.dm_status || 'not_sent'
         if (dmStatus === 'sent' || dmStatus === 'replied') dmsSent++
-        if (dmStatus === 'not_sent' && hasDraft) dmReady++
+        if (dmStatus === 'not_sent' && hasDraft) {
+          dmReady++
+          if (mine) dmReadyMine++
+        }
       }
     })
   })
 
-  const hasAttention = pendingReview > 0 || dmReady > 0
+  // Prefer the "yours" figure whenever the user owns any of the outstanding work;
+  // fall back to the team-wide total otherwise.
+  const hasMine = pendingReviewMine > 0 || dmReadyMine > 0
+  const reviewValue = hasMine ? pendingReviewMine : pendingReview
+  const dmValue = hasMine ? dmReadyMine : dmReady
 
-  const isEmpty = campaigns.length === 0 && sessions.length === 0 && campaignOps.length === 0 && !loading && !campaignsLoading
+  const totalPosted = campaignOps.reduce((sum, c) => sum + campaignMetrics(c).posted, 0)
+
+  // Funnel: Scored → Approved → DM sent → Posted. Scored is the widest bar; keep
+  // it >= downstream so the funnel never inverts visually even when the numbers
+  // come from different sources.
+  const scored = Math.max(accountsScored, reviewedAccounts, approved)
+  const stages = [
+    { key: 'scored', label: 'Scored', value: scored, tone: 'accent' },
+    { key: 'approved', label: 'Approved', value: approved, tone: 'sage', verb: 'passed' },
+    { key: 'dm', label: 'DM sent', value: dmsSent, tone: 'sage', verb: 'DM’d' },
+    { key: 'posted', label: 'Posted', value: totalPosted, tone: 'sage', verb: 'posted' },
+  ]
+  const widest = Math.max(1, scored)
+  const convPct = (curr, prev) => (prev > 0 ? Math.min(100, Math.round((curr / prev) * 100)) : null)
+
+  const hasAttention = pendingReview > 0 || dmReady > 0
+  const isEmpty =
+    campaigns.length === 0 && sessions.length === 0 && campaignOps.length === 0 && !loading && !campaignsLoading
 
   if (isEmpty) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-24">
-        <Rocket size={32} className="text-faint mb-4" />
-        <h2 className="text-[17px] font-semibold text-ink mb-2">No campaigns yet</h2>
-        <p className="text-[13.5px] text-muted mb-6 text-center">Run your first seeding session to see results here</p>
+        <span className="w-14 h-14 rounded-[16px] bg-accent-dim grid place-items-center mb-5">
+          <Rocket size={24} className="text-[#8A6A22]" />
+        </span>
+        <h2 className="text-[19px] font-serif font-bold text-ink mb-2">Welcome, {firstName(user)}</h2>
+        <p className="text-[13.5px] text-muted mb-6 text-center max-w-xs">
+          Run your first seeding session and your pipeline will take shape right here.
+        </p>
         {onNavigate && (
           <button
             onClick={() => onNavigate('seeder')}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-ink text-white rounded-[11px] text-[13px] font-medium hover:bg-ink/85 transition-all"
           >
             Start a session <ArrowRight size={14} />
           </button>
@@ -112,55 +213,98 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
   }
 
   return (
-    <div className="px-[48px] py-[40px] pb-[64px] max-w-[1080px] mx-auto w-full">
-      {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Dashboard</p>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink leading-tight">Overview</h1>
-          <p className="text-[14px] text-muted mt-1">Your KOL seeding workspace</p>
-        </div>
-      </div>
+    <div
+      className="px-[48px] py-[40px] pb-[64px] max-w-[1120px] mx-auto w-full"
+      style={{ '--fn-accent': '#C8A96E', '--fn-sage': '#4A7C59' }}
+    >
+      {/* Greeting hero */}
+      <header className="mb-8 anim-rise">
+        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[10px] tabular-nums">{todayLabel()}</p>
+        <h1 className="text-[34px] font-serif font-bold tracking-[0.01em] text-ink leading-tight text-balance">
+          {greeting()}, <span className="italic text-accent">{firstName(user)}</span>
+        </h1>
+        <p className="text-[14px] text-muted mt-1.5">
+          {hasAttention ? (
+            <>
+              {reviewValue > 0 && (
+                <>
+                  <span className="font-semibold text-ink tabular-nums">{reviewValue}</span> account{reviewValue !== 1 ? 's' : ''} awaiting {hasMine ? 'your review' : 'review'}
+                </>
+              )}
+              {reviewValue > 0 && dmValue > 0 && ' · '}
+              {dmValue > 0 && (
+                <>
+                  <span className="font-semibold text-ink tabular-nums">{dmValue}</span> DM{dmValue !== 1 ? 's' : ''} ready to send
+                </>
+              )}
+            </>
+          ) : (
+            'Your KOL seeding workspace.'
+          )}
+        </p>
+      </header>
 
-      {/* Attention banner */}
+      {/* Needs-you-now action strip */}
       {supabase && !loading && hasAttention && (
-        <div className="mb-8 border border-[#E7D3A8] bg-[#F6ECD6] rounded-[13px] px-5 py-4 flex items-start gap-3">
-          <div className="w-[34px] h-[34px] rounded-[9px] bg-[#E6D4A8] flex items-center justify-center flex-shrink-0">
-            <AlertCircle size={16} className="text-[#8A6A22]" />
-          </div>
-          <div className="text-[13.5px] text-body flex flex-col gap-1 pt-[1px]">
-            {pendingReview > 0 && (
-              <span>
-                <span className="font-semibold text-ink">{pendingReview}</span> account{pendingReview !== 1 ? 's' : ''} pending brand manager review
-              </span>
-            )}
-            {dmReady > 0 && (
-              <span>
-                <span className="font-semibold text-ink">{dmReady}</span> approved DM draft{dmReady !== 1 ? 's' : ''} ready to send
-              </span>
-            )}
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-9 anim-rise anim-d1">
+          {reviewValue > 0 && (
+            <ActionCard
+              tone="amber"
+              icon={ClipboardCheck}
+              value={reviewValue}
+              label={
+                hasMine
+                  ? `pending your review${pendingReview > pendingReviewMine ? ` · ${pendingReview} in all` : ''}`
+                  : `account${reviewValue !== 1 ? 's' : ''} pending review`
+              }
+              onClick={() => onNavigate?.('review_queue')}
+            />
+          )}
+          {dmValue > 0 && (
+            <ActionCard
+              tone="sage"
+              icon={Send}
+              value={dmValue}
+              label={
+                hasMine
+                  ? `your DM${dmValue !== 1 ? 's' : ''} ready to send${dmReady > dmReadyMine ? ` · ${dmReady} in all` : ''}`
+                  : `approved DM${dmValue !== 1 ? 's' : ''} ready to send`
+              }
+              onClick={() => onNavigate?.('ready_to_send')}
+            />
+          )}
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-4 mb-10">
-        <KpiCard label="Sessions" value={totalSessions} sub="across the team" />
-        <KpiCard label="Scored" value={accountsScored} sub="across all sessions" />
-        <KpiCard
-          label="Approved"
-          value={loading ? '—' : approved}
-          sub={supabase ? 'from recent campaigns' : 'requires Supabase'}
-        />
-        <KpiCard
-          label="DMs Sent"
-          value={loading ? '—' : dmsSent}
-          sub={supabase ? 'sent or replied' : 'requires Supabase'}
-        />
-      </div>
+      {/* Pipeline funnel — the signature */}
+      <section className="mb-10 anim-rise anim-d2">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Seeding pipeline</p>
+          <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase tabular-nums">
+            {totalSessions} session{totalSessions !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="border border-card-edge rounded-[16px] bg-white px-7 pt-6 pb-7">
+          <div className="flex items-stretch">
+            {stages.map((s, i) => (
+              <div key={s.key} className="flex items-stretch flex-1 min-w-0">
+                <FunnelStage
+                  label={s.label}
+                  value={s.value}
+                  tone={s.tone}
+                  fill={Math.max(s.value > 0 ? 4 : 0, Math.round((s.value / widest) * 100))}
+                />
+                {i < stages.length - 1 && (
+                  <Conversion pct={convPct(stages[i + 1].value, s.value)} verb={stages[i + 1].verb} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-      {/* Campaigns (Campaign Ops) */}
-      <section className="mb-10">
+      {/* Campaigns */}
+      <section className="mb-10 anim-rise anim-d3">
         <div className="flex items-center justify-between mb-4">
           <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Campaigns</p>
           {onNavigate && campaignOps.length > 0 && (
@@ -178,68 +322,69 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
             Supabase not configured — campaign data unavailable locally
           </p>
         ) : campaignsLoading ? (
-          <p className="text-sm text-muted py-6 text-center">Loading...</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="border border-card-edge rounded-[14px] bg-white h-[132px] animate-pulse" />
+            ))}
+          </div>
         ) : campaignOps.length === 0 ? (
           <div className="py-8 text-center border border-dashed border-mist rounded-[14px]">
             <p className="text-sm text-muted mb-3">No campaigns yet</p>
             {onNavigate && (
               <button
                 onClick={() => onNavigate('campaigns')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all"
               >
                 Create a campaign <ArrowRight size={14} />
               </button>
             )}
           </div>
         ) : (
-          <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
-            {/* Table header */}
-            <div className="grid grid-cols-[1fr_64px_64px_72px_84px_36px] gap-4 px-[20px] py-[11px] border-b border-[#EDE8DC] bg-surface">
-              {['Campaign', 'KOLs', 'Posted', 'Overdue', 'Fulfilled', ''].map((h, i) => (
-                <span key={h || i} className={`font-mono text-[9.5px] text-faint uppercase tracking-[.13em] ${i > 0 && i < 5 ? 'text-right' : ''}`}>{h}</span>
-              ))}
-            </div>
-
-            {campaignOps.map((c, i) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {campaignOps.slice(0, 6).map((c) => {
               const m = campaignMetrics(c)
               return (
-                <div
+                <button
                   key={c.id}
                   onClick={() => onOpenCampaign?.(c.id)}
-                  className={`grid grid-cols-[1fr_64px_64px_72px_84px_36px] gap-4 px-[20px] py-[13px] items-center cursor-pointer hover:bg-surface transition-colors ${
-                    i !== campaignOps.length - 1 ? 'border-b border-[#F0ECE2]' : ''
-                  }`}
+                  className="group text-left border border-card-edge rounded-[14px] bg-white px-[18px] py-4 transition-all hover:border-accent hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(34,30,24,0.05)]"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13.5px] text-[#322E26] font-medium truncate">{c.name}</p>
-                      <span className={`flex-shrink-0 text-[9px] font-mono px-1.5 py-0.5 rounded-full ${
-                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{c.status}</span>
-                    </div>
-                    <p className="text-[11px] text-faint font-mono truncate">
-                      {[c.brand, c.market, c.posting_deadline ? `deadline ${formatDate(c.posting_deadline)}` : null].filter(Boolean).join(' · ')}
-                    </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-[14px] font-semibold text-[#322E26] truncate leading-snug">{c.name}</p>
+                    <span
+                      className={`flex-shrink-0 text-[9px] font-medium uppercase tracking-[.04em] px-2 py-0.5 rounded-full ${
+                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'
+                      }`}
+                    >
+                      {c.status}
+                    </span>
                   </div>
-                  <span className="font-mono text-[13px] text-body text-right">{m.total || '—'}</span>
-                  <span className="font-mono text-[13px] text-sage font-medium text-right">{m.posted || '—'}</span>
-                  <span className="font-mono text-[13px] text-rose/80 text-right">{m.overdue || '—'}</span>
-                  <span className="font-mono text-[13px] text-body text-right">{m.total ? `${m.fulfilled}%` : '—'}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onOpenCampaign?.(c.id) }}
-                    className="flex items-center justify-center text-[#C2BAA8] hover:text-ink transition-colors"
-                    title="Open campaign"
-                  >
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
+                  <p className="text-[11px] text-faint truncate mt-1 mb-3.5">
+                    {[c.brand, c.market, c.posting_deadline ? `deadline ${formatDate(c.posting_deadline)}` : null]
+                      .filter(Boolean)
+                      .join(' · ') || 'No details set'}
+                  </p>
+                  <div className="flex items-center justify-between text-[10.5px] text-muted mb-1.5 tabular-nums">
+                    <span>Fulfilled</span>
+                    <span className="font-semibold text-ink">{m.total ? `${m.fulfilled}%` : '—'}</span>
+                  </div>
+                  <div className="h-[7px] bg-mist rounded-full overflow-hidden">
+                    <div className="h-full bg-sage rounded-full transition-all duration-500" style={{ width: `${m.fulfilled}%` }} />
+                  </div>
+                  <div className="flex gap-4 mt-3.5 text-[11px] text-muted tabular-nums">
+                    <span><span className="font-semibold text-ink">{m.total || 0}</span> KOLs</span>
+                    <span><span className="font-semibold text-ink">{m.posted || 0}</span> posted</span>
+                    {m.overdue > 0 && <span className="text-rose-strong"><span className="font-semibold">{m.overdue}</span> overdue</span>}
+                  </div>
+                </button>
               )
             })}
           </div>
         )}
       </section>
 
-      {/* Recent seeding sessions (shared_results) */}
-      <section>
+      {/* Recent seeding sessions */}
+      <section className="anim-rise anim-d4">
         <div className="flex items-center justify-between mb-4">
           <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Recent seeding sessions</p>
         </div>
@@ -249,21 +394,22 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
             Supabase not configured — session data unavailable locally
           </p>
         ) : loading ? (
-          <p className="text-sm text-muted py-6 text-center">Loading...</p>
+          <div className="border border-card-edge rounded-[14px] bg-white h-[120px] animate-pulse" />
         ) : campaigns.length === 0 ? (
-          <p className="text-sm text-muted py-6 text-center border border-dashed border-mist rounded-[14px]">
-            No seeding sessions shared yet — use the Seeder to score and share results
-          </p>
+          <div className="py-8 text-center border border-dashed border-mist rounded-[14px]">
+            <CheckCircle2 size={20} className="text-faint mx-auto mb-2" />
+            <p className="text-sm text-muted">No seeding sessions shared yet — score and share results from the Seeder</p>
+          </div>
         ) : (
           <div className="border border-card-edge rounded-[14px] overflow-hidden bg-white">
             {/* Table header */}
             <div className="grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[11px] border-b border-[#EDE8DC] bg-surface">
-              {['Brief', 'Accounts', 'Approved', 'Pending', 'Date', ''].map((h) => (
-                <span key={h} className="font-mono text-[9.5px] text-faint uppercase tracking-[.13em]">{h}</span>
+              {['Brief', 'Accounts', 'Approved', 'Pending', 'Date', ''].map((h, i) => (
+                <span key={h || i} className="font-mono text-[9.5px] text-faint uppercase tracking-[.13em]">{h}</span>
               ))}
             </div>
 
-            {campaigns.map((c, i) => {
+            {campaigns.slice(0, 6).map((c, i) => {
               const rs = c.review_state || {}
               const accounts = c.accounts || []
               const total = accounts.length
@@ -277,22 +423,19 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
               return (
                 <div
                   key={c.id}
-                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[14px] items-center hover:bg-surface transition-colors ${
-                    i !== campaigns.length - 1 ? 'border-b border-[#F0ECE2]' : ''
+                  onClick={() => (onOpenReview ? onOpenReview(c.id) : onNavigate?.('review_queue'))}
+                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[14px] items-center cursor-pointer hover:bg-surface transition-colors ${
+                    i !== Math.min(campaigns.length, 6) - 1 ? 'border-b border-[#F0ECE2]' : ''
                   }`}
                 >
                   <p className="text-[13.5px] text-[#322E26] font-medium truncate" title={brief}>{brief}</p>
-                  <span className="font-mono text-[13px] text-muted">{total}</span>
-                  <span className="font-mono text-[13px] text-sage font-medium">{approvedCount}</span>
-                  <span className="font-mono text-[13px] text-faint">{pendingCount}</span>
+                  <span className="font-mono text-[13px] text-muted tabular-nums">{total}</span>
+                  <span className="font-mono text-[13px] text-sage font-medium tabular-nums">{approvedCount}</span>
+                  <span className="font-mono text-[13px] text-faint tabular-nums">{pendingCount}</span>
                   <span className="font-mono text-[11.5px] text-faint">{formatDate(c.created_at)}</span>
-                  <button
-                    onClick={() => (onOpenReview ? onOpenReview(c.id) : onNavigate?.('review_queue'))}
-                    className="flex items-center justify-center text-[#C2BAA8] hover:text-ink transition-colors"
-                    title="View results"
-                  >
+                  <span className="flex items-center justify-center text-[#C2BAA8]">
                     <ArrowRight size={14} />
-                  </button>
+                  </span>
                 </div>
               )
             })}

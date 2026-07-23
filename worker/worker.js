@@ -519,9 +519,8 @@ async function createCampaignSpreadsheet(token, title, env) {
     if (!res.ok) throw new Error(`Drive create failed (${res.status}): ${await res.text()}`)
     const f = await res.json()
     doc = { spreadsheetId: f.id, spreadsheetUrl: f.webViewLink }
-    // A Drive-created sheet has one tab named "Sheet1"; rename it so the value
-    // writes (which target "Campaign!A1") line up.
-    await renameFirstTab(token, f.id)
+    // A Drive-created sheet has one tab named "Sheet1"; writeCampaignWorkbook
+    // reuses it as the first workbook tab and adds the rest.
   } else {
     const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
       method: 'POST',
@@ -551,123 +550,208 @@ async function createCampaignSpreadsheet(token, title, env) {
   return { id: doc.spreadsheetId, url: doc.spreadsheetUrl }
 }
 
-// Rename the auto-created first tab ("Sheet1") to "Campaign" so value writes align.
-async function renameFirstTab(token, sheetId) {
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(sheetId,title)`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
+// ── Google Sheets low-level helpers ──────────────────────────────────────────
+const SHEET_API = 'https://sheets.googleapis.com/v4/spreadsheets'
+async function getSpreadsheet(token, sheetId, fields) {
+  const res = await fetch(`${SHEET_API}/${sheetId}?fields=${encodeURIComponent(fields)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
   if (!res.ok) throw new Error(`Sheets read failed (${res.status}): ${await res.text()}`)
-  const { sheets } = await res.json()
-  const first = sheets && sheets[0] && sheets[0].properties
-  if (!first || first.title === 'Campaign') return
-  const upd = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      requests: [
-        { updateSheetProperties: { properties: { sheetId: first.sheetId, title: 'Campaign' }, fields: 'title' } },
-      ],
-    }),
-  })
-  if (!upd.ok) throw new Error(`Sheets rename failed (${upd.status}): ${await upd.text()}`)
+  return res.json()
 }
-
-// Overwrite the sheet with a fresh values grid (one-way push: app → sheet).
-// USER_ENTERED so date strings ("2026-07-20") land as real dates and counts as
-// numbers, instead of raw text.
-async function writeSheetValues(token, sheetId, values) {
-  const clear = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1:ZZ10000:clear`,
-    { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' },
-  )
-  if (!clear.ok) throw new Error(`Sheets clear failed (${clear.status}): ${await clear.text()}`)
-  const upd = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Campaign!A1?valueInputOption=USER_ENTERED`,
-    {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values }),
-    },
-  )
-  if (!upd.ok) throw new Error(`Sheets update failed (${upd.status}): ${await upd.text()}`)
-}
-
-// Presentation pass after the value write: spreadsheet title, frozen/bold header,
-// Status + Tier dropdowns (data validation), and date formats. Columns are found
-// by header name so reordering buildCampaignSheetValues can't silently mis-format.
-// Idempotent — re-applied on every sync (a value :clear doesn't remove validation,
-// but re-asserting keeps everything true to the current grid).
-const SHEET_DROPDOWNS = {
-  Status: ['Approved', 'Shipped', 'Awaiting post', 'Posted', 'Overdue', 'Opted out'],
-  Tier: ['PR', 'Paid'],
-}
-const SHEET_DATE_COLUMNS = ['Shipped', 'Deadline', 'Posted at', 'Eng. updated']
-
-async function formatCampaignSheet(token, sheetId, values, title) {
-  const meta = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=properties.title,sheets.properties(sheetId,title)`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  )
-  if (!meta.ok) throw new Error(`Sheets read failed (${meta.status}): ${await meta.text()}`)
-  const doc = await meta.json()
-  const tab = (doc.sheets || []).find((s) => s.properties?.title === 'Campaign') || (doc.sheets || [])[0]
-  if (!tab) return
-  const gid = tab.properties.sheetId
-  const headers = values[0] || []
-  const col = (name) => headers.indexOf(name)
-  // Ranges leave endRowIndex open (to the sheet's end) so manually added rows
-  // below the pushed grid inherit the dropdowns/formats too.
-  const colRange = (c) => ({ sheetId: gid, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 })
-
-  const requests = []
-  if (title && doc.properties?.title !== title) {
-    requests.push({ updateSpreadsheetProperties: { properties: { title }, fields: 'title' } })
-  }
-  requests.push({
-    updateSheetProperties: {
-      properties: { sheetId: gid, gridProperties: { frozenRowCount: 1 } },
-      fields: 'gridProperties.frozenRowCount',
-    },
-  })
-  requests.push({
-    repeatCell: {
-      range: { sheetId: gid, startRowIndex: 0, endRowIndex: 1 },
-      cell: { userEnteredFormat: { textFormat: { bold: true } } },
-      fields: 'userEnteredFormat.textFormat.bold',
-    },
-  })
-  for (const [name, list] of Object.entries(SHEET_DROPDOWNS)) {
-    const c = col(name)
-    if (c < 0) continue
-    requests.push({
-      setDataValidation: {
-        range: colRange(c),
-        rule: {
-          condition: { type: 'ONE_OF_LIST', values: list.map((v) => ({ userEnteredValue: v })) },
-          showCustomUi: true,
-          strict: false, // dropdown UI, but blanks/legacy values don't error the cell
-        },
-      },
-    })
-  }
-  for (const name of SHEET_DATE_COLUMNS) {
-    const c = col(name)
-    if (c < 0) continue
-    requests.push({
-      repeatCell: {
-        range: colRange(c),
-        cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } },
-        fields: 'userEnteredFormat.numberFormat',
-      },
-    })
-  }
-  const upd = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+async function sheetsBatchUpdate(token, sheetId, requests) {
+  if (!requests.length) return
+  const res = await fetch(`${SHEET_API}/${sheetId}:batchUpdate`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ requests }),
   })
-  if (!upd.ok) throw new Error(`Sheets format failed (${upd.status}): ${await upd.text()}`)
+  if (!res.ok) throw new Error(`Sheets batchUpdate failed (${res.status}): ${await res.text()}`)
+  return res.json()
+}
+async function valuesGet(token, sheetId, range) {
+  const res = await fetch(`${SHEET_API}/${sheetId}/values/${encodeURIComponent(range)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return []
+  return (await res.json()).values || []
+}
+async function valuesClear(token, sheetId, range) {
+  const res = await fetch(`${SHEET_API}/${sheetId}/values/${encodeURIComponent(range)}:clear`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}',
+  })
+  if (!res.ok) throw new Error(`Sheets clear failed (${res.status}): ${await res.text()}`)
+}
+async function valuesUpdate(token, sheetId, range, values) {
+  const res = await fetch(
+    `${SHEET_API}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) },
+  )
+  if (!res.ok) throw new Error(`Sheets update failed (${res.status}): ${await res.text()}`)
+}
+function hexToRgb(hex) {
+  const h = String(hex).replace('#', '')
+  return { red: parseInt(h.slice(0, 2), 16) / 255, green: parseInt(h.slice(2, 4), 16) / 255, blue: parseInt(h.slice(4, 6), 16) / 255 }
+}
+const WHITE = { red: 1, green: 1, blue: 1 }
+function padRow(r, w) { const o = (r || []).slice(0, w); while (o.length < w) o.push(''); return o.map((v) => (v == null ? '' : v)) }
+function qtab(name) { return `'${String(name).replace(/'/g, "''")}'` }
+
+// Preserve human-owned (manual) cells across a re-sync: read the tab's current
+// values and index them by the tab's key column (falling back to row position).
+function buildPreserveMap(existing, tab, headerRow) {
+  const map = new Map()
+  const rows = (existing || []).slice(headerRow + 1)
+  rows.forEach((r, i) => {
+    const rec = {}
+    for (const mc of tab.manualCols || []) rec[mc] = r[mc]
+    map.set(`#${i}`, rec)
+    if (tab.keyCol != null && r[tab.keyCol]) map.set(String(r[tab.keyCol]), rec)
+  })
+  return map
+}
+
+// All the presentation requests for one tab (header, dropdowns, colour rules,
+// dates, green block, section separators, black bar). Column ranges leave the
+// bottom open so manually added rows inherit dropdowns/formats.
+function buildTabFormatRequests(tab, gid, headerRow, firstDataRow, existingCfCount) {
+  const w = tab.headers.length
+  const dataEnd = firstDataRow + (tab.rows || []).length
+  const openCol = (c) => ({ sheetId: gid, startRowIndex: firstDataRow, startColumnIndex: c, endColumnIndex: c + 1 })
+  const reqs = []
+
+  // Freeze the header (and bar) row(s).
+  reqs.push({ updateSheetProperties: { properties: { sheetId: gid, gridProperties: { frozenRowCount: firstDataRow } }, fields: 'gridProperties.frozenRowCount' } })
+
+  // Header row: charcoal fill, white bold.
+  reqs.push({
+    repeatCell: {
+      range: { sheetId: gid, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: 0, endColumnIndex: w },
+      cell: { userEnteredFormat: { backgroundColor: hexToRgb(tab.headerFill || '#434343'), textFormat: { bold: true, foregroundColor: WHITE } } },
+      fields: 'userEnteredFormat(backgroundColor,textFormat)',
+    },
+  })
+  // Per-column header colour overrides (DM tab: blue 【英】 / pink 【中】).
+  for (const [c, hex] of Object.entries(tab.headerFills || {})) {
+    reqs.push({
+      repeatCell: {
+        range: { sheetId: gid, startRowIndex: headerRow, endRowIndex: headerRow + 1, startColumnIndex: +c, endColumnIndex: +c + 1 },
+        cell: { userEnteredFormat: { backgroundColor: hexToRgb(hex), textFormat: { bold: true, foregroundColor: WHITE } } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat)',
+      },
+    })
+  }
+  // Black "Date" bar above the header.
+  if (tab.blackBarTop) {
+    const barRange = { sheetId: gid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: w }
+    reqs.push({ unmergeCells: { range: barRange } })
+    reqs.push({ mergeCells: { range: barRange, mergeType: 'MERGE_ALL' } })
+    reqs.push({ repeatCell: { range: barRange, cell: { userEnteredFormat: { backgroundColor: hexToRgb('#000000'), textFormat: { bold: true, foregroundColor: WHITE } } }, fields: 'userEnteredFormat(backgroundColor,textFormat)' } })
+  }
+  // Pale-green Month block.
+  for (const c of tab.greenCols || []) {
+    reqs.push({ repeatCell: { range: { sheetId: gid, startRowIndex: firstDataRow, endRowIndex: dataEnd, startColumnIndex: c, endColumnIndex: c + 1 }, cell: { userEnteredFormat: { backgroundColor: hexToRgb('#D9EAD3') } }, fields: 'userEnteredFormat.backgroundColor' } })
+  }
+  // Section separators (bold + bottom border).
+  for (const sr of tab.sectionRows || []) {
+    const row = firstDataRow + sr
+    const range = { sheetId: gid, startRowIndex: row, endRowIndex: row + 1, startColumnIndex: 0, endColumnIndex: w }
+    reqs.push({ repeatCell: { range, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat.bold' } })
+    reqs.push({ updateBorders: { range, bottom: { style: 'SOLID', width: 1, color: hexToRgb('#000000') } } })
+  }
+  // Date columns.
+  for (const c of tab.dateCols || []) {
+    reqs.push({ repeatCell: { range: openCol(c), cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'yyyy-mm-dd' } } }, fields: 'userEnteredFormat.numberFormat' } })
+  }
+  // Dropdowns.
+  for (const [c, list] of Object.entries(tab.dropdowns || {})) {
+    reqs.push({ setDataValidation: { range: openCol(+c), rule: { condition: { type: 'ONE_OF_LIST', values: list.map((v) => ({ userEnteredValue: String(v) })) }, showCustomUi: true, strict: false } } })
+  }
+  // Colour rules → per-value cell background (replicates the dropdown chip
+  // colours). Clear prior rules on this tab first so re-syncs don't stack them.
+  for (let i = 0; i < (existingCfCount || 0); i++) reqs.push({ deleteConditionalFormatRule: { sheetId: gid, index: 0 } })
+  for (const [c, map] of Object.entries(tab.colorRules || {})) {
+    for (const [value, hex] of Object.entries(map)) {
+      reqs.push({
+        addConditionalFormatRule: {
+          index: 0,
+          rule: {
+            ranges: [openCol(+c)],
+            booleanRule: {
+              condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: value }] },
+              format: { backgroundColor: hexToRgb(hex), textFormat: hex === '#434343' ? { foregroundColor: WHITE } : undefined },
+            },
+          },
+        },
+      })
+    }
+  }
+  return reqs
+}
+
+// Create/reuse the tabs, write each tab's values (preserving manual columns on
+// re-sync), and apply per-tab styling. One-way push (app → sheet). USER_ENTERED
+// so date strings and numbers land typed, not as raw text.
+async function writeCampaignWorkbook(token, sheetId, workbook, created) {
+  const tabs = workbook.tabs || []
+  const desired = tabs.map((t) => t.name)
+  const CF_FIELDS = 'properties.title,sheets(properties(sheetId,title),conditionalFormats)'
+
+  // 1. Ensure every desired tab exists (reuse a stray default, else add).
+  let meta = await getSpreadsheet(token, sheetId, CF_FIELDS)
+  let titles = new Map((meta.sheets || []).map((s) => [s.properties.title, s.properties.sheetId]))
+  const defaults = (meta.sheets || []).filter((s) => !desired.includes(s.properties.title) && /^(Sheet1|Campaign)$/.test(s.properties.title))
+  const setup = []
+  let di = 0
+  for (const name of desired) {
+    if (titles.has(name)) continue
+    if (di < defaults.length) { setup.push({ updateSheetProperties: { properties: { sheetId: defaults[di].properties.sheetId, title: name }, fields: 'title' } }); di++ }
+    else setup.push({ addSheet: { properties: { title: name } } })
+  }
+  if (setup.length) {
+    await sheetsBatchUpdate(token, sheetId, setup)
+    meta = await getSpreadsheet(token, sheetId, CF_FIELDS)
+    titles = new Map((meta.sheets || []).map((s) => [s.properties.title, s.properties.sheetId]))
+  }
+
+  // 2. Spreadsheet title + tab order.
+  const order = []
+  if (workbook.title && meta.properties?.title !== workbook.title) {
+    order.push({ updateSpreadsheetProperties: { properties: { title: workbook.title }, fields: 'title' } })
+  }
+  desired.forEach((name, i) => order.push({ updateSheetProperties: { properties: { sheetId: titles.get(name), index: i }, fields: 'index' } }))
+  await sheetsBatchUpdate(token, sheetId, order)
+
+  // 3. Per-tab: preserve manual cells, write values, format.
+  const cfByGid = new Map((meta.sheets || []).map((s) => [s.properties.sheetId, (s.conditionalFormats || []).length]))
+  for (const tab of tabs) {
+    const gid = titles.get(tab.name)
+    const hasBar = !!tab.blackBarTop
+    const headerRow = hasBar ? 1 : 0
+    const firstDataRow = headerRow + 1
+    const w = tab.headers.length
+
+    let preserved = null
+    if (!created && (tab.manualCols || []).length) {
+      preserved = buildPreserveMap(await valuesGet(token, sheetId, `${qtab(tab.name)}!A1:ZZ100000`), tab, headerRow)
+    }
+
+    const grid = []
+    if (hasBar) grid.push(padRow([tab.blackBarTop], w))
+    grid.push(padRow(tab.headers, w))
+    ;(tab.rows || []).forEach((r, ri) => {
+      const row = padRow(r, w)
+      if (preserved && !(tab.sectionRows || []).includes(ri)) {
+        const prev = (tab.keyCol != null && preserved.get(String(row[tab.keyCol]))) || preserved.get(`#${ri}`)
+        if (prev) for (const mc of tab.manualCols) if (prev[mc] != null && prev[mc] !== '') row[mc] = prev[mc]
+      }
+      grid.push(row)
+    })
+
+    await valuesClear(token, sheetId, `${qtab(tab.name)}!A1:ZZ100000`)
+    await valuesUpdate(token, sheetId, `${qtab(tab.name)}!A1`, grid)
+    await sheetsBatchUpdate(token, sheetId, buildTabFormatRequests(tab, gid, headerRow, firstDataRow, cfByGid.get(gid) || 0))
+  }
 }
 
 export default {
@@ -1172,29 +1256,29 @@ You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted
       if (!env.GOOGLE_SERVICE_ACCOUNT_KEY) {
         return json({ error: 'GOOGLE_SERVICE_ACCOUNT_KEY not configured — see PHASE4 setup doc' }, 500, origin)
       }
-      const { campaignId, title, values } = await request.json()
-      if (!campaignId || !Array.isArray(values)) {
-        return json({ error: 'campaignId and values[] required' }, 400, origin)
+      const { campaignId, title, tabs } = await request.json()
+      if (!campaignId || !Array.isArray(tabs)) {
+        return json({ error: 'campaignId and tabs[] required' }, 400, origin)
       }
       try {
         const rows = await sbSelect(env, `campaigns?id=eq.${campaignId}&select=id,name,sheet_url`)
         if (!rows.length) return json({ error: 'Campaign not found' }, 404, origin)
         const campaign = rows[0]
 
+        const workbook = { title: title || `${campaign.name || 'Campaign'}_Marketing Plan`, tabs }
         const token = await getGoogleAccessToken(env)
         let sheetId = sheetIdFromUrl(campaign.sheet_url)
         let url = campaign.sheet_url
         let created = false
         if (!sheetId) {
-          const made = await createCampaignSpreadsheet(token, title || campaign.name || 'Campaign', env)
+          const made = await createCampaignSpreadsheet(token, workbook.title, env)
           sheetId = made.id
           url = made.url
           created = true
           await sbUpdate(env, 'campaigns', `id=eq.${campaignId}`, { sheet_url: url })
         }
-        await writeSheetValues(token, sheetId, values)
         // Also renames a pre-existing spreadsheet if the title convention changed.
-        await formatCampaignSheet(token, sheetId, values, title || campaign.name || 'Campaign')
+        await writeCampaignWorkbook(token, sheetId, workbook, created)
         return json({ url, created }, 200, origin)
       } catch (e) {
         return json({ error: String(e.message || e) }, 502, origin)

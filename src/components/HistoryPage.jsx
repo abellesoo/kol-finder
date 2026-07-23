@@ -3,6 +3,9 @@ import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight, AlertTriangle, Fo
 import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle, setSessionCampaign } from '../lib/sessionHistory'
 import { listCampaigns, createCampaign } from '../lib/campaigns'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
+import PageHeader from './core/PageHeader'
+import Loading from './core/Loading'
+import EmptyState from './core/EmptyState'
 
 // Split sessions into per-campaign groups (campaigns in their listing order,
 // only those with sessions) plus a trailing "Unassigned" bucket. So the Seeder
@@ -168,55 +171,55 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
 
   return (
     <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
-      <div className="mb-10">
-        <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">History</p>
-        <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">Past activity</h1>
-      </div>
+      <PageHeader
+        className="mb-9"
+        label="History"
+        title="Past activity"
+        count={!loading && !loadError && sessions.length ? sessions.length : null}
+        subtitle="Every seeding session you’ve run, grouped by campaign. Open one to pick up where you left off."
+      />
 
       <section>
-        <div className="flex items-center gap-2 mb-4">
-          <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">Seeder sessions</p>
-        </div>
-
         {loading ? (
-          <div className="flex items-center justify-center py-10 gap-2 text-faint">
-            <Loader2 size={14} className="animate-spin" />
-            <span className="text-sm">Loading…</span>
-          </div>
+          <Loading label="Loading sessions…" />
         ) : loadError ? (
-          <div className="flex flex-col items-center py-16">
-            <X size={32} className="text-rose mb-4" />
-            <h2 className="text-[17px] font-semibold text-ink mb-2">Couldn’t load history</h2>
-            <p className="text-[13.5px] text-muted mb-6 text-center">Something went wrong while loading your sessions. Check your connection and try again.</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
-            >
-              Retry
-            </button>
-          </div>
-        ) : sessions.length === 0 ? (
-          <div className="flex flex-col items-center py-16">
-            <Clock size={32} className="text-faint mb-4" />
-            <h2 className="text-[17px] font-semibold text-ink mb-2">No sessions recorded</h2>
-            <p className="text-[13.5px] text-muted mb-6 text-center">Your past seeding sessions will appear here after you run your first score</p>
-            {onNavigate && (
+          <EmptyState
+            icon={X}
+            title="Couldn’t load history"
+            description="Something went wrong while loading your sessions. Check your connection and try again."
+            action={
               <button
-                onClick={() => onNavigate('seeder')}
-                className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all"
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all"
               >
-                Go to Seeder <ArrowRight size={14} />
+                Retry
               </button>
-            )}
-          </div>
+            }
+          />
+        ) : sessions.length === 0 ? (
+          <EmptyState
+            icon={Clock}
+            title="No sessions yet"
+            description="Your seeding sessions will appear here after you run your first score."
+            action={
+              onNavigate && (
+                <button
+                  onClick={() => onNavigate('seeder')}
+                  className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all"
+                >
+                  Go to Seeder <ArrowRight size={14} />
+                </button>
+              )
+            }
+          />
         ) : (
           <div className="space-y-8">
             {groups.map((grp) => (
               <div key={grp.id || 'unassigned'}>
                 <div className="flex items-center gap-2 mb-3">
-                  <FolderOpen size={13} className={grp.id ? 'text-sage' : 'text-faint'} />
-                  <p className="text-[13px] font-semibold text-ink">{grp.name}</p>
-                  <span className="font-mono text-[10px] text-faint">{grp.items.length}</span>
+                  <FolderOpen size={14} className={grp.id ? 'text-sage' : 'text-faint'} />
+                  <p className="text-[15px] font-serif font-bold text-ink">{grp.name}</p>
+                  <span className="font-mono text-[10px] text-faint tabular-nums">{grp.items.length}</span>
                 </div>
                 <div className="space-y-2">
             {grp.items.map((session) => (

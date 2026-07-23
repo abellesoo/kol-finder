@@ -218,6 +218,19 @@ export async function setCampaignStatus(id, status) {
   if (error) throw new Error(error.message)
 }
 
+// Delete a campaign. Its attached pipeline KOLs (campaign_kols → verified_posts,
+// nudges) cascade away, but Seeder sessions and review submissions survive —
+// their campaign_id is FK'd ON DELETE SET NULL, so they simply return to the
+// "Unassigned" group. No seeding or review data is lost.
+export async function deleteCampaign(id) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase.from('campaigns').delete().eq('id', id).select('id')
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) {
+    throw new Error('Delete was blocked (0 rows removed) — check Supabase permissions')
+  }
+}
+
 // ── Campaign setup: picker source + form-shape adapters ──────────────────────
 // The Step 1 campaign picker needs brands with their campaigns nested — the same
 // shape loadDatabank() returned (brands → children), so the launcher UI is

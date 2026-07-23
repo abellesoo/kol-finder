@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
-  LayoutGrid, Table2, FileSpreadsheet,
+  LayoutGrid, Table2, FileSpreadsheet, Trash2, AlertTriangle,
 } from 'lucide-react'
-import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols } from '../lib/campaigns'
+import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import { useUrlParam } from '../lib/useUrlParam'
 import ImportCampaignModal from './ImportCampaignModal'
@@ -153,6 +153,8 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
   const [showImport, setShowImport] = useState(false)
   const [view, setView] = useUrlParam('campaigns_view', 'cards') // 'cards' | 'table' (shareable via URL)
   const [seedState, setSeedState] = useState(null) // { runId, name, count }
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const seedRunRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -204,6 +206,28 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
     }
     onOpenCampaign(created.id)
   }, [onOpenCampaign, onSeedConsumed])
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteCampaign(deleteTarget.id)
+      setCampaigns((prev) => prev.filter((c) => c.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch (e) {
+      console.error('Delete campaign failed', e)
+      window.alert(e.message || 'Failed to delete campaign — please try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!deleteTarget) return
+    const onKey = (e) => { if (e.key === 'Escape' && !deleting) setDeleteTarget(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [deleteTarget, deleting])
 
   if (loading) {
     return (
@@ -311,7 +335,13 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                         c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{c.status}</span>
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      <span onClick={(e) => e.stopPropagation()}><OpenSheetButton url={c.sheet_url} /></span>
+                      <span onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-2">
+                        <OpenSheetButton url={c.sheet_url} />
+                        <button onClick={() => setDeleteTarget(c)} title="Delete campaign"
+                          className="flex items-center justify-center w-8 h-8 rounded-[10px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 )
@@ -358,6 +388,10 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                       className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
                       Open <ArrowRight size={13} />
                     </button>
+                    <button onClick={() => setDeleteTarget(c)} title="Delete campaign"
+                      className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -380,6 +414,38 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
           onClose={() => setShowImport(false)}
           onImported={(campaignId) => { setShowImport(false); onOpenCampaign(campaignId) }}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
+          onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="w-full max-w-[400px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-rose/10 mb-4">
+              <AlertTriangle size={18} className="text-rose" />
+            </div>
+            <h2 className="text-[16px] font-semibold text-ink mb-1.5">Delete “{deleteTarget.name}”?</h2>
+            <p className="text-[13px] text-muted mb-2 leading-relaxed">
+              This removes the campaign and its attached KOL pipeline
+              {Object.values(deleteTarget.counts || {}).reduce((a, b) => a + b, 0) > 0
+                ? ` (${Object.values(deleteTarget.counts).reduce((a, b) => a + b, 0)} KOL${Object.values(deleteTarget.counts).reduce((a, b) => a + b, 0) === 1 ? '' : 's'})`
+                : ''}. This can’t be undone.
+            </p>
+            <p className="text-[12px] text-faint mb-6 leading-relaxed">
+              Its {deleteTarget.sessionCount || 0} seeding session{deleteTarget.sessionCount === 1 ? '' : 's'} and any review submissions are kept — they just move back to “Unassigned.”
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting}
+                className="px-4 py-2 rounded-[10px] text-[13px] font-medium text-ink hover:bg-surface transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={confirmDelete} disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-rose text-white text-[13px] font-medium hover:bg-rose/90 transition-colors disabled:opacity-60">
+                {deleting && <Loader2 size={13} className="animate-spin" />}
+                {deleting ? 'Deleting…' : 'Delete campaign'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

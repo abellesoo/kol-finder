@@ -1,16 +1,42 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle, Rocket } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle, Rocket, FolderOpen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { listCampaigns, createCampaign } from '../lib/campaigns'
+import { setResultCampaign } from '../lib/reviewState'
+import CampaignMoveMenu from './core/CampaignMoveMenu'
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
   return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Per-campaign groups (campaigns in listing order, only those with rows) plus a
+// trailing "Unassigned" bucket. Shared with the getter used across review views.
+function groupByCampaign(rows, campaigns) {
+  const byId = new Map()
+  const unassigned = []
+  for (const r of rows) {
+    const cid = r.campaign_id || null
+    if (!cid) { unassigned.push(r); continue }
+    if (!byId.has(cid)) byId.set(cid, [])
+    byId.get(cid).push(r)
+  }
+  const groups = []
+  for (const c of campaigns) {
+    const items = byId.get(c.id)
+    if (items && items.length) groups.push({ id: c.id, name: c.name, items })
+  }
+  const known = new Set(campaigns.map((c) => c.id))
+  for (const [cid, items] of byId) if (!known.has(cid)) unassigned.push(...items)
+  if (unassigned.length) groups.push({ id: null, name: 'Unassigned', items: unassigned })
+  return groups
+}
+
 export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rows, setRows] = useState([])
+  const [campaigns, setCampaigns] = useState([])
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
@@ -22,7 +48,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
     try {
       const { data, error: err } = await supabase
         .from('shared_results')
-        .select('id, campaign_brief, accounts, review_state, created_at')
+        .select('id, campaign_id, campaign_brief, accounts, review_state, created_at')
         .order('created_at', { ascending: false })
       if (err) throw new Error(err.message)
       setRows(data || [])
@@ -34,6 +60,20 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { listCampaigns().then(setCampaigns).catch((e) => console.error('Failed to load campaigns', e)) }, [])
+
+  const groups = useMemo(() => groupByCampaign(rows, campaigns), [rows, campaigns])
+
+  const moveRow = async (row, campaignId) => {
+    await setResultCampaign(row.id, campaignId)
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, campaign_id: campaignId || null } : r)))
+  }
+
+  const createCampaignInline = async (name) => {
+    const c = await createCampaign({ name })
+    setCampaigns((prev) => [c, ...prev])
+    return c.id
+  }
 
   useEffect(() => {
     if (!deleteTarget) return
@@ -108,8 +148,16 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
         </div>
       )}
 
-      <div className="space-y-3">
-        {rows.map((row) => {
+      <div className="space-y-8">
+        {groups.map((grp) => (
+          <div key={grp.id || 'unassigned'}>
+            <div className="flex items-center gap-2 mb-3">
+              <FolderOpen size={13} className={grp.id ? 'text-sage' : 'text-faint'} />
+              <p className="text-[13px] font-semibold text-ink">{grp.name}</p>
+              <span className="font-mono text-[10px] text-faint">{grp.items.length}</span>
+            </div>
+            <div className="space-y-3">
+        {grp.items.map((row) => {
           const reviewState = row.review_state || {}
           const total = (row.accounts || []).length
           const approved = Object.values(reviewState).filter((e) => e.status === 'approved').length
@@ -151,9 +199,16 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
                   >
                     Open <ArrowRight size={13} />
                   </button>
+                  <CampaignMoveMenu
+                    campaigns={campaigns}
+                    value={row.campaign_id || null}
+                    onMove={(cid) => moveRow(row, cid)}
+                    onCreate={createCampaignInline}
+                    label="Move to campaign"
+                  />
                   <button
                     onClick={(e) => { e.stopPropagation(); requestDeleteCampaign(row) }}
-                    title="Delete campaign"
+                    title="Delete submission"
                     className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all"
                   >
                     <Trash2 size={14} />
@@ -163,6 +218,9 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
             </div>
           )
         })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {deleteTarget && (

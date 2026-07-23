@@ -87,6 +87,29 @@ export async function loadSessionFull(id) {
   return loadLocalHistory().find((s) => s.id === id) || null
 }
 
+// Move a Seeder session under a campaign (or clear it with null). Sessions carry
+// a snapshot config, so this only re-files the session — it never re-runs it.
+export async function setSessionCampaign(id, campaignId) {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('sessions')
+      .update({ campaign_id: campaignId || null })
+      .eq('id', id)
+      .select('id')
+    if (error) throw error
+    if (!data || data.length === 0) {
+      throw new Error('Move was blocked (0 rows updated) — check Supabase permissions for the sessions table')
+    }
+  } else {
+    try {
+      const updated = loadLocalHistory().map((s) =>
+        s.id === id ? { ...s, campaign_id: campaignId || null } : s
+      )
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(updated))
+    } catch {}
+  }
+}
+
 export async function updateSessionTitle(id, title) {
   if (supabase) {
     const { data, error } = await supabase.from('sessions').select('config').eq('id', id).single()

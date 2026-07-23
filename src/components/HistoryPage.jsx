@@ -1,6 +1,32 @@
-import { useState, useEffect, useRef } from 'react'
-import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight, AlertTriangle } from 'lucide-react'
-import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle } from '../lib/sessionHistory'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Trash2, Loader2, Pencil, Check, X, Clock, ArrowRight, AlertTriangle, FolderOpen } from 'lucide-react'
+import { loadHistory, loadSessionFull, deleteSession, updateSessionTitle, setSessionCampaign } from '../lib/sessionHistory'
+import { listCampaigns, createCampaign } from '../lib/campaigns'
+import CampaignMoveMenu from './core/CampaignMoveMenu'
+
+// Split sessions into per-campaign groups (campaigns in their listing order,
+// only those with sessions) plus a trailing "Unassigned" bucket. So the Seeder
+// history reads campaign-first, matching the rest of the app.
+function groupSessions(sessions, campaigns) {
+  const byId = new Map()
+  const unassigned = []
+  for (const s of sessions) {
+    const cid = s.campaignId || null
+    if (!cid) { unassigned.push(s); continue }
+    if (!byId.has(cid)) byId.set(cid, [])
+    byId.get(cid).push(s)
+  }
+  const groups = []
+  for (const c of campaigns) {
+    const items = byId.get(c.id)
+    if (items && items.length) groups.push({ id: c.id, name: c.name, items })
+  }
+  // Sessions whose campaign no longer exists fall through to Unassigned too.
+  const knownIds = new Set(campaigns.map((c) => c.id))
+  for (const [cid, items] of byId) if (!knownIds.has(cid)) unassigned.push(...items)
+  if (unassigned.length) groups.push({ id: null, name: 'Unassigned', items: unassigned })
+  return groups
+}
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -26,6 +52,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
   const [editingTitle, setEditingTitle] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [campaigns, setCampaigns] = useState([])
   const inputRef = useRef(null)
 
   useEffect(() => {
@@ -40,7 +67,21 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
         setLoadError(true)
         setLoading(false)
       })
+    listCampaigns().then(setCampaigns).catch((err) => console.error('Failed to load campaigns', err))
   }, [])
+
+  const groups = useMemo(() => groupSessions(sessions, campaigns), [sessions, campaigns])
+
+  const moveSession = async (session, campaignId) => {
+    await setSessionCampaign(session.id, campaignId)
+    setSessions((prev) => prev.map((s) => (s.id === session.id ? { ...s, campaignId: campaignId || null } : s)))
+  }
+
+  const createCampaignInline = async (name) => {
+    const c = await createCampaign({ name })
+    setCampaigns((prev) => [c, ...prev])
+    return c.id
+  }
 
   useEffect(() => {
     if (editingId && inputRef.current) inputRef.current.focus()
@@ -168,8 +209,16 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
             )}
           </div>
         ) : (
-          <div className="space-y-2">
-            {sessions.map((session) => (
+          <div className="space-y-8">
+            {groups.map((grp) => (
+              <div key={grp.id || 'unassigned'}>
+                <div className="flex items-center gap-2 mb-3">
+                  <FolderOpen size={13} className={grp.id ? 'text-sage' : 'text-faint'} />
+                  <p className="text-[13px] font-semibold text-ink">{grp.name}</p>
+                  <span className="font-mono text-[10px] text-faint">{grp.items.length}</span>
+                </div>
+                <div className="space-y-2">
+            {grp.items.map((session) => (
               <div
                 key={session.id}
                 onClick={() => handleClickSession(session)}
@@ -230,6 +279,13 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
                       <Pencil size={13} />
                     </button>
                   )}
+                  <CampaignMoveMenu
+                    campaigns={campaigns}
+                    value={session.campaignId || null}
+                    onMove={(cid) => moveSession(session, cid)}
+                    onCreate={createCampaignInline}
+                    label="Move to campaign"
+                  />
                   <button
                     onClick={(e) => requestDeleteSession(e, session)}
                     className="text-faint hover:text-rose transition-colors"
@@ -237,6 +293,9 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
                   >
                     <Trash2 size={14} />
                   </button>
+                </div>
+              </div>
+            ))}
                 </div>
               </div>
             ))}

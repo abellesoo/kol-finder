@@ -580,6 +580,7 @@ function MainApp({ user, role, onSignOut }) {
                 influencers={influencers}
                 config={config}
                 sessionId={currentSessionId}
+                campaignId={activeCampaign?.id || null}
                 onBackToSetup={() => setStep(influencers.length > 0 ? 'config' : 'upload')}
               />
             )}

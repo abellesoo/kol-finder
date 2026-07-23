@@ -380,7 +380,7 @@ function writeCache(cache) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
 
-export default function ResultsStep({ results, influencers, config, sessionId, onBackToSetup }) {
+export default function ResultsStep({ results, influencers, config, sessionId, campaignId = null, onBackToSetup }) {
   const sessionIdRef = useRef(sessionId)
   useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
@@ -762,6 +762,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
       const { error } = await supabase
         .from('shared_results')
         .insert({
+          campaign_id: campaignId || null,
           campaign_brief: config?.campaignBrief || '',
           accounts: accountsToShare,
           review_state: {},

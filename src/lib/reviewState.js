@@ -22,6 +22,22 @@ export function campaignDmDraft(reviewState) {
   return ''
 }
 
+// Move a review submission (shared_results row) under a campaign, or clear it
+// with null. Groups the Review Queue + Ready to Send by the same Campaign the
+// Seeder sessions use. Requires db/review_campaign_link.sql to have been run.
+export async function setResultCampaign(id, campaignId) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('shared_results')
+    .update({ campaign_id: campaignId || null })
+    .eq('id', id)
+    .select('id')
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) {
+    throw new Error('Move was blocked (0 rows updated) — check Supabase permissions')
+  }
+}
+
 // Key for an account's review_state entry. Instagram accounts keep the bare
 // username (backward compatible with every existing row); Threads accounts are
 // namespaced so a same-handle IG + Threads pair in one run don't share a single

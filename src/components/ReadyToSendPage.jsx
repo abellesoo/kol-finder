@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, SendHorizonal } from 'lucide-react'
+import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, SendHorizonal, FolderOpen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { listCampaigns, createCampaign } from '../lib/campaigns'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry, reviewKey, campaignDmDraft } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey, campaignDmDraft, setResultCampaign } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
 import ColumnPicker from './table/ColumnPicker'
+import CampaignMoveMenu from './core/CampaignMoveMenu'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -27,6 +29,7 @@ export default function ReadyToSendPage() {
   const [error, setError] = useState(null)
   const [items, setItems] = useState([])
   const [sessionMeta, setSessionMeta] = useState({})
+  const [campaigns, setCampaigns] = useState([])
   const [copiedUser, setCopiedUser] = useState(null)
   // Column visibility is remembered across tabs + reloads (Phase 4).
   const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
@@ -42,14 +45,14 @@ export default function ReadyToSendPage() {
     try {
       const { data, error: err } = await supabase
         .from('shared_results')
-        .select('id, campaign_brief, accounts, review_state, created_at')
+        .select('id, campaign_id, campaign_brief, accounts, review_state, created_at')
         .order('created_at', { ascending: false })
       if (err) throw new Error(err.message)
 
       const metaMap = {}
       const ready = []
       for (const row of data || []) {
-        metaMap[row.id] = { campaignBrief: row.campaign_brief || '', createdAt: row.created_at }
+        metaMap[row.id] = { campaignBrief: row.campaign_brief || '', createdAt: row.created_at, campaignId: row.campaign_id || null }
         // One DM draft per campaign, reused for every approved account in it.
         const campaignDraft = campaignDmDraft(row.review_state)
         for (const account of row.accounts || []) {
@@ -79,7 +82,9 @@ export default function ReadyToSendPage() {
     }
   }, [])
 
-  const groups = useMemo(() => {
+  // Approved accounts → one subgroup per review submission (keeps the shared
+  // per-submission DM draft intact) …
+  const submissionGroups = useMemo(() => {
     const map = new Map()
     for (const item of items) {
       if (!map.has(item.rowId)) map.set(item.rowId, [])
@@ -92,7 +97,41 @@ export default function ReadyToSendPage() {
     }))
   }, [items, sessionMeta])
 
+  // … then those submissions bucket under their campaign (campaigns in listing
+  // order, only those with approvals) plus a trailing "Unassigned" group.
+  const campaignGroups = useMemo(() => {
+    const byId = new Map()
+    const unassigned = []
+    for (const sub of submissionGroups) {
+      const cid = sub.campaignId || null
+      if (!cid) { unassigned.push(sub); continue }
+      if (!byId.has(cid)) byId.set(cid, [])
+      byId.get(cid).push(sub)
+    }
+    const out = []
+    for (const c of campaigns) {
+      const subs = byId.get(c.id)
+      if (subs && subs.length) out.push({ id: c.id, name: c.name, subs })
+    }
+    const known = new Set(campaigns.map((c) => c.id))
+    for (const [cid, subs] of byId) if (!known.has(cid)) unassigned.push(...subs)
+    if (unassigned.length) out.push({ id: null, name: 'Unassigned', subs: unassigned })
+    return out
+  }, [submissionGroups, campaigns])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { listCampaigns().then(setCampaigns).catch((e) => console.error('Failed to load campaigns', e)) }, [])
+
+  const moveSubmission = async (rowId, campaignId) => {
+    await setResultCampaign(rowId, campaignId)
+    setSessionMeta((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] || {}), campaignId: campaignId || null } }))
+  }
+
+  const createCampaignInline = async (name) => {
+    const c = await createCampaign({ name })
+    setCampaigns((prev) => [c, ...prev])
+    return c.id
+  }
 
   const persistStatus = useCallback(async (item, newStatus) => {
     setItems((prev) => prev.map((i) =>
@@ -176,11 +215,21 @@ export default function ReadyToSendPage() {
         </div>
       )}
 
-      <div className="space-y-8">
-        {groups.map((group) => (
+      <div className="space-y-10">
+        {campaignGroups.map((cg) => (
+          <div key={cg.id || 'unassigned'}>
+            <div className="flex items-center gap-2 mb-4">
+              <FolderOpen size={15} className={cg.id ? 'text-sage' : 'text-faint'} />
+              <h2 className="text-[16px] font-serif font-bold text-ink">{cg.name}</h2>
+              <span className="font-mono text-[10px] text-faint">
+                {cg.subs.reduce((n, s) => n + s.items.length, 0)} approved
+              </span>
+            </div>
+            <div className="space-y-8 pl-1">
+        {cg.subs.map((group) => (
           <div key={group.rowId}>
             <div className="flex items-center gap-3 mb-3 pb-3 border-b border-mist">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-[13.5px] text-ink truncate">
                   {(group.campaignBrief || '').length > 90 ? group.campaignBrief.slice(0, 90) + '…' : group.campaignBrief || '(no brief)'}
                 </p>
@@ -188,6 +237,13 @@ export default function ReadyToSendPage() {
                   {formatDate(group.createdAt)} · {group.items.length} {group.items.length === 1 ? 'account' : 'accounts'} approved
                 </p>
               </div>
+              <CampaignMoveMenu
+                campaigns={campaigns}
+                value={group.campaignId || null}
+                onMove={(cid) => moveSubmission(group.rowId, cid)}
+                onCreate={createCampaignInline}
+                label="Move to campaign"
+              />
             </div>
             <div className="space-y-3">
               {group.items.map((item) => (
@@ -252,6 +308,9 @@ export default function ReadyToSendPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        ))}
             </div>
           </div>
         ))}

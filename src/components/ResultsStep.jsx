@@ -136,6 +136,11 @@ function InfoTooltip({ column }) {
 
 // TABLE_COLUMNS, ALWAYS_EXPORT_IDS imported from ../lib/columnDefs
 
+// Row identity for selection / expand / React keys. A handle can exist as both
+// an Instagram and a Threads candidate in one run, so bare username collides —
+// key by platform:username everywhere a row is addressed.
+const rowKey = (r) => `${r.platform || 'instagram'}:${r.username}`
+
 const DM_STATUS_STYLES = {
   'not_sent':    'bg-ink/10 text-ink/50',
   'sent':        'bg-blue-100 text-blue-700',
@@ -283,18 +288,18 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
         <div className="px-4 py-12 text-center text-[13.5px] text-muted">No accounts match your filters.</div>
       )}
       {filtered.map((r) => (
-        <div key={r.username}>
+        <div key={rowKey(r)}>
           <div
             className="group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
             style={{ gridTemplateColumns: gridTemplate }}
-            onClick={() => setExpandedRow(expandedRow === r.username ? null : r.username)}
+            onClick={() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r))}
           >
             {selectionMode && (
               <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center justify-center">
                 <input
                   type="checkbox"
-                  checked={selectedAccounts.has(r.username)}
-                  onChange={() => onToggleSelect(r.username)}
+                  checked={selectedAccounts.has(rowKey(r))}
+                  onChange={() => onToggleSelect(rowKey(r))}
                   className="w-4 h-4 accent-ink cursor-pointer"
                 />
               </div>
@@ -331,7 +336,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             ))}
           </div>
 
-          {expandedRow === r.username && (
+          {expandedRow === rowKey(r) && (
             <div className="px-4 py-4 bg-surface border-b border-[#F0ECE2] grid grid-cols-2 gap-6 text-sm">
               <div>
                 <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.13em] mb-2">Scoring Verdict</p>
@@ -567,7 +572,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
         liveMedianComments: medComments,
       }
     })
-  }, [results, infMap, liveStats, threadsStats, aiStats, blendAi])
+  }, [results, infMap, liveStats, threadsStats, aiStats, blendAi, config])
 
   // Pre-filter (min score + legacy flag filter) feeds the shared sort/filter
   // engine, which owns per-column sort + category filters.
@@ -711,16 +716,16 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     }
   }
 
-  const handleToggleSelect = (username) => {
+  const handleToggleSelect = (key) => {
     setSelectedAccounts((prev) => {
       const next = new Set(prev)
-      next.has(username) ? next.delete(username) : next.add(username)
+      next.has(key) ? next.delete(key) : next.add(key)
       return next
     })
   }
 
   const handleSelectAll = () => {
-    setSelectedAccounts(new Set(filtered.map((r) => r.username)))
+    setSelectedAccounts(new Set(filtered.map((r) => rowKey(r))))
   }
 
   // Send selected accounts to the Review Queue
@@ -729,7 +734,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     setShareStatus('loading')
     try {
       const accountsToShare = enriched
-        .filter((r) => selectedAccounts.has(r.username))
+        .filter((r) => selectedAccounts.has(rowKey(r)))
         .map((r) => ({
           username: r.username,
           fullName: r.fullName || '',

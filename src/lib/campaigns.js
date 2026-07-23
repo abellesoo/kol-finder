@@ -509,9 +509,10 @@ export async function importCampaignKols(campaignId, rows) {
     shipped_at: r.shipped_at || null,
     notes: r.notes || null,
   }))
-  const { error: e1 } = await supabase
+  const { data: insertedKols, error: e1 } = await supabase
     .from('campaign_kols')
     .upsert(kolPayload, { onConflict: 'campaign_id,kol_handle', ignoreDuplicates: true })
+    .select('id')
   if (e1) throw new Error(e1.message)
 
   // Re-read to map handle → id (covers KOLs that already existed on the campaign).
@@ -552,7 +553,7 @@ export async function importCampaignKols(campaignId, rows) {
     if (error) throw new Error(error.message)
     postsInserted += data ? data.length : 0
   }
-  return { kols: kolPayload.length, posts: postsInserted }
+  return { kols: insertedKols ? insertedKols.length : 0, posts: postsInserted }
 }
 
 // ── Verified posts (Phase 2 — written by the verification worker or import) ───

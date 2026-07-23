@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { reviewKey } from './reviewState'
+import { presetToForm, presetToScrape } from './inputDatabank'
 
 // ── Data layer for the Campaign Ops module ───────────────────────────────────
 // All reads/writes against campaigns / campaign_kols live here (mirrors how
@@ -144,7 +145,25 @@ export async function listCampaigns() {
       counts[k.campaign_id][k.state] = (counts[k.campaign_id][k.state] || 0) + 1
     }
   }
-  return (campaigns || []).map((c) => ({ ...c, counts: counts[c.id] || {} }))
+
+  // Seeder-session count per campaign — same one-query rollup as the KOL counts.
+  const sessionCounts = {}
+  if (ids.length) {
+    const { data: sess, error: e3 } = await supabase
+      .from('sessions')
+      .select('campaign_id')
+      .in('campaign_id', ids)
+    if (e3) throw new Error(e3.message)
+    for (const s of sess || []) {
+      if (s.campaign_id) sessionCounts[s.campaign_id] = (sessionCounts[s.campaign_id] || 0) + 1
+    }
+  }
+
+  return (campaigns || []).map((c) => ({
+    ...c,
+    counts: counts[c.id] || {},
+    sessionCount: sessionCounts[c.id] || 0,
+  }))
 }
 
 export async function getCampaign(id) {
@@ -154,19 +173,41 @@ export async function getCampaign(id) {
   return data
 }
 
+// Create a campaign. As of the seeding-setup unification a campaign is created
+// at Step 1 (before deadline / market are known), so posting_deadline and the
+// ops fields are optional; brand_id + default_step1/step2 carry the saved setup.
 export async function createCampaign(fields) {
   if (!supabase) throw new Error('Supabase not configured')
   const payload = {
     name: fields.name?.trim(),
-    brand: fields.brand?.trim(),
-    market: fields.market?.trim(),
+    brand: fields.brand?.trim() || null,
+    brand_id: fields.brand_id || null,
+    market: fields.market?.trim() || null,
     campaign_type: fields.campaign_type || 'gifted',
     start_date: fields.start_date || null,
-    posting_deadline: fields.posting_deadline,
+    posting_deadline: fields.posting_deadline || null,
     hashtags: fields.hashtags || [],
     mention_handles: fields.mention_handles || [],
+    default_step1: fields.default_step1 || {},
+    default_step2: fields.default_step2 || {},
   }
   const { data, error } = await supabase.from('campaigns').insert(payload).select('*').single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// Edit a campaign's saved setup defaults — the copied-defaults source. Affects
+// FUTURE sessions only; existing sessions keep their own config snapshot. Only
+// the keys present in `fields` are touched.
+export async function updateCampaignSetup(id, fields) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const patch = {}
+  if (fields.name !== undefined) patch.name = fields.name?.trim()
+  if (fields.brand !== undefined) patch.brand = fields.brand?.trim() || null
+  if (fields.brand_id !== undefined) patch.brand_id = fields.brand_id || null
+  if (fields.default_step1 !== undefined) patch.default_step1 = fields.default_step1 || {}
+  if (fields.default_step2 !== undefined) patch.default_step2 = fields.default_step2 || {}
+  const { data, error } = await supabase.from('campaigns').update(patch).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
   return data
 }
@@ -175,6 +216,81 @@ export async function setCampaignStatus(id, status) {
   if (!supabase) throw new Error('Supabase not configured')
   const { error } = await supabase.from('campaigns').update({ status }).eq('id', id)
   if (error) throw new Error(error.message)
+}
+
+// ── Campaign setup: picker source + form-shape adapters ──────────────────────
+// The Step 1 campaign picker needs brands with their campaigns nested — the same
+// shape loadDatabank() returned (brands → children), so the launcher UI is
+// reused. Newest campaign first under each brand.
+export async function loadCampaignsByBrand() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('brands')
+    .select('id, name, background, products, updated_at, campaigns:campaigns(id, name, status, default_step1, default_step2, created_at)')
+    .order('updated_at', { ascending: false })
+  if (error) {
+    console.error('Failed to load campaigns by brand', error)
+    return []
+  }
+  const touched = (c) => Date.parse(c.created_at || 0) || 0
+  return (data || []).map((b) => ({
+    ...b,
+    campaigns: (b.campaigns || []).sort((a, z) => touched(z) - touched(a)),
+  }))
+}
+
+// A single brand row (facts live here; setup lives on the campaign). Used to
+// build a new-session prefill from a campaign.
+export async function getBrandById(id) {
+  if (!supabase || !id) return null
+  const { data, error } = await supabase
+    .from('brands')
+    .select('id, name, background, products')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// Update a brand's durable facts (background / product catalogue). Brand facts
+// are shared across the brand's campaigns; the campaign brief editor writes them
+// here (decomposed from the tidied brief) so scoring picks them up.
+export async function updateBrandFacts(brandId, { background, products } = {}) {
+  if (!supabase || !brandId) return null
+  const patch = {}
+  if (background !== undefined) patch.background = background || ''
+  if (products !== undefined) patch.products = Array.isArray(products) ? products : []
+  if (Object.keys(patch).length === 0) return null
+  const { data, error } = await supabase.from('brands').update(patch).eq('id', brandId).select('id').single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// Find-or-create a brand by name (citext unique ⇒ idempotent upsert). Used when
+// starting a new campaign under a brand that may not exist yet. Returns the row.
+export async function getOrCreateBrand(name) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const n = String(name || '').trim()
+  if (!n) return null
+  const { data, error } = await supabase
+    .from('brands')
+    .upsert({ name: n }, { onConflict: 'name' })
+    .select('id, name, background, products')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// A campaign's default_step1/default_step2 use the SAME JSON shapes brand_presets
+// did, so the databank's adapters map them straight into the Seeder form —
+// campaignToForm fills the scoring config (+ brand facts), campaignToScrape the
+// scrape inputs. Reused so there's one prefill code path, not two.
+export function campaignToForm(brand, campaign) {
+  const b = brand || { name: campaign?.brand || '', background: '', products: [] }
+  return presetToForm(b, { step2: campaign?.default_step2 || {} })
+}
+export function campaignToScrape(campaign) {
+  return presetToScrape({ step1: campaign?.default_step1 || {} })
 }
 
 // ── Approved KOLs (derived from shared_results, reused from the Review Queue) ──

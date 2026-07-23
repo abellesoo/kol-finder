@@ -3,7 +3,8 @@ import {
   Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
   LayoutGrid, Table2, FileSpreadsheet,
 } from 'lucide-react'
-import { listCampaigns, createCampaign, parseTokens, getApprovedKolsForRun, attachKols } from '../lib/campaigns'
+import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols } from '../lib/campaigns'
+import { BRAND_CATALOG } from '../lib/brandCatalog'
 import { useUrlParam } from '../lib/useUrlParam'
 import ImportCampaignModal from './ImportCampaignModal'
 
@@ -39,9 +40,6 @@ function OpenSheetButton({ url, size = 'sm' }) {
   )
 }
 
-const MARKETS = ['HK', 'TW', 'SG', 'MY', 'Other']
-const CAMPAIGN_TYPES = ['gifted', 'paid', 'mixed']
-
 function formatDate(isoStr) {
   if (!isoStr) return '—'
   return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -57,11 +55,12 @@ const COUNT_ORDER = [
   { key: 'opted_out', label: 'opted out', cls: 'text-faint/70' },
 ]
 
+// Minimal create: name + brand only. Everything else (audience, keywords, brief,
+// location, scrape targets) is set on the campaign page the user lands on next —
+// one editor, no duplicate form here.
 function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 0 }) {
-  const [form, setForm] = useState({
-    name: initialName, brand: '', market: 'HK', campaign_type: 'gifted',
-    start_date: '', posting_deadline: '', hashtags: '', mention_handles: '',
-  })
+  const [name, setName] = useState(initialName)
+  const [brand, setBrand] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -71,28 +70,14 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, saving])
 
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-
   const submit = async () => {
     setError(null)
-    if (!form.name.trim()) return setError('Campaign name is required')
-    if (!form.brand.trim()) return setError('Brand is required')
-    if (!form.posting_deadline) return setError('Posting deadline is required')
-    if (form.start_date && form.start_date > form.posting_deadline) {
-      return setError('Start date is after the posting deadline')
-    }
+    if (!name.trim()) return setError('Campaign name is required')
+    if (!brand.trim()) return setError('Pick a brand')
     setSaving(true)
     try {
-      const created = await createCampaign({
-        name: form.name,
-        brand: form.brand,
-        market: form.market,
-        campaign_type: form.campaign_type,
-        start_date: form.start_date || null,
-        posting_deadline: form.posting_deadline,
-        hashtags: parseTokens(form.hashtags, 'hashtag'),
-        mention_handles: parseTokens(form.mention_handles, 'handle'),
-      })
+      const b = await getOrCreateBrand(brand.trim())
+      const created = await createCampaign({ name: name.trim(), brand: b.name, brand_id: b.id })
       onCreated(created)
     } catch (e) {
       setError(e.message)
@@ -104,18 +89,13 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
   const labelCls = 'block text-[10px] font-mono text-faint uppercase tracking-[.14em] mb-1.5'
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
-      onClick={() => !saving && onClose()}
-    >
-      <div
-        className="w-full max-w-[520px] max-h-[88vh] overflow-y-auto bg-white rounded-[16px] shadow-xl p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
+      onClick={() => !saving && onClose()}>
+      <div className="w-full max-w-[460px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-5">
           <div>
             <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">New campaign</p>
-            <h2 className="text-[18px] font-semibold text-ink">Create a seeding campaign</h2>
+            <h2 className="text-[18px] font-semibold text-ink">Create a campaign</h2>
             {seededCount > 0 && (
               <p className="text-[12px] text-sage mt-1">
                 {seededCount} approved KOL{seededCount === 1 ? '' : 's'} from this run will be attached automatically.
@@ -130,51 +110,19 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
         <div className="space-y-4">
           <div>
             <label className={labelCls}>Name</label>
-            <input className={inputCls} value={form.name} placeholder="LILYEVE TW Seeding Wave 2"
-              onChange={(e) => set('name', e.target.value)} autoFocus />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Brand</label>
-              <input className={inputCls} value={form.brand} placeholder="LILYEVE"
-                onChange={(e) => set('brand', e.target.value)} />
-            </div>
-            <div>
-              <label className={labelCls}>Market</label>
-              <select className={inputCls} value={form.market} onChange={(e) => set('market', e.target.value)}>
-                {MARKETS.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Type</label>
-              <select className={inputCls} value={form.campaign_type} onChange={(e) => set('campaign_type', e.target.value)}>
-                {CAMPAIGN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Start date <span className="text-faint/60 normal-case">(optional)</span></label>
-              <input type="date" className={inputCls} value={form.start_date} onChange={(e) => set('start_date', e.target.value)} />
-            </div>
+            <input className={inputCls} value={name} placeholder="HK Autumn Repair"
+              onChange={(e) => setName(e.target.value)} autoFocus />
           </div>
           <div>
-            <label className={labelCls}>Posting deadline</label>
-            <input type="date" className={inputCls} value={form.posting_deadline} onChange={(e) => set('posting_deadline', e.target.value)} />
-            <p className="text-[11px] text-faint mt-1">Default deadline for every KOL. Can be overridden per-KOL later.</p>
+            <label className={labelCls}>Brand</label>
+            <select className={inputCls} value={brand} onChange={(e) => setBrand(e.target.value)}>
+              <option value="">Select a brand…</option>
+              {BRAND_CATALOG.map((b) => <option key={b.id} value={b.name}>{b.name}</option>)}
+            </select>
           </div>
-          <div>
-            <label className={labelCls}>Mention handles <span className="text-faint/60 normal-case">— post detection signal</span></label>
-            <input className={inputCls} value={form.mention_handles} placeholder="lilyeve_tw, markato.hk"
-              onChange={(e) => set('mention_handles', e.target.value)} />
-            <p className="text-[11px] text-faint mt-1">Comma or space separated. @ optional.</p>
-          </div>
-          <div>
-            <label className={labelCls}>Hashtags <span className="text-faint/60 normal-case">— post detection signal</span></label>
-            <input className={inputCls} value={form.hashtags} placeholder="lilyevexmarkato, kbeauty"
-              onChange={(e) => set('hashtags', e.target.value)} />
-            <p className="text-[11px] text-faint mt-1">Comma or space separated. # optional.</p>
-          </div>
+          <p className="text-[12px] text-faint">
+            You'll set the audience, keywords, brief, location and Instagram/Threads scrape targets on the next screen.
+          </p>
         </div>
 
         {error && (
@@ -189,7 +137,7 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
           <button onClick={submit} disabled={saving}
             className="flex items-center gap-2 px-4 py-2 rounded-[10px] bg-ink text-white text-[13px] font-medium hover:bg-ink/80 transition-colors disabled:opacity-60">
             {saving && <Loader2 size={13} className="animate-spin" />}
-            {saving ? 'Creating…' : 'Create campaign'}
+            {saving ? 'Creating…' : 'Create & set up'}
           </button>
         </div>
       </div>
@@ -334,6 +282,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                 <th className="px-3 py-3 font-normal">Brand</th>
                 <th className="px-3 py-3 font-normal">Market</th>
                 <th className="px-3 py-3 font-normal">Deadline</th>
+                <th className="px-3 py-3 font-normal text-right">Sessions</th>
                 <th className="px-3 py-3 font-normal text-right">KOLs</th>
                 <th className="px-3 py-3 font-normal text-right">Posted</th>
                 <th className="px-3 py-3 font-normal text-right">Overdue</th>
@@ -352,6 +301,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                     <td className="px-3 py-2.5 text-body">{c.brand}</td>
                     <td className="px-3 py-2.5 text-body font-mono">{c.market}</td>
                     <td className="px-3 py-2.5 text-body font-mono whitespace-nowrap">{formatDate(c.posting_deadline)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-body">{c.sessionCount || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-body">{m.total || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-sage">{m.posted || '—'}</td>
                     <td className="px-3 py-2.5 text-right font-mono text-rose/80">{m.overdue || '—'}</td>
@@ -385,7 +335,13 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                       }`}>{c.status}</span>
                     </div>
                     <p className="text-[11px] text-faint font-mono">
-                      {c.brand} · {c.market} · {c.campaign_type} · deadline {formatDate(c.posting_deadline)}
+                      {[
+                        c.brand,
+                        c.market,
+                        c.campaign_type,
+                        c.posting_deadline && `deadline ${formatDate(c.posting_deadline)}`,
+                        `${c.sessionCount || 0} session${c.sessionCount === 1 ? '' : 's'}`,
+                      ].filter(Boolean).join(' · ')}
                     </p>
                     <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                       {total === 0 && <span className="text-[11px] font-mono text-faint">no KOLs attached</span>}

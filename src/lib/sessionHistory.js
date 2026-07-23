@@ -4,9 +4,10 @@ const LOCAL_KEY = 'kol_session_history'
 
 // ── Supabase-backed session history (shared across all users) ──────────────
 
-export async function saveSession({ fileNames, config, results, influencers }) {
+export async function saveSession({ fileNames, config, results, influencers, campaignId = null }) {
   const session = {
     id: Date.now(),
+    campaign_id: campaignId || null,
     file_names: fileNames || [],
     account_count: results.length,
     config,
@@ -53,12 +54,25 @@ export async function loadHistory() {
   if (supabase) {
     const { data, error } = await supabase
       .from('sessions')
-      .select('id, file_names, account_count, config, created_at')
+      .select('id, campaign_id, file_names, account_count, config, created_at')
       .order('created_at', { ascending: false })
     if (error) throw error
     return (data || []).map(normalizeRow)
   }
   return loadLocalHistory()
+}
+
+// Sessions belonging to one campaign, newest first — for the Campaign detail's
+// "Seeder sessions" list. Light select (no results/influencers blobs).
+export async function listSessionsForCampaign(campaignId) {
+  if (!supabase || !campaignId) return []
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('id, campaign_id, file_names, account_count, config, created_at')
+    .eq('campaign_id', campaignId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map(normalizeRow)
 }
 
 export async function loadSessionFull(id) {
@@ -109,6 +123,7 @@ export async function deleteSession(id) {
 function normalizeRow(row) {
   return {
     id: row.id,
+    campaignId: row.campaign_id ?? null,
     date: row.created_at || new Date(row.id).toISOString(),
     fileNames: row.file_names || [],
     accountCount: row.account_count || 0,

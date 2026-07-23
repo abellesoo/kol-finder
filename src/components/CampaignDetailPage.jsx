@@ -3,7 +3,7 @@ import {
   Loader2, ArrowLeft, ExternalLink, UserPlus, X, RefreshCw, Trash2,
   Truck, CalendarClock, Search, ScanLine, CheckCircle2, Circle, Copy, Check,
   MessageSquarePlus, Info, LayoutList, Table2, ChevronDown, FileSpreadsheet,
-  MapPin,
+  MapPin, Plus, ChevronRight, Pencil, Sparkles,
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
@@ -12,13 +12,21 @@ import {
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
   tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
-  getScoringByHandle, buildCampaignSheetValues,
+  getScoringByHandle, buildCampaignSheetValues, updateCampaignSetup,
+  getBrandById, updateBrandFacts,
 } from '../lib/campaigns'
-import { runVerification, draftNudge, syncCampaignSheet } from '../lib/apifyApi'
+import { listSessionsForCampaign } from '../lib/sessionHistory'
+import { BRAND_CATALOG } from '../lib/brandCatalog'
+import { assembleBrief, briefToFields } from '../lib/brief'
+import { runVerification, draftNudge, syncCampaignSheet, parseBrief } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
+
+const RESULT_LIMITS = [100, 200, 500, 1000]
+// Match a campaign's brand name to a BRAND_CATALOG entry (casing/punctuation).
+const normBrand = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 function formatDate(isoStr) {
   if (!isoStr) return '—'
@@ -661,10 +669,332 @@ function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTra
   )
 }
 
-export default function CampaignDetailPage({ campaignId, onBack }) {
+// A campaign's Seeder sessions — the runs grouped under it. Opening one loads it
+// into the Seeder; "New session" starts a fresh run pre-filled from the campaign.
+function SessionsPanel({ sessions, onOpenSession, onNewSession }) {
+  return (
+    <div className="mb-5 px-5 py-4 bg-surface border border-card-edge rounded-[14px]">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[14px] font-semibold text-ink">
+          Seeder sessions <span className="text-faint font-normal">· {sessions.length}</span>
+        </h3>
+        <button onClick={onNewSession}
+          className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink hover:text-accent transition-colors">
+          <Plus size={14} /> New session
+        </button>
+      </div>
+      <p className="text-[11.5px] text-faint mb-3">
+        Each run under this campaign — all share the config above; only the scrape depth changes per run.
+      </p>
+      {sessions.length === 0 ? (
+        <p className="text-[12.5px] text-muted">
+          No sessions yet —{' '}
+          <button onClick={onNewSession} className="underline underline-offset-2 hover:text-ink">start one</button>.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {sessions.map((s) => (
+            <button key={s.id} onClick={() => onOpenSession(s.id)}
+              className="w-full flex items-center gap-3 px-3.5 py-2.5 bg-white border border-card-edge rounded-[11px] hover:border-ink transition-colors text-left">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-ink truncate">
+                  {s.config?.sessionTitle || (s.fileNames?.length ? s.fileNames.join(', ') : 'Seeding run')}
+                </p>
+                <p className="text-[11px] text-faint">{formatDate(s.date)}</p>
+              </div>
+              <span className="text-[12px] font-mono text-body flex-shrink-0">{s.accountCount} accounts</span>
+              <ChevronRight size={15} className="text-faint flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The single editor for a campaign: scoring config (audience / in-niche /
+// out-niche / brief / location) + the Instagram/Threads scrape targets + default
+// max-results. Shared by every session under the campaign. A fresh campaign
+// opens straight into edit mode. Brand → niches + scoring formula are derived
+// from the fixed catalog on save, so there's no manual niche picker.
+function toSetupForm(s1, s2) {
+  return {
+    targetAudience: s2.targetAudience || '',
+    targetKeywords: s2.targetKeywords || '',
+    excludeKeywords: s2.excludeKeywords || '',
+    locationTarget: s2.locationTarget || 'Hong Kong',
+    instagram: s1.platforms?.instagram ?? true,
+    threads: s1.platforms?.threads ?? false,
+    scrapeInput: s1.scrapeInput || '',
+    painpointInput: s1.painpointInput || '',
+    genreInput: s1.genreInput || '',
+    resultsLimit: s1.resultsLimit || 200,
+  }
+}
+
+// Seed the one-box brief from brand facts (shared) + the campaign's saved brief
+// bits, in the labelled format 自動整理 produces.
+function briefSeed(brand, s2, brandName) {
+  return assembleBrief({
+    brandName: brandName || '',
+    brandBackground: brand?.background || '',
+    products: brand?.products || [],
+    newProduct: s2?.newProduct || '',
+    collabFormat: s2?.collabFormat || '',
+    briefNotes: s2?.briefNotes || '',
+  })
+}
+
+function SetupTokens({ text }) {
+  const parts = String(text || '').split(/[\n,]+/).map((x) => x.trim()).filter(Boolean)
+  if (!parts.length) return <span className="text-faint">—</span>
+  return <div className="flex flex-wrap gap-1.5">{parts.map((p, i) => <span key={i} className="tag">{p}</span>)}</div>
+}
+function SetupKV({ label, children }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <p className="font-mono text-[9px] tracking-[.1em] uppercase text-faint mb-1">{label}</p>
+      <div className="text-[13px] text-ink">{children ?? <span className="text-faint">—</span>}</div>
+    </div>
+  )
+}
+
+function CampaignSetupPanel({ campaign, onSaved }) {
+  const s1 = campaign.default_step1 || {}
+  const s2 = campaign.default_step2 || {}
+  const hasSetup = Object.keys(s1).length > 0 || Object.keys(s2).length > 0
+  const [editing, setEditing] = useState(!hasSetup) // fresh campaign opens ready to fill
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [form, setForm] = useState(() => toSetupForm(s1, s2))
+  const [brandFacts, setBrandFacts] = useState(null)
+  const [brief, setBrief] = useState('')
+  const [tidying, setTidying] = useState(false)
+  const [tidyErr, setTidyErr] = useState('')
+
+  // Load brand facts (background/products, shared across the brand's campaigns)
+  // so the brief box assembles from them + the campaign's saved brief bits.
+  useEffect(() => {
+    let alive = true
+    const seed = (b) => { if (alive) { setBrandFacts(b || {}); setBrief(briefSeed(b, s2, campaign.brand)) } }
+    if (!campaign.brand_id) { seed({}); return }
+    getBrandById(campaign.brand_id).then(seed).catch(() => seed({}))
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign.id])
+
+  const startEdit = () => {
+    setForm(toSetupForm(s1, s2))
+    setBrief(briefSeed(brandFacts || {}, s2, campaign.brand))
+    setErr(null); setTidyErr(''); setEditing(true)
+  }
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  // 自動整理 — DeepSeek rewrites the freeform brief into the labelled format.
+  const tidy = async () => {
+    if (!brief.trim()) return
+    setTidying(true); setTidyErr('')
+    try {
+      const out = assembleBrief(await parseBrief(brief))
+      if (!out.trim()) throw new Error('DeepSeek 讀唔到呢份 brief — 檢查下內容再試')
+      setBrief(out)
+    } catch (e) {
+      setTidyErr(e.message || 'Could not tidy the brief')
+    } finally {
+      setTidying(false)
+    }
+  }
+
+  const save = async () => {
+    setBusy(true); setErr(null)
+    try {
+      // Brand drives niches + scoring formula from the fixed catalog — no manual
+      // niche picker; scoring still rewards the right vertical.
+      const cat = BRAND_CATALOG.find((b) => normBrand(b.name) === normBrand(campaign.brand))
+      const derived = cat ? { brandId: cat.id, niches: cat.niches, scoringProfile: cat.scoringProfile } : {}
+      // Decompose the brief: brand facts (background/products) go to the brand
+      // (shared); campaign-specific bits stay on the campaign.
+      const bf = briefToFields(brief)
+      if (campaign.brand_id) {
+        await updateBrandFacts(campaign.brand_id, { background: bf.brandBackground, products: bf.products })
+      }
+      const updated = await updateCampaignSetup(campaign.id, {
+        default_step2: {
+          ...s2, ...derived,
+          targetAudience: form.targetAudience,
+          targetKeywords: form.targetKeywords,
+          excludeKeywords: form.excludeKeywords,
+          newProduct: bf.newProduct,
+          collabFormat: bf.collabFormat,
+          briefNotes: bf.briefNotes,
+          locationTarget: form.locationTarget,
+        },
+        default_step1: {
+          ...s1,
+          platforms: { instagram: form.instagram, threads: form.threads },
+          scrapeInput: form.scrapeInput,
+          painpointInput: form.painpointInput,
+          genreInput: form.genreInput,
+          resultsLimit: form.resultsLimit,
+        },
+      })
+      onSaved(updated)
+      setEditing(false)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full px-2.5 py-2 border border-mist rounded-[9px] text-[12.5px] text-ink bg-white focus:outline-none focus:border-ink/40'
+  const lblCls = 'font-mono text-[9px] tracking-[.1em] uppercase text-faint'
+
+  return (
+    <div className="mb-6 px-5 py-4 bg-surface border border-card-edge rounded-[14px]">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-[14px] font-semibold text-ink">Campaign config</h3>
+        {!editing && (
+          <button onClick={startEdit}
+            className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink hover:text-accent transition-colors">
+            <Pencil size={13} /> Edit
+          </button>
+        )}
+      </div>
+      <p className="text-[11.5px] text-faint mb-3">
+        The scoring brief and scrape targets for this campaign — <span className="font-medium text-body">shared by every session</span>.
+        Edit here and it changes everywhere.
+      </p>
+
+      {!editing ? (
+        <div className="grid sm:grid-cols-2 gap-x-6">
+          <div>
+            <SetupKV label="Target audience">{s2.targetAudience}</SetupKV>
+            <SetupKV label="In-niche keywords"><SetupTokens text={s2.targetKeywords} /></SetupKV>
+            <SetupKV label="Out-niche keywords"><SetupTokens text={s2.excludeKeywords} /></SetupKV>
+            <SetupKV label="Campaign brief">
+              {brief.trim()
+                ? <pre className="whitespace-pre-wrap font-sans text-[12.5px] text-body leading-relaxed">{brief}</pre>
+                : undefined}
+            </SetupKV>
+            <SetupKV label="Target location">{s2.locationTarget}</SetupKV>
+          </div>
+          <div>
+            <SetupKV label="Scrape — platforms">
+              <div className="flex gap-1.5">
+                {s1.platforms?.instagram && <span className="tag tag-video">Instagram</span>}
+                {s1.platforms?.threads && <span className="tag tag-video">Threads</span>}
+                {!s1.platforms?.instagram && !s1.platforms?.threads && <span className="text-faint">—</span>}
+              </div>
+            </SetupKV>
+            {s1.platforms?.instagram && <SetupKV label="Instagram — targets"><SetupTokens text={s1.scrapeInput} /></SetupKV>}
+            {s1.platforms?.threads && (
+              <SetupKV label="Threads — keywords">
+                <SetupTokens text={[s1.painpointInput, s1.genreInput].filter(Boolean).join('\n')} />
+              </SetupKV>
+            )}
+            <SetupKV label="Default max results">{s1.resultsLimit || 200}</SetupKV>
+          </div>
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-2.5">
+            <div>
+              <label className={lblCls}>Target audience</label>
+              <textarea rows={2} className={inputCls} value={form.targetAudience} onChange={(e) => set('targetAudience', e.target.value)} />
+            </div>
+            <div>
+              <label className={lblCls}>In-niche keywords <span className="text-sage normal-case tracking-normal">· reward</span></label>
+              <input className={inputCls} value={form.targetKeywords} onChange={(e) => set('targetKeywords', e.target.value)} placeholder="comma separated" />
+            </div>
+            <div>
+              <label className={lblCls}>Out-niche keywords <span className="text-rose normal-case tracking-normal">· penalise</span></label>
+              <input className={inputCls} value={form.excludeKeywords} onChange={(e) => set('excludeKeywords', e.target.value)} placeholder="comma separated" />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-0.5">
+                <label className={lblCls}>Campaign brief</label>
+                <button type="button" onClick={tidy} disabled={tidying || !brief.trim()}
+                  className="flex items-center gap-1 text-[11px] text-accent hover:text-ink disabled:opacity-40 transition-colors">
+                  {tidying ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />} 自動整理
+                </button>
+              </div>
+              <textarea rows={5} className={inputCls} value={brief} onChange={(e) => setBrief(e.target.value)}
+                placeholder={'品牌背景：…\n新品：…\n合作形式：…\n產品詳情：\n【產品名】\n・賣點'} />
+              {tidyErr && <p className="text-[11px] text-rose mt-1">{tidyErr}</p>}
+            </div>
+            <div>
+              <label className={lblCls}>Target location</label>
+              <input className={inputCls} value={form.locationTarget} onChange={(e) => set('locationTarget', e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <span className={lblCls}>Platforms</span>
+              {[['instagram', 'Instagram'], ['threads', 'Threads']].map(([k, lbl]) => (
+                <button key={k} type="button" onClick={() => set(k, !form[k])}
+                  className={`px-2.5 py-1 rounded-[8px] text-[11px] border transition-colors ${
+                    form[k] ? 'bg-ink text-white border-ink' : 'border-mist text-muted hover:border-ink/30'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            {form.instagram && (
+              <div>
+                <label className={lblCls}>Instagram — one entry per line</label>
+                <textarea rows={3} className={inputCls} value={form.scrapeInput} onChange={(e) => set('scrapeInput', e.target.value)}
+                  placeholder={'https://www.instagram.com/brand/tagged/\n#skincare'} />
+              </div>
+            )}
+            {form.threads && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={lblCls}>Pain-point</label>
+                  <textarea rows={3} className={inputCls} value={form.painpointInput} onChange={(e) => set('painpointInput', e.target.value)} />
+                </div>
+                <div>
+                  <label className={lblCls}>Content-genre</label>
+                  <textarea rows={3} className={inputCls} value={form.genreInput} onChange={(e) => set('genreInput', e.target.value)} />
+                </div>
+              </div>
+            )}
+            <div>
+              <label className={lblCls}>Default max results</label>
+              <div className="flex gap-1.5 mt-1">
+                {RESULT_LIMITS.map((n) => (
+                  <button key={n} type="button" onClick={() => set('resultsLimit', n)}
+                    className={`px-3 py-1 rounded-[8px] text-[12px] font-mono border transition-all ${
+                      form.resultsLimit === n ? 'bg-ink text-white border-ink' : 'border-mist text-muted hover:border-ink/30'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {err && <p className="sm:col-span-2 text-[11px] text-rose">{err}</p>}
+          <div className="sm:col-span-2 flex items-center justify-end gap-2">
+            {hasSetup && (
+              <button onClick={() => setEditing(false)} disabled={busy}
+                className="px-3.5 py-2 rounded-[9px] text-[12.5px] text-muted hover:text-ink transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+            )}
+            <button onClick={save} disabled={busy}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-[9px] bg-ink text-white text-[12.5px] font-medium hover:bg-ink/80 transition-colors disabled:opacity-50">
+              {busy && <Loader2 size={12} className="animate-spin" />} Save config
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, onNewSession }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [campaign, setCampaign] = useState(null)
+  const [sessions, setSessions] = useState([])
   const [kols, setKols] = useState([])
   const [postsByKol, setPostsByKol] = useState({})
   const [nudgesByKol, setNudgesByKol] = useState({})
@@ -680,8 +1010,13 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
     setLoading(true)
     setError(null)
     try {
-      const [c, ks] = await Promise.all([getCampaign(campaignId), getCampaignKols(campaignId)])
+      const [c, ks, ss] = await Promise.all([
+        getCampaign(campaignId),
+        getCampaignKols(campaignId),
+        listSessionsForCampaign(campaignId),
+      ])
       setCampaign(c)
+      setSessions(ss)
       setKols(ks)
       const ids = ks.map((k) => k.id)
       const [posts, nudges] = await Promise.all([getVerifiedPostsByKol(ids), getNudgesByKol(ids)])
@@ -906,7 +1241,12 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
           </div>
           <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{campaign.name}</h1>
           <p className="text-[13px] text-muted font-mono">
-            {campaign.brand} · {campaign.market} · {campaign.campaign_type} · deadline {formatDate(campaign.posting_deadline)}
+            {[
+              campaign.brand,
+              campaign.market,
+              campaign.campaign_type,
+              campaign.posting_deadline && `deadline ${formatDate(campaign.posting_deadline)}`,
+            ].filter(Boolean).join(' · ')}
           </p>
           {(campaign.mention_handles?.length > 0 || campaign.hashtags?.length > 0) && (
             <div className="flex items-center flex-wrap gap-1.5 mt-3">
@@ -964,6 +1304,13 @@ export default function CampaignDetailPage({ campaignId, onBack }) {
           </button>
         </div>
       </div>
+
+      <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
+      <SessionsPanel
+        sessions={sessions}
+        onOpenSession={(id) => onOpenSession?.(id)}
+        onNewSession={() => onNewSession?.(campaign)}
+      />
 
       {total > 0 && (
         <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mb-6 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">

@@ -36,6 +36,16 @@
   .anim-rise { animation: none; }
 }
 
+/* Indeterminate progress sweep — used while a scrape is running (unknown total). */
+@keyframes indeterminate {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+.anim-indeterminate { animation: indeterminate 1.3s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-indeterminate { animation: none; }
+}
+
 @layer components {
   .score-badge {
     @apply inline-flex items-center justify-center w-[38px] h-[38px] rounded-full font-mono text-[13px] font-semibold leading-none;

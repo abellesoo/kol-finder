@@ -126,7 +126,11 @@ function StepProgress({ current }) {
   )
 }
 
-function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false }, ref) {
+// Normalize a brand name for matching a campaign's brand to a BRAND_CATALOG
+// entry (handles casing + punctuation: "NE:AR" ↔ "near", "BB Lab" ↔ "BB LAB").
+const normBrand = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false, lockedBrandName = '' }, ref) {
   const [sessionTitle, setSessionTitle] = useState('')
   // The operator picks a brand; the brand drives niches + scoring formula. Niches
   // are no longer hand-picked — they come from brandCatalog so the relevancy
@@ -151,6 +155,20 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
     setNiches(brand.niches)
     chooseProfile(brand.scoringProfile)
   }
+
+  // When a campaign is active, its brand drives this step — so the brand picker
+  // is hidden and we derive the catalog brand (niches + formula) from the
+  // campaign's brand name. Only auto-picks when it differs from the current
+  // brandId, so an existing campaign's own saved niches (set via applyConfig)
+  // aren't clobbered by the catalog defaults.
+  const lockedCatalogBrand = lockedBrandName
+    ? BRAND_CATALOG.find((b) => normBrand(b.name) === normBrand(lockedBrandName)) || null
+    : null
+  const brandLocked = !!lockedCatalogBrand
+  useEffect(() => {
+    if (lockedCatalogBrand && brandId !== lockedCatalogBrand.id) chooseBrand(lockedCatalogBrand.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedCatalogBrand?.id])
   // Per-campaign relevancy vocabulary. The six fixed niches can't express a
   // specific product (減脂 protein shake, etc.), so the operator types the
   // in-niche signals to reward and the wrong-vertical signals to penalise.
@@ -392,26 +410,35 @@ function ConfigStep({ fileNames = [], influencerCount, onStart, embedded = false
           <label className="block font-mono text-[10px] tracking-[.14em] text-faint uppercase mb-3">
             Brand
             <span className="ml-2 normal-case text-faint/70 tracking-normal font-sans text-[11px]">
-              sets the target niches and scoring formula for this run
+              {brandLocked
+                ? 'set by the campaign — drives the target niches and scoring formula'
+                : 'sets the target niches and scoring formula for this run'}
             </span>
           </label>
-          <div className="flex flex-wrap gap-2">
-            {BRAND_CATALOG.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => chooseBrand(b.id)}
-                className={`px-3 py-1.5 rounded-full text-[13px] border transition-all
-                  ${brandId === b.id
-                    ? 'bg-ink border-ink text-white'
-                    : 'bg-white border-[#E1DBCD] text-[#6C6555] hover:border-ink/30'
-                  }`}
-                title={b.tag}
-              >
-                {b.name}
-              </button>
-            ))}
-          </div>
+          {brandLocked ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-ink text-white text-[13px]">
+              {lockedCatalogBrand.name}
+              <span className="text-white/60 text-[11px]">from campaign</span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {BRAND_CATALOG.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => chooseBrand(b.id)}
+                  className={`px-3 py-1.5 rounded-full text-[13px] border transition-all
+                    ${brandId === b.id
+                      ? 'bg-ink border-ink text-white'
+                      : 'bg-white border-[#E1DBCD] text-[#6C6555] hover:border-ink/30'
+                    }`}
+                  title={b.tag}
+                >
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          )}
           {/* The niches the picked brand maps to — shown read-only for
               transparency; the relevancy scorer uses exactly these. */}
           {niches.length > 0 && (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket } from 'lucide-react'
+import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket, BookMarked } from 'lucide-react'
 import CombinedStep from './components/CombinedStep'
 import ResultsStep from './components/ResultsStep'
 import DashboardPage from './components/DashboardPage'
@@ -10,12 +10,15 @@ import ReviewQueuePage from './components/ReviewQueuePage'
 import ReadyToSendPage from './components/ReadyToSendPage'
 import CampaignsPage from './components/CampaignsPage'
 import CampaignDetailPage from './components/CampaignDetailPage'
+import VaultPage from './components/VaultPage'
 import LoginPage from './components/LoginPage'
 import TeamPage from './components/TeamPage'
 import { supabase } from './lib/supabase'
 import { parseApifyXlsx, aggregatePostItems, aggregateThreadsPostItems, classifyRegion } from './lib/parseXlsx'
 import { scoreInfluencers } from './lib/scoreInfluencers'
 import { saveSession, loadSessionFull } from './lib/sessionHistory'
+import { getCampaign, getBrandById, campaignToForm } from './lib/campaigns'
+import { runSeederScrape } from './lib/seederScrape'
 import { readUrlState, popStashedDeepLink, syncUrl } from './lib/urlState'
 import StepProgress from './components/core/StepProgress'
 
@@ -25,6 +28,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
+      { id: 'vault', label: 'Creator Vault', icon: BookMarked },
       { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
     ],
   },
@@ -184,6 +188,7 @@ function MainApp({ user, role, onSignOut }) {
   const [influencers, setInfluencers] = useState([])
   const [results, setResults] = useState([])
   const [config, setConfig] = useState(null)
+  const [activeCampaign, setActiveCampaign] = useState(null) // the campaign this seeder run belongs to
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
   const [currentSessionId, setCurrentSessionId] = useState(initialUrlState.sessionId || null)
   const startingRef = useRef(false)
@@ -258,6 +263,12 @@ function MainApp({ user, role, onSignOut }) {
     setCurrentSessionId(session.id)
     setStep(view === 'setup' ? 'config' : 'results')
     setMode('seeder')
+    // Restore the campaign this session belongs to, so a re-score stays grouped.
+    if (session.campaignId) {
+      getCampaign(session.campaignId).then(setActiveCampaign).catch(() => setActiveCampaign(null))
+    } else {
+      setActiveCampaign(null)
+    }
   }
 
   function deduplicateInfluencers(batches) {
@@ -283,19 +294,9 @@ function MainApp({ user, role, onSignOut }) {
     return Object.values(merged).sort((a, b) => b.totalEngagement - a.totalEngagement)
   }
 
-  const handleFiles = async (files) => {
-    setFileNames(files.map((f) => f.name))
-    try {
-      const allParsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
-      setInfluencers(deduplicateInfluencers(allParsed))
-      setCurrentSessionId(null) // new data — the session param in the URL no longer applies
-      setStep('config')
-    } catch (err) {
-      alert('Failed to parse file(s): ' + err.message)
-    }
-  }
-
-  const handleScrapedItems = (brandedResults) => {
+  // Aggregate Apify branded scrape results into a deduped influencer list —
+  // used by the campaign run flow.
+  function aggregateBranded(brandedResults) {
     const influencerLists = brandedResults.map(({ items, brand, platform, trackByTerm, enrichByUser }) => {
       // Threads batches carry platform:'threads' + a term→track map + a
       // username→follower/bio enrichment map; they go through the Threads-shaped
@@ -306,34 +307,14 @@ function MainApp({ user, role, onSignOut }) {
         ? all.filter((inf) => inf.username.toLowerCase() !== brand.toLowerCase())
         : all
     })
-    const merged = deduplicateInfluencers(influencerLists)
-    if (merged.length === 0) {
-      alert(
-        "No KOLs found in the scraped data.\n\nThis usually means the tagged page returned no posts from other users, or the account doesn't exist. Try a different URL or check the account on Instagram first."
-      )
-      return
-    }
-    setFileNames(brandedResults.map(({ brand }) => brand))
-    setInfluencers(merged)
-    setCurrentSessionId(null) // new data — the session param in the URL no longer applies
-    setStep('config')
+    return deduplicateInfluencers(influencerLists)
   }
 
-  const handleStart = async (cfg) => {
-    // Guard against a double-click starting two scoring runs (and two sessions).
-    if (startingRef.current) return
-    startingRef.current = true
-    setConfig(cfg)
-    setStep('scoring')
-    setProgress({ done: 0, total: influencers.length, error: null })
-
-    // Step-2 hard filters applied before scoring:
-    //  • min avg likes
-    //  • target location — drop accounts whose detected region is a DIFFERENT
-    //    known region (e.g. Taiwan when Hong Kong is chosen). Accounts whose
-    //    location can't be classified are kept, so we don't silently lose good
-    //    candidates the scraper couldn't geo-tag.
-    const toScore = influencers.filter((inf) => {
+  // Score a set of influencers with a config, then save the session. Shared by
+  // the campaign run flow (scrape + upload paths).
+  const runScoringAndSave = async (allInfluencers, cfg, campaignId) => {
+    setProgress({ phase: 'scoring', done: 0, total: allInfluencers.length, error: null, note: '' })
+    const toScore = allInfluencers.filter((inf) => {
       if (inf.avgLikes < (cfg.minEngagement || 0)) return false
       if (cfg.locationTarget) {
         const region = classifyRegion(inf.accountLocation)
@@ -342,21 +323,81 @@ function MainApp({ user, role, onSignOut }) {
       return true
     })
     setProgress((p) => ({ ...p, total: toScore.length }))
+    const allResults = []
+    const batchSize = 5
+    for (let i = 0; i < toScore.length; i += batchSize) {
+      const batch = toScore.slice(i, i + batchSize)
+      const scored = await scoreInfluencers(batch, cfg)
+      allResults.push(...scored)
+      setProgress((p) => ({ ...p, done: Math.min(i + batchSize, toScore.length) }))
+    }
+    setResults(allResults)
+    setConfig(cfg)
+    setStep('results')
+    const id = await saveSession({ fileNames, config: cfg, results: allResults, influencers: allInfluencers, campaignId })
+    setCurrentSessionId(id)
+  }
 
+  // Map a campaign's saved scrape targets (default_step1) to runSeederScrape args.
+  function campaignScrapeParams(campaign, resultsLimit) {
+    const s1 = campaign.default_step1 || {}
+    return {
+      platforms: s1.platforms || { instagram: true, threads: false },
+      scrapeInput: s1.scrapeInput || '',
+      painpointInput: s1.painpointInput || '',
+      genreInput: s1.genreInput || '',
+      resultsLimit: resultsLimit || s1.resultsLimit || 200,
+    }
+  }
+
+  // The one-button campaign run: get data (scrape the campaign's targets, or use
+  // an uploaded export), then score with the campaign's shared config, then save.
+  const handleRunCampaign = async ({ mode = 'scrape', files = [], resultsLimit = 200 } = {}) => {
+    if (startingRef.current || !activeCampaign) return
+    startingRef.current = true
+    setMode('seeder')
+    setStep('scoring')
+    setProgress({ phase: 'scraping', done: 0, total: 0, error: null, note: '' })
     try {
-      const allResults = []
-      const batchSize = 5
-      for (let i = 0; i < toScore.length; i += batchSize) {
-        const batch = toScore.slice(i, i + batchSize)
-        const scored = await scoreInfluencers(batch, cfg)
-        allResults.push(...scored)
-        setProgress((p) => ({ ...p, done: Math.min(i + batchSize, toScore.length) }))
+      let inf = []
+      let names = []
+      if (mode === 'upload') {
+        setProgress((p) => ({ ...p, note: 'Parsing files…' }))
+        const parsed = await Promise.all(files.map((f) => parseApifyXlsx(f)))
+        inf = deduplicateInfluencers(parsed)
+        names = files.map((f) => f.name)
+      } else {
+        const { brandedResults, failedBrands, notices } = await runSeederScrape(
+          campaignScrapeParams(activeCampaign, resultsLimit),
+          { onProgress: (text) => setProgress((p) => ({ ...p, note: text })) }
+        )
+        if (brandedResults.length === 0) {
+          setProgress((p) => ({ ...p, error: failedBrands.length ? `Scrape failed for ${failedBrands.join(', ')}.` : 'No results were scraped.' }))
+          return
+        }
+        if (failedBrands.length) alert(`Some targets failed and were skipped: ${failedBrands.join(', ')}.\nContinuing with what succeeded.`)
+        if (notices.length) alert(notices.join('\n'))
+        inf = aggregateBranded(brandedResults)
+        names = brandedResults.map(({ brand }) => brand)
       }
-      setResults(allResults)
-      setStep('results')
-      saveSession({ fileNames, config: cfg, results: allResults, influencers })
-        .then((id) => setCurrentSessionId(id))
-        .catch(console.error)
+      if (inf.length === 0) {
+        setProgress((p) => ({ ...p, error: 'No KOLs found in the data. Try different targets or upload an export.' }))
+        return
+      }
+      setFileNames(names)
+      setInfluencers(inf)
+      setCurrentSessionId(null)
+
+      // Build the scoring config from the campaign (shared) + brand facts.
+      let brand = null
+      try {
+        if (activeCampaign.brand_id) brand = await getBrandById(activeCampaign.brand_id)
+      } catch (e) {
+        console.error('Failed to load brand facts', e)
+      }
+      const cfg = { ...campaignToForm(brand, activeCampaign), sessionTitle: activeCampaign.name, resultsLimit }
+
+      await runScoringAndSave(inf, cfg, activeCampaign.id)
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
     } finally {
@@ -405,6 +446,35 @@ function MainApp({ user, role, onSignOut }) {
     setMode('campaign_detail')
   }
 
+  // Open a campaign's existing session in the Seeder (from the campaign detail).
+  const handleOpenSessionFromCampaign = (sessionId) => {
+    loadSessionFull(sessionId)
+      .then((session) => session && handleLoadSeederSession(session, 'results'))
+      .catch(console.error)
+  }
+
+  // Start a fresh session under a campaign: clear the seeder and land on the Run
+  // screen with this campaign active (it already holds config + scrape targets).
+  const handleNewSessionForCampaign = (campaign) => {
+    setActiveCampaign(campaign)
+    setInfluencers([])
+    setResults([])
+    setFileNames([])
+    setConfig(null)
+    setCurrentSessionId(null)
+    setStep('upload')
+    setOpenCampaignId(null)
+    setMode('seeder')
+  }
+
+  // A brand-new campaign (created from the Step 1 picker) opens its page so the
+  // user sets it up (config + scrape targets) before running.
+  const handleNewCampaign = (campaign) => {
+    setActiveCampaign(campaign)
+    setOpenCampaignId(campaign.id)
+    setMode('campaign_detail')
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
@@ -433,8 +503,11 @@ function MainApp({ user, role, onSignOut }) {
           <CampaignDetailPage
             campaignId={openCampaignId}
             onBack={() => { setMode('campaigns'); setOpenCampaignId(null) }}
+            onOpenSession={handleOpenSessionFromCampaign}
+            onNewSession={handleNewSessionForCampaign}
           />
         )}
+        {mode === 'vault' && <VaultPage onNavigate={handleNav} />}
         {mode === 'history' && (
           <HistoryPage onLoadSeederSession={handleLoadSeederSession} onNavigate={handleNav} />
         )}
@@ -448,18 +521,30 @@ function MainApp({ user, role, onSignOut }) {
                   steps={[{ num: 1, label: 'Set up' }, { num: 2, label: 'Results' }]}
                 />
                 <div className="max-w-sm">
-                  <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-6">Scoring accounts</p>
+                  <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-6">
+                    {progress.phase === 'scraping' ? 'Scraping accounts' : 'Scoring accounts'}
+                  </p>
                   {progress.error ? (
                     <div className="text-rose text-sm mb-4">
                       <p className="font-medium mb-1">Error</p>
                       <p className="text-muted text-xs">{progress.error}</p>
                       <button
-                        onClick={() => setStep('config')}
+                        onClick={() => setStep('upload')}
                         className="mt-4 px-4 py-2 bg-ink text-white rounded-[10px] text-sm"
                       >
-                        Back to config
+                        Back to setup
                       </button>
                     </div>
+                  ) : progress.phase === 'scraping' ? (
+                    <>
+                      <div className="w-full h-1.5 bg-mist rounded-full overflow-hidden mb-3">
+                        <div className="h-full w-1/3 bg-ink rounded-full anim-indeterminate" />
+                      </div>
+                      <p className="font-mono text-sm text-muted">{progress.note || 'Starting scrape…'}</p>
+                      <p className="text-xs text-faint mt-1">
+                        Scraping the campaign's targets — this usually takes 1–5 minutes.
+                      </p>
+                    </>
                   ) : (
                     <>
                       <div className="w-full h-1.5 bg-mist rounded-full overflow-hidden mb-3">
@@ -481,11 +566,11 @@ function MainApp({ user, role, onSignOut }) {
             )}
             {(step === 'upload' || step === 'config') && (
               <CombinedStep
-                influencers={influencers}
-                fileNames={fileNames}
-                onFiles={handleFiles}
-                onScrapedItems={handleScrapedItems}
-                onStart={handleStart}
+                activeCampaign={activeCampaign}
+                onSelectCampaign={setActiveCampaign}
+                onNewCampaign={handleNewCampaign}
+                onEditCampaign={handleOpenCampaign}
+                onRunCampaign={handleRunCampaign}
                 onViewResults={results.length > 0 ? () => setStep('results') : null}
               />
             )}

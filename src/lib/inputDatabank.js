@@ -74,6 +74,16 @@ export function presetToScrape(preset) {
   return pick(preset?.step1, STEP1_FIELDS)
 }
 
+// Whitelist a live form's scrape inputs / campaign config down to the fields we
+// persist — reused when writing a campaign's saved defaults so brand facts and
+// stray keys never leak into default_step1/default_step2.
+export function pickScrapeFields(step1) {
+  return pick(step1, STEP1_FIELDS)
+}
+export function pickCampaignFields(step2) {
+  return pick(step2, CAMPAIGN_FIELDS)
+}
+
 // ── Queries ─────────────────────────────────────────────────────────────────
 
 // Brands with their presets nested, newest-touched first at both levels.

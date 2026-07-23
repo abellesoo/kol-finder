@@ -487,9 +487,10 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   })
   const [liveStatus, setLiveStatus] = useState(() => {
     const cache = readCache()
-    const hasCached = results.some(
-      (r) => hasRealData(cache[r.username]?.stats) || r.medianLikes != null || r.medianViews != null || r.medianComments != null
-    )
+    const hasCached = results.some((r) => {
+      const key = r.platform === 'threads' ? `threads:${r.username}` : r.username
+      return hasRealData(cache[key]?.stats) || r.medianLikes != null || r.medianViews != null || r.medianComments != null
+    })
     return hasCached ? 'done' : 'idle'
   })
   const [liveProgress, setLiveProgress] = useState({ done: 0, total: 0 })
@@ -594,12 +595,19 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   // Threads rows re-run profile enrichment (chunked ≤20 handles per actor run).
   // Both persist onto the session so the stats survive reloads.
   const handleFetchLive = useCallback(async (usernames, { force = false } = {}) => {
-    const threadsSet = new Set(results.filter((r) => r.platform === 'threads').map((r) => r.username))
+    // Derive the IG/Threads fetch lists from the actual rows, not from a shared
+    // username set: a handle that exists as BOTH an Instagram and a Threads row
+    // must be fetched on both — the old set test sent it to Threads only, so the
+    // Instagram row never got live stats. Restricted to the passed usernames.
+    const passed = new Set(usernames)
+    const uniq = (arr) => [...new Set(arr)]
     const cache = readCache()
     const now = Date.now()
     const isFresh = (key) => cache[key] && now - cache[key].ts < CACHE_TTL_MS && hasRealData(cache[key].stats)
-    const igToFetch = usernames.filter((u) => !threadsSet.has(u) && (force || !isFresh(u)))
-    const thToFetch = usernames.filter((u) => threadsSet.has(u) && (force || !isFresh(`threads:${u}`)))
+    const igToFetch = uniq(results.filter((r) => r.platform !== 'threads' && passed.has(r.username)).map((r) => r.username))
+      .filter((u) => force || !isFresh(u))
+    const thToFetch = uniq(results.filter((r) => r.platform === 'threads' && passed.has(r.username)).map((r) => r.username))
+      .filter((u) => force || !isFresh(`threads:${u}`))
     const total = igToFetch.length + thToFetch.length
     if (total === 0) { setLiveStatus('done'); return }
     setLiveStatus('loading')

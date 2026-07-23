@@ -145,7 +145,7 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
   )
 }
 
-export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) {
+export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, onCampaignDeleted }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [campaigns, setCampaigns] = useState([])
@@ -247,6 +247,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
     try {
       await deleteCampaign(deleteTarget.id)
       setCampaigns((prev) => prev.filter((c) => c.id !== deleteTarget.id))
+      onCampaignDeleted?.(deleteTarget.id)
       setDeleteTarget(null)
     } catch (e) {
       console.error('Delete campaign failed', e)
@@ -360,10 +361,10 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                       {editingId === c.id ? (
                         <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={renameKeyDown}
+                            onKeyDown={renameKeyDown} onBlur={commitRename}
                             className="min-w-0 flex-1 bg-transparent border-b border-ink/40 outline-none text-ink" />
                           <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={13} /></button>
-                          <button onClick={cancelRename} title="Cancel" className="text-faint hover:text-ink"><X size={13} /></button>
+                          <button onMouseDown={(e) => { e.preventDefault(); cancelRename(e) }} title="Cancel" className="text-faint hover:text-ink"><X size={13} /></button>
                         </span>
                       ) : (
                         <span className="group/name flex items-center gap-1.5">
@@ -405,7 +406,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
       ) : (
         <div className="space-y-3">
           {campaigns.map((c) => {
-            const total = Object.values(c.counts).reduce((a, b) => a + b, 0)
+            const total = Object.values(c.counts || {}).reduce((a, b) => a + b, 0)
             return (
               <div key={c.id}
                 className="border border-card-edge rounded-[14px] px-5 py-4 bg-white hover:border-[#D6CEBD] transition-all">
@@ -415,10 +416,10 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                       {editingId === c.id ? (
                         <span className="flex items-center gap-1.5">
                           <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={renameKeyDown}
+                            onKeyDown={renameKeyDown} onBlur={commitRename}
                             className="font-semibold text-[14px] text-ink bg-transparent border-b border-ink/40 outline-none max-w-[220px]" />
                           <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={14} /></button>
-                          <button onClick={cancelRename} title="Cancel" className="text-faint hover:text-ink"><X size={14} /></button>
+                          <button onMouseDown={(e) => { e.preventDefault(); cancelRename(e) }} title="Cancel" className="text-faint hover:text-ink"><X size={14} /></button>
                         </span>
                       ) : (
                         <span className="group/name flex items-center gap-1.5 min-w-0">
@@ -445,7 +446,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                     <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
                       {total === 0 && <span className="text-[11px] font-mono text-faint">no KOLs attached</span>}
                       {COUNT_ORDER.map(({ key, label, cls }) => (
-                        c.counts[key] ? (
+                        (c.counts || {})[key] ? (
                           <span key={key} className={`text-[11px] font-mono ${cls}`}>{c.counts[key]} {label}</span>
                         ) : null
                       ))}

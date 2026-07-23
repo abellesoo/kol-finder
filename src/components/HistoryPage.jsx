@@ -43,7 +43,7 @@ function formatConfig(config) {
   return parts.join(' · ')
 }
 
-export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
+export default function HistoryPage({ onLoadSeederSession, onNavigate, onSessionDeleted }) {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -144,6 +144,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
     try {
       await deleteSession(id)
       setSessions((prev) => prev.filter((s) => s.id !== id))
+      onSessionDeleted?.(id)
       setDeleteTarget(null)
     } catch (err) {
       console.error('Failed to delete session', err)
@@ -231,6 +232,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
                       value={editingTitle}
                       onChange={(e) => setEditingTitle(e.target.value)}
                       onKeyDown={handleKeyDown}
+                      onBlur={commitEdit}
                       onClick={(e) => e.stopPropagation()}
                       placeholder="Session name…"
                       className="text-[13.5px] font-medium text-ink bg-transparent border-b border-ink/40 outline-none w-full max-w-xs"
@@ -263,7 +265,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate }) {
                         <Check size={14} />
                       </button>
                       <button
-                        onClick={cancelEdit}
+                        onMouseDown={(e) => { e.preventDefault(); cancelEdit(e) }}
                         className="text-faint hover:text-ink transition-colors"
                         title="Cancel"
                       >

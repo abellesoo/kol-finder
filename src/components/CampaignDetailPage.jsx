@@ -297,6 +297,11 @@ function TrackingField({ kol, campaign, onSave }) {
 // data — name + mobile — and the repo is public, so they never go in code).
 function SfSenderModal({ onClose, onSaved }) {
   const [s, setS] = useState(() => getSfSender())
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   const upd = (key) => (e) => setS((prev) => ({ ...prev, [key]: e.target.value }))
   const canSave = !!(s.name.trim() && s.mobile.trim() && s.district.trim() && s.area.trim() && s.address.trim())
   const save = () => onSaved(saveSfSender({
@@ -1185,11 +1190,16 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   }, [load])
 
   const handleConfirmPost = useCallback(async (post, verified) => {
-    const updated = await setHumanVerified(post.id, verified)
-    setPostsByKol((prev) => ({
-      ...prev,
-      [post.campaign_kol_id]: (prev[post.campaign_kol_id] || []).map((p) => (p.id === post.id ? updated : p)),
-    }))
+    try {
+      const updated = await setHumanVerified(post.id, verified)
+      setPostsByKol((prev) => ({
+        ...prev,
+        [post.campaign_kol_id]: (prev[post.campaign_kol_id] || []).map((p) => (p.id === post.id ? updated : p)),
+      }))
+    } catch (e) {
+      console.error('Confirm post failed', e)
+      setToast({ type: 'error', message: e.message || 'Failed to update — please try again.' })
+    }
   }, [])
 
   const handleDraftNudge = useCallback(async (kol) => {
@@ -1263,10 +1273,10 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
           </div>
           {renaming ? (
             <div className="flex items-center gap-2 mb-1">
-              <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={renameKeyDown}
+              <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={renameKeyDown} onBlur={commitRename}
                 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink bg-transparent border-b-2 border-ink/30 outline-none w-full max-w-[560px]" />
               <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70 flex-shrink-0"><Check size={22} /></button>
-              <button onClick={() => setRenaming(false)} title="Cancel" className="text-faint hover:text-ink flex-shrink-0"><X size={22} /></button>
+              <button onMouseDown={(e) => { e.preventDefault(); setRenaming(false) }} title="Cancel" className="text-faint hover:text-ink flex-shrink-0"><X size={22} /></button>
             </div>
           ) : (
             <div className="group/name flex items-center gap-2 mb-1">

@@ -104,7 +104,7 @@ function CampaignPickerModal({ count, onClose, onPick }) {
                 >
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-medium text-ink truncate">{c.name}</p>
-                    <p className="font-mono text-[10.5px] text-faint">{c.brand} · {c.market} · {c.status}</p>
+                    <p className="font-mono text-[10.5px] text-faint">{[c.brand, c.market, c.status].filter(Boolean).join(' · ') || 'no brand set'}</p>
                   </div>
                   {attachingId === c.id
                     ? <Loader2 size={14} className="animate-spin text-faint flex-shrink-0" />
@@ -193,14 +193,19 @@ export default function VaultPage({ onNavigate }) {
     const igRows = selectedRows.filter((r) => (r.platform || 'instagram') !== 'threads')
     const skipped = selectedRows.length - igRows.length
     const kols = igRows.map((r) => ({ handle: r.handle, username: r.handle, runId: r.source_run_id }))
-    const added = await attachKols(campaign.id, kols)
-    setPicking(false)
-    setSelected(new Set())
-    const parts = [`Added ${added} to ${campaign.name}`]
-    if (added < igRows.length) parts.push(`${igRows.length - added} already on it`)
-    if (skipped) parts.push(`${skipped} Threads skipped`)
-    setToast(parts.join(' · '))
-    setTimeout(() => setToast(null), 4000)
+    try {
+      const added = await attachKols(campaign.id, kols)
+      setPicking(false)
+      setSelected(new Set())
+      const parts = [`Added ${added} to ${campaign.name}`]
+      if (added < igRows.length) parts.push(`${igRows.length - added} already on it`)
+      if (skipped) parts.push(`${skipped} Threads skipped`)
+      setToast(parts.join(' · '))
+      setTimeout(() => setToast(null), 4000)
+    } catch (err) {
+      console.error('Attach to campaign failed', err)
+      window.alert(err?.message || 'Failed to attach to campaign — please try again.')
+    }
   }
 
   // Scrape a single handle live (same pipeline as the Profile Analyzer) and drop

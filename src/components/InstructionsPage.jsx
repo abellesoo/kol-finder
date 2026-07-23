@@ -272,9 +272,11 @@ export default function InstructionsPage() {
         <div className="bg-surface border border-card-edge rounded-[12px] px-5 py-4 mb-6 mt-4 overflow-x-auto">
           <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-3">Formula</p>
           <div className="space-y-1 font-mono text-[13px] text-body min-w-[520px]">
-            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement Score × 5 + Relevancy Score × 5 <span className="text-ink/40 text-xs">· 50% Eng / 50% Rel</span></p>
-            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 3.5 + Relevancy × 2.5 + AI Fit × 4 <span className="text-ink/40 text-xs">· when "Blend into Overall" is on (35% Eng / 25% Rel / 40% AI)</span></p>
-            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= capped at 40 <span className="text-ink/40 text-xs">· when Relevancy &lt; 3 (off-niche floor — reach can't rescue a wrong-vertical account)</span></p>
+            <p><span className="text-ink/40 mr-2">Overall (0–100)</span>= Engagement × W<sub>e</sub> + Relevancy × W<sub>r</sub> <span className="text-ink/40 text-xs">· the weights depend on the run's scoring formula (set by the brand, overridable)</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 8 + Relevancy × 2 <span className="text-ink/40 text-xs">· Beauty / engagement-first (80% Eng / 20% Rel) · no off-niche cap</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= Engagement × 5 + Relevancy × 5 <span className="text-ink/40 text-xs">· Health / relevancy-protected (50% Eng / 50% Rel) · off-niche cap + business demotion</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= … + AI Fit blend <span className="text-ink/40 text-xs">· Beauty → Eng×5 + Rel×1 + AI×4 (50/10/40) · Health → Eng×3.5 + Rel×2.5 + AI×4 (35/25/40)</span></p>
+            <p><span className="text-ink/40 mr-2 invisible">Overall (0–100)</span>= capped at 40 <span className="text-ink/40 text-xs">· Health formula only, when Relevancy &lt; 3 (off-niche floor — reach can't rescue a wrong-vertical account)</span></p>
             <p><span className="text-ink/40 mr-2">Engagement Score</span>= log(1 + medianLikes + medianViews × 0.8 + medianComments × 1.5) + reach boost <span className="text-ink/40 text-xs">· with Live Stats</span></p>
             <p><span className="text-ink/40 mr-2 invisible">Engagement Score</span>= log(1 + avgLikes + avgComments × 1.5) + reach boost <span className="text-ink/40 text-xs">· before Live Stats · reach boost = log10(1 + followers) × 0.5</span></p>
             <p><span className="text-ink/40 mr-2">Relevancy Score</span>= 3 + niche hits + ((in-niche keyword + audience term hits) × 1.5) − off-niche categories − (exclude keyword hits × 3) <span className="text-ink/40 text-xs">· capped 0–10; +1 if location matches</span></p>
@@ -301,8 +303,8 @@ export default function InstructionsPage() {
           <ScoreRow
             name="Overall Score"
             range="0 – 100"
-            formula="(engagement × 5) + (relevancy × 5)   ·   capped at 40 when relevancy < 3"
-            description="50% Engagement Score + 50% Relevancy Score. Niche fit and audience activity weigh equally, so a high-engagement account in the wrong niche can't float to the top. If Relevancy falls below the baseline of 3 (net off-niche or excluded matches), Overall gets capped at 40 — the off-niche floor. Reach alone won't lift a wrong-vertical creator into your shortlist. 70+ is flagged a strong match; 45–69 possible; below 45 low fit. Treat it as your review order, not a pass/fail grade."
+            formula="Beauty: (engagement × 8) + (relevancy × 2)   |   Health: (engagement × 5) + (relevancy × 5) · capped at 40 when relevancy < 3"
+            description="The blend depends on the run's scoring formula, which the brand sets and you can override on the Set-up screen. The Beauty / engagement-first formula weights 80% Engagement / 20% Relevancy — best when almost any on-vibe creator works, so reach leads. The Health / relevancy-protected formula weights them 50/50, adds the off-niche cap, and demotes business/venue pages — so a lively wrong-vertical account can't float to the top. Under Health, if Relevancy falls below the baseline of 3 (net off-niche or excluded matches), Overall is capped at 40 — the off-niche floor; Beauty applies no cap. 70+ is flagged a strong match; 45–69 possible; below 45 low fit. Treat it as your review order, not a pass/fail grade."
           />
           <ScoreRow
             name="Engagement Score"
@@ -353,14 +355,15 @@ export default function InstructionsPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[12px] text-faint"><strong className="text-body">Example:</strong> You select beauty + skincare. An account with "makeup, serum, moisturizer, foodie" in their content: beauty hits +1, skincare hits +2, food is off-niche −1 → score = 3 + 3 − 1 = <strong className="text-body">5</strong>. If a score looks off, expand the row — the "Niche signals" tags are the exact keywords that matched.</p>
+              <p className="text-[12px] text-faint mb-3"><strong className="text-body">Example:</strong> The brand maps to skincare + makeup. An account with "makeup, serum, moisturizer, foodie" in their content: makeup hits +1, skincare hits +2, food is off-niche −1 → score = 3 + 3 − 1 = <strong className="text-body">5</strong>. If a score looks off, expand the row — the "Niche signals" tags are the exact keywords that matched.</p>
+              <p className="text-[12px] text-faint"><strong className="text-body">Business/venue accounts</strong> (a gym's own page, a clinic, a store) are detected structurally — by branch/opening-hours/booking language and a corporate "we" voice, not by niche. Under the <strong>Health</strong> formula they're demoted below the floor (Relevancy ≤ 2, which triggers the off-niche cap) and always tagged <code className="font-mono text-[11px] bg-white px-1 rounded">business-account</code> so a reviewer can see why. The Beauty formula tags them but doesn't demote.</p>
             </>}
           />
           <ScoreRow
             name="Bot Risk Score"
             range="0 – 10 · informational"
             formula="based on comments ÷ likes ratio"
-            description="Not part of the Overall Score — informational only. It reads authenticity from the comment-to-like ratio; genuine engagement usually runs 1–2%+. The rules: ratio < 0.5% with avg likes > 5,000 → score 2 (high bot risk); ratio < 1% with avg likes > 1,000 → score 4; ratio ≥ 2% → score 9; ratio ≥ 1% → score 7; anything else → score 5. Higher = more authentic. Accounts scoring 2–3 get a 'bot-risk' flag in the flags column."
+            description="Not part of the Overall Score — informational only. It reads authenticity from the comment-to-like ratio; genuine engagement usually runs 1–2%+. Higher score = higher bot risk. The rules: ratio < 0.5% with avg likes > 5,000 → score 8 (high bot risk); ratio < 1% with avg likes > 1,000 → score 6; ratio ≥ 2% → score 1 (healthy); ratio ≥ 1% → score 3; anything else → score 5. Accounts scoring 6 or higher get a 'bot-risk' flag in the flags column — except a Threads account with real view counts, which is exempt (Threads structurally has fewer replies per like)."
           />
           <ScoreRow
             name="AI Fit Score"
@@ -379,7 +382,7 @@ export default function InstructionsPage() {
                 <p className="mb-2">Because it re-reads your latest decisions every run, it gets sharper the moment your team logs more reviews — no training step, no waiting. Two trade-offs: it only sees the <strong>most recent ~40 decisions</strong> (a token-budget limit, not your whole history), and it matches demonstrated patterns rather than tracking specific past "mistakes" with a correction signal. On a brand-new database with no decisions yet, it scores on the brief alone and stays deliberately moderate.</p>
                 <p className="text-[12px] text-faint">This is why <strong className="text-body">consistent reviewing matters</strong>: the more consistently brand managers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
               </div>
-              <p>It's <strong>advisory</strong> by default — it gets its own column but doesn't move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending reweights Overall to <strong>35% Engagement + 25% Relevancy + 40% AI Fit</strong>. The off-niche cap still applies — a below-floor Relevancy caps Overall at 40, high AI Fit or not.</p>
+              <p>It's <strong>advisory</strong> by default — it gets its own column but doesn't move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending gives AI Fit <strong>40% of Overall</strong>, with the rest split by the run's formula — the <strong>Health</strong> formula reweights to 35% Engagement + 25% Relevancy + 40% AI Fit, the <strong>Beauty</strong> formula to 50% Engagement + 10% Relevancy + 40% AI Fit. Under the Health formula the off-niche cap still applies — a below-floor Relevancy caps Overall at 40, high AI Fit or not.</p>
             </>}
           />
         </div>

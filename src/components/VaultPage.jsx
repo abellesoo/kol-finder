@@ -1,9 +1,25 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Trash2, ExternalLink, Search, BookMarked, Rocket, X, Check, Download } from 'lucide-react'
-import { listVault, removeFromVault } from '../lib/vault'
+import { Loader2, Trash2, ExternalLink, Search, BookMarked, Rocket, X, Check, Download, BookmarkPlus, AlertCircle } from 'lucide-react'
+import { listVault, removeFromVault, saveToVault } from '../lib/vault'
 import { listCampaigns, attachKols } from '../lib/campaigns'
+import { startReelScraper, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
+import { computeStats } from '../lib/computeStats'
 import { profileUrl } from '../lib/platforms'
 import { supabase } from '../lib/supabase'
+
+// Pull a bare Instagram handle out of what the user typed — accepts "@handle",
+// "handle", or a pasted instagram.com/handle URL.
+function extractHandle(input) {
+  const trimmed = String(input || '').trim().replace(/^@/, '')
+  const match = trimmed.match(/instagram\.com\/([^/?#]+)/)
+  return (match ? match[1] : trimmed).toLowerCase()
+}
+
+// A plausible IG handle — so we only offer a live lookup for something scrapeable,
+// not a free-text search like "beauty creators".
+function isLikelyHandle(s) {
+  return /^[a-z0-9._]{1,30}$/.test(s)
+}
 
 // Escape a value for a CSV cell (quote if it contains a comma, quote, or newline).
 function csvCell(v) {
@@ -112,6 +128,8 @@ export default function VaultPage({ onNavigate }) {
   const [selected, setSelected] = useState(() => new Set())
   const [picking, setPicking] = useState(false)
   const [toast, setToast] = useState(null)
+  const [lookupStatus, setLookupStatus] = useState('idle') // idle | loading | error
+  const [lookupError, setLookupError] = useState(null)
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -185,6 +203,46 @@ export default function VaultPage({ onNavigate }) {
     setTimeout(() => setToast(null), 4000)
   }
 
+  // Scrape a single handle live (same pipeline as the Profile Analyzer) and drop
+  // it straight into the vault — so the search box can *add* a creator, not just
+  // filter ones already saved.
+  const lookupHandle = extractHandle(query)
+  const showLookup =
+    !loading && !loadError && isLikelyHandle(lookupHandle) && filtered.length === 0
+
+  const handleLookup = async () => {
+    const handle = extractHandle(query)
+    if (!handle) return
+    setLookupStatus('loading')
+    setLookupError(null)
+    try {
+      const run = await startReelScraper(handle)
+      const completed = await pollUntilDone(run)
+      const items = await getDatasetItems(completed.defaultDatasetId)
+      const stats = computeStats(items)
+      if (stats.totalScraped === 0) {
+        throw new Error('No public reels found — check the spelling, or the account may be private.')
+      }
+      const fullName = items.map((it) => it.ownerFullName).find(Boolean) || null
+      const saved = await saveToVault({
+        username: handle,
+        platform: 'instagram',
+        fullName,
+        followerCount: stats.followerCount,
+        avgLikes: stats.medianLikes,
+        aiScore: null,
+      })
+      setRows((prev) => [saved, ...prev.filter((r) => r.id !== saved.id)])
+      setLookupStatus('idle')
+      setToast(`Saved @${handle} to the vault`)
+      setTimeout(() => setToast(null), 4000)
+    } catch (err) {
+      console.error('Vault lookup failed', err)
+      setLookupError(err.message)
+      setLookupStatus('error')
+    }
+  }
+
   const handleExport = () => {
     const src = selectedRows.length ? selectedRows : filtered
     downloadCsv(
@@ -221,7 +279,7 @@ export default function VaultPage({ onNavigate }) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search handle or name…"
+            placeholder="Search saved creators — or type a handle to add one…"
             className="w-full pl-9 pr-3 py-2 rounded-[10px] border border-mist bg-white text-[13.5px] text-ink placeholder:text-faint focus:outline-none focus:border-ink/30"
           />
         </div>
@@ -265,12 +323,47 @@ export default function VaultPage({ onNavigate }) {
           <h2 className="text-[17px] font-semibold text-ink mb-2">Couldn’t load the vault</h2>
           <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px]">Retry</button>
         </div>
+      ) : showLookup ? (
+        <div className="flex flex-col items-center py-16 text-center">
+          <BookmarkPlus size={30} className="text-faint mb-4" />
+          <h2 className="text-[17px] font-semibold text-ink mb-1">
+            @{lookupHandle} isn’t in your vault yet
+          </h2>
+          <p className="text-[13.5px] text-muted max-w-sm mb-5">
+            Look them up live on Instagram and save them here — no full Seeder run needed.
+            Metrics come from the last 90 days of reels.
+          </p>
+          {lookupStatus === 'loading' ? (
+            <div className="flex flex-col items-center gap-1.5 text-faint">
+              <div className="flex items-center gap-2">
+                <Loader2 size={15} className="animate-spin" />
+                <span className="text-sm text-body">Scraping @{lookupHandle}…</span>
+              </div>
+              <span className="text-xs text-faint">This usually takes 1–2 minutes.</span>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handleLookup}
+                className="flex items-center gap-2 px-4 py-2.5 bg-ink text-white rounded-[10px] text-[13.5px] font-medium hover:bg-ink/85 transition-colors"
+              >
+                <Search size={14} /> Look up @{lookupHandle} & save
+              </button>
+              {lookupStatus === 'error' && (
+                <div className="flex items-start gap-2 mt-4 max-w-sm text-left px-3 py-2.5 bg-rose/5 border border-rose/20 rounded-[10px]">
+                  <AlertCircle size={15} className="text-rose shrink-0 mt-0.5" />
+                  <p className="text-xs text-body">{lookupError}</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center py-16 text-center">
           <BookMarked size={30} className="text-faint mb-4" />
           <h2 className="text-[17px] font-semibold text-ink mb-2">No saved creators yet</h2>
           <p className="text-[13.5px] text-muted max-w-sm">
-            On a Seeder results table or a review, click the bookmark next to a handle to save that creator here.
+            Search a handle above to add one, or on a Seeder results table or a review, click the bookmark next to a handle to save that creator here.
           </p>
         </div>
       ) : filtered.length === 0 ? (

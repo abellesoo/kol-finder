@@ -118,14 +118,18 @@ function matchPost(post, mentionHandles, hashtags) {
 
   const tagSet = new Set()
   for (const h of post.hashtags || []) tagSet.add(normalizeHashtag(h))
-  for (const h of caption.match(/#([\w.]+)/g) || []) tagSet.add(normalizeHashtag(h))
+  // Unicode-aware so CJK hashtags (#掉髮) tokenise exactly. Matching is by set
+  // membership only — a substring test would let a campaign tag/handle that is a
+  // PREFIX of a longer one falsely fire (#lily on #lilyeve, @lily on @lilyeve_tw),
+  // which could auto-flag a KOL "posted" on a coincidental post.
+  for (const h of caption.match(/#[\p{L}\p{N}_]+/gu) || []) tagSet.add(normalizeHashtag(h))
 
   const matched = []
   for (const mh of mentionHandles) {
-    if (mentionSet.has(mh) || caption.includes(`@${mh}`)) matched.push(`@${mh}`)
+    if (mentionSet.has(mh)) matched.push(`@${mh}`)
   }
   for (const ht of hashtags) {
-    if (tagSet.has(ht) || caption.includes(`#${ht}`)) matched.push(`#${ht}`)
+    if (tagSet.has(ht)) matched.push(`#${ht}`)
   }
   return matched
 }

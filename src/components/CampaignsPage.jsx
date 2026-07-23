@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
-  LayoutGrid, Table2, FileSpreadsheet, Trash2, AlertTriangle,
+  LayoutGrid, Table2, FileSpreadsheet, Trash2, AlertTriangle, Pencil, Check,
 } from 'lucide-react'
-import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign } from '../lib/campaigns'
+import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import { useUrlParam } from '../lib/useUrlParam'
 import ImportCampaignModal from './ImportCampaignModal'
@@ -155,6 +155,8 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
   const [seedState, setSeedState] = useState(null) // { runId, name, count }
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editingName, setEditingName] = useState('')
   const seedRunRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -206,6 +208,38 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
     }
     onOpenCampaign(created.id)
   }, [onOpenCampaign, onSeedConsumed])
+
+  const startRename = (e, c) => {
+    e.stopPropagation()
+    setEditingId(c.id)
+    setEditingName(c.name || '')
+  }
+  const cancelRename = (e) => {
+    e?.stopPropagation()
+    setEditingId(null)
+    setEditingName('')
+  }
+  const commitRename = async (e) => {
+    e?.stopPropagation()
+    const id = editingId
+    const name = editingName.trim()
+    const current = campaigns.find((c) => c.id === id)
+    setEditingId(null)
+    setEditingName('')
+    if (!name || !current || name === current.name) return
+    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)))
+    try {
+      await updateCampaignSetup(id, { name })
+    } catch (err) {
+      console.error('Rename campaign failed', err)
+      setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, name: current.name } : c)))
+      window.alert(err.message || 'Failed to rename campaign — please try again.')
+    }
+  }
+  const renameKeyDown = (e) => {
+    if (e.key === 'Enter') commitRename(e)
+    if (e.key === 'Escape') cancelRename(e)
+  }
 
   const confirmDelete = async () => {
     if (!deleteTarget) return
@@ -321,7 +355,26 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                 return (
                   <tr key={c.id} onClick={() => onOpenCampaign(c.id)}
                     className="border-b border-mist/60 last:border-0 hover:bg-surface cursor-pointer transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-ink max-w-[220px] truncate">{c.name}</td>
+                    <td className="px-4 py-2.5 font-medium text-ink max-w-[220px]"
+                      onClick={(e) => { if (editingId === c.id) e.stopPropagation() }}>
+                      {editingId === c.id ? (
+                        <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={renameKeyDown}
+                            className="min-w-0 flex-1 bg-transparent border-b border-ink/40 outline-none text-ink" />
+                          <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={13} /></button>
+                          <button onClick={cancelRename} title="Cancel" className="text-faint hover:text-ink"><X size={13} /></button>
+                        </span>
+                      ) : (
+                        <span className="group/name flex items-center gap-1.5">
+                          <span className="truncate">{c.name}</span>
+                          <button onClick={(e) => startRename(e, c)} title="Rename"
+                            className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
+                            <Pencil size={12} />
+                          </button>
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-body">{c.brand}</td>
                     <td className="px-3 py-2.5 text-body font-mono">{c.market}</td>
                     <td className="px-3 py-2.5 text-body font-mono whitespace-nowrap">{formatDate(c.posting_deadline)}</td>
@@ -359,7 +412,23 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed }) 
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="font-semibold text-[14px] text-ink truncate">{c.name}</p>
+                      {editingId === c.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={renameKeyDown}
+                            className="font-semibold text-[14px] text-ink bg-transparent border-b border-ink/40 outline-none max-w-[220px]" />
+                          <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={14} /></button>
+                          <button onClick={cancelRename} title="Cancel" className="text-faint hover:text-ink"><X size={14} /></button>
+                        </span>
+                      ) : (
+                        <span className="group/name flex items-center gap-1.5 min-w-0">
+                          <p className="font-semibold text-[14px] text-ink truncate">{c.name}</p>
+                          <button onClick={(e) => startRename(e, c)} title="Rename"
+                            className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
+                            <Pencil size={12} />
+                          </button>
+                        </span>
+                      )}
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
                         c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'
                       }`}>{c.status}</span>

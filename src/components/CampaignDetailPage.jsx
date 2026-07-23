@@ -1004,7 +1004,29 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const [sfBusy, setSfBusy] = useState(false)
   const [showSfSender, setShowSfSender] = useState(false)
   const [toast, setToast] = useState(null)
+  const [renaming, setRenaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
   const [view, setView] = useUrlParam('campaign_view', 'board') // 'board' | 'table' (shareable via URL)
+
+  const startRename = () => { setNameDraft(campaign?.name || ''); setRenaming(true) }
+  const commitRename = async () => {
+    const name = nameDraft.trim()
+    setRenaming(false)
+    if (!name || name === campaign?.name) return
+    const prev = campaign
+    setCampaign((c) => ({ ...c, name }))
+    try {
+      await updateCampaignSetup(campaign.id, { name })
+    } catch (err) {
+      console.error('Rename campaign failed', err)
+      setCampaign(prev)
+      window.alert(err.message || 'Failed to rename campaign — please try again.')
+    }
+  }
+  const renameKeyDown = (e) => {
+    if (e.key === 'Enter') commitRename()
+    if (e.key === 'Escape') setRenaming(false)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1239,7 +1261,22 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
             <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
               campaign.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{campaign.status}</span>
           </div>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{campaign.name}</h1>
+          {renaming ? (
+            <div className="flex items-center gap-2 mb-1">
+              <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} onKeyDown={renameKeyDown}
+                className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink bg-transparent border-b-2 border-ink/30 outline-none w-full max-w-[560px]" />
+              <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70 flex-shrink-0"><Check size={22} /></button>
+              <button onClick={() => setRenaming(false)} title="Cancel" className="text-faint hover:text-ink flex-shrink-0"><X size={22} /></button>
+            </div>
+          ) : (
+            <div className="group/name flex items-center gap-2 mb-1">
+              <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink">{campaign.name}</h1>
+              <button onClick={startRename} title="Rename campaign"
+                className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
+                <Pencil size={17} />
+              </button>
+            </div>
+          )}
           <p className="text-[13px] text-muted font-mono">
             {[
               campaign.brand,

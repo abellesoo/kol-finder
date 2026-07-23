@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Loader2, RefreshCw, ArrowRight, CheckCircle2, Trash2, AlertTriangle, Rocket, FolderOpen } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { listCampaigns, createCampaign } from '../lib/campaigns'
-import { setResultCampaign } from '../lib/reviewState'
+import { setResultCampaign, loadReviewSubmissions } from '../lib/reviewState'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
 
 function formatDate(isoStr) {
@@ -46,12 +46,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('shared_results')
-        .select('id, campaign_id, campaign_brief, accounts, review_state, created_at')
-        .order('created_at', { ascending: false })
-      if (err) throw new Error(err.message)
-      setRows(data || [])
+      setRows(await loadReviewSubmissions())
     } catch (e) {
       setError(e.message)
     } finally {
@@ -78,11 +73,11 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
   useEffect(() => {
     if (!deleteTarget) return
     const onKeyDown = (e) => {
-      if (e.key === 'Escape') setDeleteTarget(null)
+      if (e.key === 'Escape' && !deleting) setDeleteTarget(null)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteTarget])
+  }, [deleteTarget, deleting])
 
   useEffect(() => {
     if (!toast) return
@@ -235,9 +230,9 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign }) {
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-rose/10 mb-4">
               <AlertTriangle size={18} className="text-rose" />
             </div>
-            <h2 className="text-[16px] font-semibold text-ink mb-1.5">Delete campaign?</h2>
+            <h2 className="text-[16px] font-semibold text-ink mb-1.5">Delete this review submission?</h2>
             <p className="text-[13px] text-muted mb-6 leading-relaxed">
-              {`Are you sure you want to delete "${deleteTarget.campaign_brief || '(no brief)'}"? This action cannot be undone.`}
+              {`"${deleteTarget.campaign_brief || '(no brief)'}" and its ${(deleteTarget.accounts || []).length} account${(deleteTarget.accounts || []).length === 1 ? '' : 's'} will be removed from the Review Queue. This can't be undone. (It doesn't affect the campaign itself.)`}
             </p>
             <div className="flex items-center justify-end gap-2">
               <button

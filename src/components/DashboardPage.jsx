@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, AlertCircle, Rocket } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { reviewKey, campaignDmDraft } from '../lib/reviewState'
+import { reviewKey, campaignDmDraft, loadReviewSubmissions } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
 import { listCampaigns } from '../lib/campaigns'
 
@@ -54,15 +54,10 @@ export default function DashboardPage({ onNavigate, onOpenReview, onOpenCampaign
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
-    supabase
-      .from('shared_results')
-      .select('id, campaign_brief, accounts, review_state, created_at')
-      .order('created_at', { ascending: false })
-      .limit(10)
-      .then(({ data, error }) => {
-        if (!error) setCampaigns(data || [])
-        setLoading(false)
-      })
+    loadReviewSubmissions()
+      .then((rows) => setCampaigns(rows))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   // KPIs from localStorage

@@ -22,6 +22,26 @@ export function campaignDmDraft(reviewState) {
   return ''
 }
 
+// One canonical read of the brand-review submissions (shared_results), used by
+// the Review Queue, Ready to Send, and the Dashboard so all three agree on the
+// same columns and the same (unlimited) row set. Newest first.
+export async function loadReviewSubmissions() {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('shared_results')
+    .select('id, campaign_id, campaign_brief, accounts, review_state, created_at')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data || []
+}
+
+// Predicate: is this account approved in its submission's review_state? Threads
+// accounts are namespaced (reviewKey), so IG+Threads pairs are judged separately.
+// Single source of truth for "approved" across the review views.
+export function isAccountApproved(account, reviewState) {
+  return (reviewState || {})[reviewKey(account)]?.status === 'approved'
+}
+
 // Move a review submission (shared_results row) under a campaign, or clear it
 // with null. Groups the Review Queue + Ready to Send by the same Campaign the
 // Seeder sessions use. Requires db/review_campaign_link.sql to have been run.

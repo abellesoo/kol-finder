@@ -3,7 +3,7 @@ import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, SendHorizonal,
 import { supabase } from '../lib/supabase'
 import { listCampaigns, createCampaign } from '../lib/campaigns'
 import { exportToCsv } from '../lib/exportCsv'
-import { mergeReviewEntry, reviewKey, campaignDmDraft, setResultCampaign } from '../lib/reviewState'
+import { mergeReviewEntry, reviewKey, campaignDmDraft, setResultCampaign, loadReviewSubmissions, isAccountApproved } from '../lib/reviewState'
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
@@ -43,11 +43,7 @@ export default function ReadyToSendPage() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('shared_results')
-        .select('id, campaign_id, campaign_brief, accounts, review_state, created_at')
-        .order('created_at', { ascending: false })
-      if (err) throw new Error(err.message)
+      const data = await loadReviewSubmissions()
 
       const metaMap = {}
       const ready = []
@@ -57,7 +53,7 @@ export default function ReadyToSendPage() {
         const campaignDraft = campaignDmDraft(row.review_state)
         for (const account of row.accounts || []) {
           const entry = row.review_state?.[reviewKey(account)]
-          if (entry?.status === 'approved') {
+          if (isAccountApproved(account, row.review_state)) {
             ready.push({
               rowId: row.id,
               username: account.username,
@@ -134,6 +130,7 @@ export default function ReadyToSendPage() {
   }
 
   const persistStatus = useCallback(async (item, newStatus) => {
+    const prevStatus = item.dmStatus
     setItems((prev) => prev.map((i) =>
       i.rowId === item.rowId && i.stateKey === item.stateKey
         ? { ...i, dmStatus: newStatus, reviewEntry: { ...i.reviewEntry, dm_status: newStatus } }
@@ -144,16 +141,23 @@ export default function ReadyToSendPage() {
       await mergeReviewEntry(item.rowId, item.stateKey, { ...item.reviewEntry, dm_status: newStatus })
     } catch (e) {
       console.error('Failed to update dm_status', e)
+      // Roll the pill back so the UI never claims a status the DB didn't accept.
+      setItems((prev) => prev.map((i) =>
+        i.rowId === item.rowId && i.stateKey === item.stateKey
+          ? { ...i, dmStatus: prevStatus, reviewEntry: { ...i.reviewEntry, dm_status: prevStatus } }
+          : i
+      ))
+      window.alert('Couldn’t save the DM status — please try again.')
     }
   }, [])
 
   const handleCopyAndOpen = useCallback(async (item) => {
     if (item.dm_draft) {
       await navigator.clipboard.writeText(item.dm_draft).catch(() => {})
-      setCopiedUser(item.username)
+      setCopiedUser(`${item.rowId}-${item.stateKey}`) // unique per card; a handle can appear in >1 group
       setTimeout(() => setCopiedUser(null), 2000)
     }
-    window.open(profileUrl(item), '_blank', 'noreferrer')
+    window.open(profileUrl(item), '_blank')
     if (item.dm_draft) await persistStatus(item, 'sent')
   }, [persistStatus])
 
@@ -302,8 +306,8 @@ export default function ReadyToSendPage() {
                       onClick={() => handleCopyAndOpen(item)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all"
                     >
-                      {copiedUser === item.username ? <Check size={12} /> : <Copy size={12} />}
-                      {copiedUser === item.username ? 'Copied!' : 'Copy & open profile'}
+                      {copiedUser === `${item.rowId}-${item.stateKey}` ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedUser === `${item.rowId}-${item.stateKey}` ? 'Copied!' : 'Copy & open profile'}
                     </button>
                   </div>
                 </div>

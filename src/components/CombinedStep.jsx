@@ -49,7 +49,9 @@ export default function CombinedStep({
   // (it may have been edited on the detail page since it was picked/created).
   useEffect(() => {
     if (!activeCampaign?.id) return
-    getCampaign(activeCampaign.id).then((c) => { if (c) onSelectCampaign(c) }).catch(() => {})
+    getCampaign(activeCampaign.id)
+      .then((c) => { onSelectCampaign(c || null) }) // null → campaign was deleted; fall back to picker
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCampaign?.id])
 

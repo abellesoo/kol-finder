@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket, BookMarked } from 'lucide-react'
+import { LayoutDashboard, Search, Clock, BookOpen, Users, LogOut, ClipboardList, Send, Rocket, BookMarked, X } from 'lucide-react'
 import CombinedStep from './components/CombinedStep'
 import ResultsStep from './components/ResultsStep'
 import DashboardPage from './components/DashboardPage'
@@ -191,7 +191,9 @@ function MainApp({ user, role, onSignOut }) {
   const [activeCampaign, setActiveCampaign] = useState(null) // the campaign this seeder run belongs to
   const [progress, setProgress] = useState({ done: 0, total: 0, error: null })
   const [currentSessionId, setCurrentSessionId] = useState(initialUrlState.sessionId || null)
+  const [runNotice, setRunNotice] = useState(null) // { kind: 'error' | 'info', text } — non-blocking banner
   const startingRef = useRef(false)
+  const cancelledRef = useRef(false) // set by the interstitial Cancel button
   const prevPageKeyRef = useRef(null)
 
   // Keep the URL in sync with the current view. Push a history entry when the
@@ -322,20 +324,42 @@ function MainApp({ user, role, onSignOut }) {
       }
       return true
     })
+    // Found accounts, but the pre-filters removed every one — explain rather than
+    // dropping the user on a blank "0 scored" results page.
+    if (toScore.length === 0 && allInfluencers.length > 0) {
+      const reasons = [
+        cfg.minEngagement ? `minimum engagement of ${cfg.minEngagement}` : null,
+        cfg.locationTarget ? `location "${cfg.locationTarget}"` : null,
+      ].filter(Boolean)
+      setProgress((p) => ({
+        ...p,
+        error: `Found ${allInfluencers.length} account${allInfluencers.length === 1 ? '' : 's'}, but ${reasons.length ? `your filters (${reasons.join(', ')}) removed them all` : 'none passed the filters'}. Loosen the campaign's filters and run again.`,
+      }))
+      return
+    }
     setProgress((p) => ({ ...p, total: toScore.length }))
     const allResults = []
     const batchSize = 5
     for (let i = 0; i < toScore.length; i += batchSize) {
+      if (cancelledRef.current) return // user hit Cancel on the interstitial
       const batch = toScore.slice(i, i + batchSize)
       const scored = await scoreInfluencers(batch, cfg)
       allResults.push(...scored)
       setProgress((p) => ({ ...p, done: Math.min(i + batchSize, toScore.length) }))
     }
+    if (cancelledRef.current) return
     setResults(allResults)
     setConfig(cfg)
     setStep('results')
-    const id = await saveSession({ fileNames, config: cfg, results: allResults, influencers: allInfluencers, campaignId })
-    setCurrentSessionId(id)
+    // Persist the run. If it fails, keep the results on screen but tell the user
+    // (a null session id would otherwise silently break vault/share later).
+    try {
+      const id = await saveSession({ fileNames, config: cfg, results: allResults, influencers: allInfluencers, campaignId })
+      setCurrentSessionId(id)
+    } catch (e) {
+      console.error('Failed to save session', e)
+      setRunNotice({ kind: 'error', text: 'Scored successfully, but saving this run to History failed. Your results are shown below but weren’t saved.' })
+    }
   }
 
   // Map a campaign's saved scrape targets (default_step1) to runSeederScrape args.
@@ -355,10 +379,27 @@ function MainApp({ user, role, onSignOut }) {
   const handleRunCampaign = async ({ mode = 'scrape', files = [], resultsLimit = 200 } = {}) => {
     if (startingRef.current || !activeCampaign) return
     startingRef.current = true
+    cancelledRef.current = false
+    setRunNotice(null)
     setMode('seeder')
     setStep('scoring')
     setProgress({ phase: 'scraping', done: 0, total: 0, error: null, note: '' })
     try {
+      // Re-fetch the campaign so the run uses its LATEST config (it may have been
+      // edited elsewhere) and never runs a campaign that was deleted meanwhile.
+      let campaign = activeCampaign
+      try {
+        const fresh = await getCampaign(activeCampaign.id)
+        if (!fresh) {
+          setActiveCampaign(null)
+          setStep('upload')
+          return
+        }
+        campaign = fresh
+        setActiveCampaign(fresh)
+      } catch (e) {
+        console.error('Failed to refresh campaign before run', e)
+      }
       let inf = []
       let names = []
       if (mode === 'upload') {
@@ -368,15 +409,18 @@ function MainApp({ user, role, onSignOut }) {
         names = files.map((f) => f.name)
       } else {
         const { brandedResults, failedBrands, notices } = await runSeederScrape(
-          campaignScrapeParams(activeCampaign, resultsLimit),
+          campaignScrapeParams(campaign, resultsLimit),
           { onProgress: (text) => setProgress((p) => ({ ...p, note: text })) }
         )
+        if (cancelledRef.current) return
         if (brandedResults.length === 0) {
           setProgress((p) => ({ ...p, error: failedBrands.length ? `Scrape failed for ${failedBrands.join(', ')}.` : 'No results were scraped.' }))
           return
         }
-        if (failedBrands.length) alert(`Some targets failed and were skipped: ${failedBrands.join(', ')}.\nContinuing with what succeeded.`)
-        if (notices.length) alert(notices.join('\n'))
+        const noticeParts = []
+        if (failedBrands.length) noticeParts.push(`Some targets failed and were skipped: ${failedBrands.join(', ')}. Continuing with what succeeded.`)
+        if (notices.length) noticeParts.push(...notices)
+        if (noticeParts.length) setRunNotice({ kind: 'info', text: noticeParts.join(' · ') })
         inf = aggregateBranded(brandedResults)
         names = brandedResults.map(({ brand }) => brand)
       }
@@ -391,13 +435,13 @@ function MainApp({ user, role, onSignOut }) {
       // Build the scoring config from the campaign (shared) + brand facts.
       let brand = null
       try {
-        if (activeCampaign.brand_id) brand = await getBrandById(activeCampaign.brand_id)
+        if (campaign.brand_id) brand = await getBrandById(campaign.brand_id)
       } catch (e) {
         console.error('Failed to load brand facts', e)
       }
-      const cfg = { ...campaignToForm(brand, activeCampaign), sessionTitle: activeCampaign.name, resultsLimit }
+      const cfg = { ...campaignToForm(brand, campaign), sessionTitle: campaign.name, resultsLimit }
 
-      await runScoringAndSave(inf, cfg, activeCampaign.id)
+      await runScoringAndSave(inf, cfg, campaign.id)
     } catch (err) {
       setProgress((p) => ({ ...p, error: err.message }))
     } finally {
@@ -475,6 +519,21 @@ function MainApp({ user, role, onSignOut }) {
     setMode('campaign_detail')
   }
 
+  // A campaign/session deleted in another tab must not stay "active" in the
+  // long-lived seeder state (MainApp never unmounts, so it wouldn't self-heal).
+  const handleCampaignDeleted = (id) => {
+    if (activeCampaign?.id === id) setActiveCampaign(null)
+  }
+  const handleSessionDeleted = (id) => {
+    if (currentSessionId === id) {
+      setResults([])
+      setInfluencers([])
+      setConfig(null)
+      setCurrentSessionId(null)
+      if (mode === 'seeder') setStep('upload')
+    }
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar mode={mode} onNav={handleNav} user={user} role={role} onSignOut={onSignOut} />
@@ -497,6 +556,7 @@ function MainApp({ user, role, onSignOut }) {
             onOpenCampaign={handleOpenCampaign}
             seed={campaignSeed}
             onSeedConsumed={() => setCampaignSeed(null)}
+            onCampaignDeleted={handleCampaignDeleted}
           />
         )}
         {mode === 'campaign_detail' && openCampaignId && (
@@ -509,7 +569,7 @@ function MainApp({ user, role, onSignOut }) {
         )}
         {mode === 'vault' && <VaultPage onNavigate={handleNav} />}
         {mode === 'history' && (
-          <HistoryPage onLoadSeederSession={handleLoadSeederSession} onNavigate={handleNav} />
+          <HistoryPage onLoadSeederSession={handleLoadSeederSession} onNavigate={handleNav} onSessionDeleted={handleSessionDeleted} />
         )}
         {mode === 'seeder' && (
           <>
@@ -561,6 +621,18 @@ function MainApp({ user, role, onSignOut }) {
                       </p>
                     </>
                   )}
+                  {!progress.error && (
+                    <button
+                      onClick={() => {
+                        cancelledRef.current = true
+                        startingRef.current = false
+                        setStep('upload')
+                      }}
+                      className="mt-6 text-[12px] text-faint hover:text-ink underline underline-offset-2"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -590,6 +662,18 @@ function MainApp({ user, role, onSignOut }) {
           <p className="font-mono text-[10px] tracking-[.12em]" style={{ color: '#C4BDB0' }}>Seeding Studio · Annabelle Soo 2026</p>
         </footer>
       </main>
+      {runNotice && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] max-w-[520px] px-4 py-3 rounded-[12px] shadow-lg text-[13px] flex items-start gap-3 ${
+            runNotice.kind === 'error' ? 'bg-rose text-white' : 'bg-ink text-white'
+          }`}
+        >
+          <span className="flex-1">{runNotice.text}</span>
+          <button onClick={() => setRunNotice(null)} className="opacity-70 hover:opacity-100 flex-shrink-0" title="Dismiss">
+            <X size={15} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }

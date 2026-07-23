@@ -1,12 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
-import { Rocket, Plus } from 'lucide-react'
-import { loadCampaignsByBrand, createCampaign, getOrCreateBrand } from '../lib/campaigns'
+import { Rocket, Plus, Loader2 } from 'lucide-react'
+import { listCampaigns, createCampaign, getOrCreateBrand } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 
 // ── Step 1 campaign chooser ──────────────────────────────────────────────────
 // A run belongs to a campaign. Pick an existing one (everything is already set on
 // it — just run) or start a new one, which creates it and opens its page to set
 // up. No config/scrape editing happens here.
+//
+// This reads the SAME flat listCampaigns() the Campaigns tab uses, so every
+// campaign that exists there is runnable here — including brand-less ones created
+// inline from the "Move to campaign" menu. (The old brand-nested query hid those,
+// showing brands with "0 campaigns".)
 
 function timeAgo(iso) {
   const t = Date.parse(iso || '')
@@ -19,17 +24,34 @@ function timeAgo(iso) {
   return new Date(t).toLocaleDateString('en', { month: 'short', year: 'numeric' })
 }
 
+// A campaign is "ready to run" once it has either scrape targets or a scoring
+// config saved. Bare campaigns (created inline for grouping) can still be picked,
+// but we hint that they need set-up first so a run doesn't dead-end.
+function needsSetup(c) {
+  const s1 = c.default_step1 || {}
+  const s2 = c.default_step2 || {}
+  const hasScrape = s1.scrapeInput || s1.painpointInput || s1.genreInput
+  const hasConfig = s2.targetAudience || s2.targetKeywords || s2.locationTarget
+  return !hasScrape && !hasConfig
+}
+
 export default function CampaignPicker({ onPick, onCreated }) {
-  const [brands, setBrands] = useState([])
+  const [campaigns, setCampaigns] = useState([])
+  const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState('existing') // 'existing' | 'new'
-  const [activeBrandId, setActiveBrandId] = useState('')
   const [newName, setNewName] = useState('')
   const [newBrand, setNewBrand] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null) // { kind: 'ok' | 'err', text }
   const flashTimerRef = useRef(null)
 
-  useEffect(() => { loadCampaignsByBrand().then(setBrands).catch(() => {}) }, [])
+  useEffect(() => {
+    listCampaigns()
+      .then(setCampaigns)
+      .catch((e) => flash('err', e.message))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   useEffect(() => () => clearTimeout(flashTimerRef.current), [])
 
   const flash = (kind, text) => {
@@ -37,8 +59,6 @@ export default function CampaignPicker({ onPick, onCreated }) {
     setMsg({ kind, text })
     flashTimerRef.current = setTimeout(() => setMsg(null), 3500)
   }
-
-  const activeBrand = brands.find((b) => b.id === activeBrandId)
 
   const handleCreate = async () => {
     const name = newName.trim()
@@ -95,7 +115,11 @@ export default function CampaignPicker({ onPick, onCreated }) {
 
       {/* Existing */}
       {mode === 'existing' && (
-        brands.length === 0 ? (
+        loading ? (
+          <div className="flex items-center gap-2 text-faint py-6">
+            <Loader2 size={14} className="animate-spin" /> <span className="text-[13px]">Loading campaigns…</span>
+          </div>
+        ) : campaigns.length === 0 ? (
           <p className="text-[13px] text-body">
             No campaigns yet —{' '}
             <button type="button" onClick={() => setMode('new')} className="underline underline-offset-2 hover:text-ink">
@@ -103,65 +127,27 @@ export default function CampaignPicker({ onPick, onCreated }) {
             </button>.
           </p>
         ) : (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {brands.map((b) => {
-                const active = b.id === activeBrandId
-                const n = b.campaigns?.length || 0
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => setActiveBrandId((cur) => (cur === b.id ? '' : b.id))}
-                    aria-pressed={active}
-                    className={`text-left px-4 py-3 rounded-[12px] border bg-white transition-all hover:shadow-sm ${
-                      active ? 'border-ink ring-1 ring-ink/50' : 'border-card-edge hover:border-ink/40'
-                    }`}
-                  >
-                    <p className="text-[13.5px] font-semibold text-ink truncate">{b.name}</p>
-                    <p className="text-[11.5px] text-faint leading-snug line-clamp-2 min-h-[2.5em] mt-0.5">
-                      {b.background || 'No background saved'}
-                    </p>
-                    <p className="font-mono text-[10px] text-faint mt-2">
-                      {n} campaign{n === 1 ? '' : 's'}
-                    </p>
-                  </button>
-                )
-              })}
-            </div>
-
-            {activeBrand && (
-              <div className="mt-4 pt-3 border-t border-mist/70">
-                {activeBrand.campaigns?.length > 0 ? (
-                  <>
-                    <p className="text-[12.5px] text-body mb-2">Pick a campaign under {activeBrand.name} to run:</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {activeBrand.campaigns.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => onPick(c)}
-                          className="flex items-center bg-white border border-card-edge rounded-[9px] px-3 py-1.5 text-[12.5px] text-ink hover:border-ink transition-colors"
-                        >
-                          {c.name}
-                          {timeAgo(c.created_at) && (
-                            <span className="font-mono text-[10px] text-faint ml-1.5">{timeAgo(c.created_at)}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-[12px] text-body">
-                    {activeBrand.name} has no campaigns yet —{' '}
-                    <button type="button" onClick={() => { setNewBrand(activeBrand.name); setMode('new') }} className="underline underline-offset-2 hover:text-ink">
-                      start one under it →
-                    </button>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {campaigns.map((c) => {
+              const setup = needsSetup(c)
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onPick(c)}
+                  className="text-left px-4 py-3 rounded-[12px] border border-card-edge bg-white transition-all hover:border-ink/40 hover:shadow-sm"
+                >
+                  <p className="text-[13.5px] font-semibold text-ink truncate">{c.name}</p>
+                  <p className="text-[11.5px] text-faint truncate mt-0.5">{c.brand || 'No brand set'}</p>
+                  <p className="font-mono text-[10px] text-faint mt-2 flex items-center gap-1.5 flex-wrap">
+                    {c.sessionCount > 0 && <span>{c.sessionCount} run{c.sessionCount === 1 ? '' : 's'}</span>}
+                    {timeAgo(c.created_at) && <span>· {timeAgo(c.created_at)}</span>}
+                    {setup && <span className="text-rose-strong">· needs set-up</span>}
                   </p>
-                )}
-              </div>
-            )}
-          </>
+                </button>
+              )
+            })}
+          </div>
         )
       )}
 
@@ -195,7 +181,7 @@ export default function CampaignPicker({ onPick, onCreated }) {
               disabled={busy}
               className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-ink text-white rounded-[10px] text-[13px] font-semibold hover:bg-ink/80 transition-colors disabled:opacity-40"
             >
-              <Plus size={15} /> Create & set up
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />} Create & set up
             </button>
           </div>
           <p className="text-[11.5px] text-faint mt-2.5">

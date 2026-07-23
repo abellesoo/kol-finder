@@ -115,7 +115,7 @@ export default function InstructionsPage() {
           KOL Finder — Seeding Studio
         </TextEffect>
         <p className="text-body leading-relaxed mb-3">
-          Your Instagram KOL seeding workflow, start to finish: <strong>find</strong> accounts, <strong>score &amp; rank</strong> them automatically, <strong>review</strong> as a team, send your <strong>DM outreach</strong>, then <strong>track</strong> every seeded KOL through to their published post (that last part lives in the <strong>Campaigns</strong> tab).
+          Your <strong>Instagram &amp; Threads</strong> KOL seeding workflow, start to finish: <strong>find</strong> accounts, <strong>score &amp; rank</strong> them automatically, <strong>review</strong> as a team, send your <strong>DM outreach</strong>, then <strong>track</strong> every seeded KOL through to their published post. It's all organised under <strong>Campaigns</strong> — a run belongs to a campaign, which holds the brand, brief, scrape targets, and the seeded-KOL board.
         </p>
         <p className="text-[13px] text-muted leading-relaxed">
           Scoring is free and runs right in your browser — no external calls. A few opt-in features use a paid API (scraping, Live Stats, AI Fit, DM drafts) — see <strong className="text-body">Costs</strong> below.
@@ -127,11 +127,11 @@ export default function InstructionsPage() {
         <p className="font-mono text-[9.5px] tracking-[.16em] text-faint uppercase mb-3">Quick start — the 30-second version</p>
         <ol className="space-y-2.5">
           {[
-            ['Get accounts in', 'Upload an Apify .xlsx export, or paste competitor URLs / hashtags to scrape.'],
-            ['Set your brief', 'Pick the brand (it sets the target niches + scoring formula), add keywords + audience terms, and write the campaign brief.'],
-            ['Start scoring', 'Every account gets ranked by Engagement + Relevancy — instantly, and free.'],
-            ['Shortlist & reach out', 'Sort and filter the table, approve your picks, move them to Ready to Send.'],
-            ['Export', 'Download a formatted XLSX to share with your team.'],
+            ['Pick or create a campaign', 'Everything — brand, target niches, scoring formula, brief, and scrape targets — lives on the campaign. Set it up once.'],
+            ['Run it', 'Scrape the campaign\'s Instagram / Threads targets, or upload an Apify .xlsx export. Every account is scored by Engagement + Relevancy instantly, and free.'],
+            ['Review & shortlist', 'Sort and filter the ranked table, tick your picks, then Send for Review — brand managers approve or reject in the Review Queue.'],
+            ['Reach out', 'Approved KOLs share one campaign DM draft; copy it, send from Instagram, and track DM status per account.'],
+            ['Track', 'Approved KOLs flow onto the campaign board — ship the product, then let the tracker auto-detect their published post.'],
           ].map(([t, d], i) => (
             <li key={t} className={`flex gap-3 anim-rise anim-d${i + 1}`}>
               <span className="shrink-0 w-5 h-5 rounded-full bg-ink/10 text-ink text-[10px] font-mono font-semibold flex items-center justify-center mt-px">{i + 1}</span>
@@ -149,38 +149,24 @@ export default function InstructionsPage() {
 
         <ol className="space-y-6">
 
-          {/* Step 1 — two intake paths */}
+          {/* Step 1 — pick or create the campaign */}
           <li className="flex gap-4">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">1</span>
             <div className="flex-1">
-              <p className="text-[16px] font-bold text-ink mb-1">Get your accounts in</p>
-              <p className="text-[13px] text-body leading-relaxed mb-3">Two ways to do it — pick whichever fits:</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
-                  <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option A — Paste URLs / hashtags</p>
-                  <p className="text-[12px] text-muted italic mb-2">Starting a fresh scrape now.</p>
-                  <p className="text-[13px] text-body leading-relaxed">
-                    Go to <strong>Scrape URLs / Hashtags</strong> and paste competitor post URLs, brand-tagged pages, or hashtags — one per line, <code className="font-mono text-[11px] bg-surface px-1 rounded">#skincare</code> or plain <code className="font-mono text-[11px] bg-surface px-1 rounded">skincare</code> both work. Pick a result limit and hit <strong>Start scrape</strong>. Results feed straight into the pipeline.
-                  </p>
-                </div>
-                <div className="border border-card-edge rounded-[12px] px-4 py-3 bg-white">
-                  <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-2">Option B — Upload XLSX</p>
-                  <p className="text-[12px] text-muted italic mb-2">You already have an Apify export.</p>
-                  <p className="text-[13px] text-body leading-relaxed">
-                    Drop in an Apify Instagram Scraper .xlsx — the filename becomes the source label in your export. Upload several files to combine sources, or re-score an old dataset with new filters.
-                  </p>
-                </div>
-              </div>
+              <p className="text-[16px] font-bold text-ink mb-1">Pick or create a campaign</p>
+              <p className="text-[13px] text-body leading-relaxed">
+                Open the <strong>Seeder</strong> tab and you land on <strong>Run a campaign</strong>. Every run belongs to a campaign, so pick an existing one (they're grouped by brand) or click <strong>New</strong> to create one. The campaign is where the brand, brief, scrape targets, and the seeded-KOL board all live, so you set things up once and reuse them across runs.
+              </p>
             </div>
           </li>
 
-          {/* Step 2 — brief, broken into scannable pieces */}
+          {/* Step 2 — set up the campaign config */}
           <li className="flex gap-4">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-ink text-white text-[11px] font-mono font-semibold flex items-center justify-center mt-0.5">2</span>
             <div className="flex-1">
-              <p className="text-[16px] font-bold text-ink mb-1">Define your brief</p>
+              <p className="text-[16px] font-bold text-ink mb-1">Set up the campaign</p>
               <p className="text-[13px] text-body leading-relaxed mb-3">
-                Everything lives on one <strong>Set up your run</strong> screen — intake on one side, scoring setup on the other — so you can tune things while your data loads. Pick your <strong>brand</strong> first (it sets the target niches and scoring formula for you), then:
+                On the campaign's page, <strong>Campaign config</strong> holds everything shared by every run under it. Pick the <strong>brand</strong> first (it sets the target niches and scoring formula for you), then:
               </p>
               <ul className="space-y-2 text-[13px] text-body leading-relaxed mb-3">
                 <li className="flex gap-2">
@@ -189,16 +175,17 @@ export default function InstructionsPage() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-faint shrink-0">•</span>
-                  <span><strong>Three text fields</strong> sharpen Relevancy. <strong>Target audience</strong> and <strong>In-niche keywords</strong> add points per match; <strong>Exclude keywords</strong> subtract them. Exact weights are in <em>How accounts are scored</em> below.</span>
+                  <span><strong>Three text fields</strong> sharpen Relevancy. <strong>Target audience</strong> and <strong>In-niche keywords</strong> add points per match; <strong>Out-niche keywords</strong> subtract them. Exact weights are in <em>How accounts are scored</em> below.</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-faint shrink-0">•</span>
-                  <span>Paste your <strong>Campaign brief</strong> into the one box — anything works (WhatsApp brief, a doc, a few typed lines), then hit <strong>自動整理 Auto-tidy</strong> and DeepSeek reformats it into the standard shape (brand / background / new product / collab format / selling points). It feeds the AI fit score and powers the campaign's DM draft. DeepSeek only uses what's in the box — it won't invent claims. It's optional here: you can still add or edit the brief on the Review page before generating DMs.</span>
+                  <span>Paste your <strong>Campaign brief</strong> into the one box — anything works (WhatsApp brief, a doc, a few typed lines), then hit <strong>自動整理 Auto-tidy</strong> and DeepSeek reformats it into the standard shape (background / new product / collab format / selling points). It feeds the AI fit score and powers the campaign's DM draft. DeepSeek only uses what's in the box — it won't invent claims.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-faint shrink-0">•</span>
+                  <span>Set the <strong>scrape targets</strong>: <strong>Instagram</strong> (brand-tagged pages or hashtags, one per line — <code className="font-mono text-[11px] bg-surface px-1 rounded">#skincare</code> or plain <code className="font-mono text-[11px] bg-surface px-1 rounded">skincare</code> both work) and/or <strong>Threads</strong> (pain-point and content-genre search terms — Threads has no tagged pages, so discovery is keyword search). Edits here change every session under the campaign.</span>
                 </li>
               </ul>
-              <p className="text-[13px] text-body leading-relaxed">
-                Ran this brand before? The <strong>Databank</strong> launcher at the top of an empty Set-up page shows a card per saved brand: click a card to prefill its background and products, then click one of its <strong>saved runs</strong> to reload the scrape inputs and the full scoring form too. There's nothing to save manually — the moment you hit <strong>Start scoring</strong>, your inputs file themselves under the brief's brand name as a run named after the session, so one brand keeps a setup per campaign.
-              </p>
             </div>
           </li>
 
@@ -206,23 +193,23 @@ export default function InstructionsPage() {
           {[
             {
               n: 3,
-              title: 'Score & enrich',
-              text: <>Hit <strong>Start scoring</strong> and every account gets ranked by Engagement and Relevancy — instantly, right in your browser. Want fresher numbers? <strong>Fetch Live Stats</strong> pulls real-time median likes, views, and comments (≈$0.01/account, cached 7 days). You can also <strong>Score fit with AI</strong> to add an AI Fit column — it's advisory unless you tick <strong>Blend into Overall</strong>.</>,
+              title: 'Run & score',
+              text: <>Back on <strong>Run a campaign</strong>, either <strong>scrape the campaign's targets</strong> (pick the max results per target) or <strong>upload an Apify .xlsx export</strong> instead. Every account gets ranked by Engagement and Relevancy — instantly, right in your browser, and free. Want fresher numbers? <strong>Fetch Live Stats</strong> pulls real-time median likes, views, and comments (≈$0.01/account, cached 7 days). You can also <strong>Score fit with AI</strong> to add an AI Fit column — advisory unless you tick <strong>Blend into Overall</strong>.</>,
             },
             {
               n: 4,
               title: 'Review & shortlist',
-              text: <>Work through the ranked table — the header stays put while you scroll. Click a numeric column to sort, or open a category column's dropdown to filter (Location, say). The <strong>Content</strong> filter (All / Video only / Non-video) narrows by format. Expand any row for the verdict, AI Fit reasoning, niche signals, and flags. Every sort and filter lands in the URL — copy the link and a teammate opens the exact same view.</>,
+              text: <>Work through the ranked table — the header stays put while you scroll. Click a numeric column to sort, or open a category column's dropdown to filter (Location, say). The <strong>Content</strong> filter (All / Video only / Non-video) narrows by format. Expand any row for the verdict, AI Fit reasoning, niche signals, and flags. Every sort and filter lands in the URL — copy the link and a teammate opens the exact same view. Tick your picks and <strong>Send for Review</strong>. Save any standout to the <strong>Creator Vault</strong> with the bookmark icon to reuse it later.</>,
             },
             {
               n: 5,
-              title: 'Reach out',
-              text: <>Move your approved accounts to <strong>Ready to Send</strong>. From there you can copy profile links, open Instagram, and track DM status per account — so nobody double-sends.</>,
+              title: 'Team review',
+              text: <>Sent accounts land in the <strong>Review Queue</strong>, grouped by campaign. A brand manager opens a submission and <strong>approves or rejects</strong> each account — adding a 1–5 fit rating on approvals or a categorised reason on rejections, which trains the AI Fit score over time. They can edit the brief and seeding criteria and generate the one shared <strong>campaign DM draft</strong> here too.</>,
             },
             {
               n: 6,
-              title: 'Export',
-              text: <>Hit <strong>Export to XLSX</strong> and you get a formatted spreadsheet — per-source colour coding, workflow dropdowns, and clickable Instagram links.</>,
+              title: 'Reach out, export & track',
+              text: <>Approved accounts move to <strong>Ready to Send</strong> — copy profile links, open Instagram, and track DM status per account so nobody double-sends. <strong>Export to XLSX</strong> anytime for a formatted spreadsheet (per-source colour coding, workflow dropdowns, clickable links). Then attach the approved KOLs to the campaign board to track them through to their published post (see <em>Tracking your seeded KOLs</em> below).</>,
             },
           ].map(({ n, title, text }) => (
             <li key={n} className="flex gap-4">
@@ -506,6 +493,28 @@ export default function InstructionsPage() {
         <p className="text-[11px] text-faint font-mono mt-6">
           Verification uses the same Apify scrape as Live Stats (~$0.01 per KOL checked); nudge drafts use DeepSeek (a fraction of a cent each) — the same two paid APIs from the cost note above. Everything else in Campaign Ops is free.
         </p>
+      </Details>
+
+      {/* The rest of the app — collapsed reference */}
+      <Details label="Also in the app" title="The other tabs">
+        <div className="space-y-4 mt-4">
+          <div>
+            <p className="text-[14px] font-semibold text-ink mb-0.5">Dashboard</p>
+            <p className="text-[13px] text-body leading-relaxed">Your landing view — an at-a-glance roll-up of campaigns, what's waiting in the Review Queue, and quick jumps into the work.</p>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-ink mb-0.5">Creator Vault</p>
+            <p className="text-[13px] text-body leading-relaxed">A team-shared library of creators worth reusing. Hit the bookmark icon on any result or review row to save a creator; the Vault keeps a snapshot of their stats (labelled "as of" the save date) and the niches from that run, so a good find is never lost between campaigns.</p>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-ink mb-0.5">History</p>
+            <p className="text-[13px] text-body leading-relaxed">Every scoring run, newest first — reopen a past run's results, or move it under a different campaign. Runs also appear under their campaign as <strong>Seeder sessions</strong>.</p>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-ink mb-0.5">Roles &amp; access</p>
+            <p className="text-[13px] text-body leading-relaxed">Sign-in is limited to <code className="font-mono text-[11px] bg-surface px-1 rounded">@markato.com</code> accounts. <strong>Brand managers</strong> see the Review Queue and Campaigns but not the Seeder, History, or Ready to Send; <strong>assistants</strong> see the full seeding workflow; <strong>admins</strong> also get the Team tab to manage roles. Shared links respect the opener's role — a link into a tab they can't access falls back to this page.</p>
+          </div>
+        </div>
       </Details>
 
       </>}

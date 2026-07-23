@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, ArrowLeft, Pencil, LayoutGrid, Table2 } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, ArrowLeft, Pencil, LayoutGrid, Table2, Bookmark, BookmarkCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { mergeReviewEntry, reviewKey, campaignDmDraft, DM_DRAFT_KEY } from '../lib/reviewState'
+import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
@@ -104,6 +105,22 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
+// Save-to-Vault star, shared by the card and table-row layouts. Renders nothing
+// when the vault isn't wired (local dev without Supabase).
+function VaultStar({ account, vaultedKeys, onToggleVault }) {
+  if (!onToggleVault) return null
+  const saved = vaultedKeys?.has(vaultKey(account))
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggleVault(account) }}
+      title={saved ? 'Saved to Creator Vault — click to remove' : 'Save to Creator Vault'}
+      className={`flex-shrink-0 transition-colors ${saved ? 'text-accent' : 'text-faint hover:text-ink'}`}
+    >
+      {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+    </button>
+  )
+}
+
 const TABLE_ROW_COLS = {
   brand:                 { label: 'Brand',      min: '80px',  render: (a) => (
     <span className="font-mono text-xs text-body">
@@ -138,7 +155,7 @@ function buildGridTemplate(activeCols) {
 }
 
 
-function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
+function AccountCard({ account, reviewEntry, onUpdate, selectedColumns, vaultedKeys, onToggleVault }) {
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
   const rejectReason = reviewEntry?.reject_reason || null
@@ -205,6 +222,7 @@ function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
               className="font-semibold text-[13.5px] text-ink hover:text-ink/70 flex items-center gap-1">
               @{account.username} <ExternalLink size={11} className="opacity-40" />
             </a>
+            <VaultStar account={account} vaultedKeys={vaultedKeys} onToggleVault={onToggleVault} />
             {account.platform === 'threads' && (
               <span className="font-mono text-[10px] bg-ink/10 text-ink/70 px-2 py-0.5 rounded-[5px]">Threads</span>
             )}
@@ -323,7 +341,7 @@ function AccountCard({ account, reviewEntry, onUpdate, selectedColumns }) {
   )
 }
 
-function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns }) {
+function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns, vaultedKeys, onToggleVault }) {
   const status = reviewEntry?.status || 'pending'
   const dmStatus = reviewEntry?.dm_status || 'not_sent'
   const rejectReason = reviewEntry?.reject_reason || null
@@ -385,15 +403,18 @@ function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns }) {
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="min-w-0 flex flex-col justify-center sticky left-0 z-[1] bg-white group-hover:bg-surface">
-          <a
-            href={profileUrl(account)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1"
-          >
-            @{account.username} <ExternalLink size={11} className="opacity-30" />
-          </a>
+          <div className="flex items-center gap-1.5">
+            <a
+              href={profileUrl(account)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1"
+            >
+              @{account.username} <ExternalLink size={11} className="opacity-30" />
+            </a>
+            <VaultStar account={account} vaultedKeys={vaultedKeys} onToggleVault={onToggleVault} />
+          </div>
           {account.fullName && <p className="text-xs text-faint truncate">{account.fullName}</p>}
         </div>
         {activeCols.map(id => (
@@ -510,6 +531,33 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
+
+  // Creator Vault — which accounts in this review are already saved.
+  const [vaultedKeys, setVaultedKeys] = useState(() => new Set())
+  useEffect(() => {
+    if (!supabase) return
+    vaultedKeySet().then(setVaultedKeys).catch(console.error)
+  }, [])
+  const handleToggleVault = useCallback(async (account) => {
+    const key = vaultKey(account)
+    const wasSaved = vaultedKeys.has(key)
+    setVaultedKeys((prev) => {
+      const next = new Set(prev)
+      if (wasSaved) next.delete(key); else next.add(key)
+      return next
+    })
+    try {
+      if (wasSaved) await removeFromVaultByHandle(account)
+      else await saveToVault(account, { runId: reviewId, niches: account.nicheSignals || [] })
+    } catch (err) {
+      setVaultedKeys((prev) => {
+        const next = new Set(prev)
+        if (wasSaved) next.add(key); else next.delete(key)
+        return next
+      })
+      alert('Could not update the Creator Vault: ' + err.message)
+    }
+  }, [vaultedKeys, reviewId])
   // Column visibility is remembered across tabs + reloads (Phase 4).
   const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
   const handleColumnsChange = useCallback((next) => {
@@ -936,6 +984,8 @@ export default function ReviewPage({ reviewId, onBack }) {
               reviewEntry={reviewState[reviewKey(account)]}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}
+              vaultedKeys={vaultedKeys}
+              onToggleVault={supabase ? handleToggleVault : null}
             />
           ))}
         </div>
@@ -950,6 +1000,8 @@ export default function ReviewPage({ reviewId, onBack }) {
               reviewEntry={reviewState[reviewKey(account)]}
               onUpdate={handleUpdate}
               selectedColumns={selectedColumns}
+              vaultedKeys={vaultedKeys}
+              onToggleVault={supabase ? handleToggleVault : null}
             />
           ))}
         </div>

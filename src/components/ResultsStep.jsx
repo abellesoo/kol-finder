@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, Sparkles } from 'lucide-react'
+import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, Sparkles, Bookmark, BookmarkCheck } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
@@ -13,6 +13,7 @@ import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluencers'
 import { updateSessionLiveStats } from '../lib/sessionHistory'
+import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
 import { supabase } from '../lib/supabase'
 import TableErrorBoundary from './TableErrorBoundary'
 import StepProgress from './core/StepProgress'
@@ -164,7 +165,7 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
-function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode }) {
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode, vaultedKeys, onToggleVault }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
   // Extra leading column for checkbox when in selection mode
   const gridTemplate = selectionMode
@@ -305,6 +306,18 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
                   className="font-medium text-sm text-ink hover:text-ink/70 flex items-center gap-1">
                   @{r.username} <ExternalLink size={11} className="opacity-40" />
                 </a>
+                {onToggleVault && (() => {
+                  const saved = vaultedKeys.has(vaultKey(r))
+                  return (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleVault(r) }}
+                      title={saved ? 'Saved to Creator Vault — click to remove' : 'Save to Creator Vault'}
+                      className={`flex-shrink-0 transition-colors ${saved ? 'text-accent' : 'text-faint opacity-0 group-hover:opacity-100 hover:text-ink'}`}
+                    >
+                      {saved ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
+                    </button>
+                  )
+                })()}
               </div>
               {r.fullName && <p className="text-xs text-ink/40 truncate">{r.fullName}</p>}
               <div className="flex flex-wrap gap-1 mt-1">
@@ -391,6 +404,39 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
 
   // Review state (kept for column rendering; populated if this session had a prior share)
   const [reviewState] = useState({})
+
+  // Creator Vault — which of these results are already saved. Loaded once so the
+  // star buttons render filled/empty; toggling updates the set optimistically.
+  const [vaultedKeys, setVaultedKeys] = useState(() => new Set())
+  useEffect(() => {
+    if (!supabase) return
+    vaultedKeySet().then(setVaultedKeys).catch(console.error)
+  }, [])
+  const handleToggleVault = useCallback(async (r) => {
+    const key = vaultKey(r)
+    const wasSaved = vaultedKeys.has(key)
+    // Optimistic flip so the icon responds instantly.
+    setVaultedKeys((prev) => {
+      const next = new Set(prev)
+      if (wasSaved) next.delete(key); else next.add(key)
+      return next
+    })
+    try {
+      if (wasSaved) {
+        await removeFromVaultByHandle(r)
+      } else {
+        await saveToVault(r, { runId: sessionIdRef.current, niches: config?.niches || [] })
+      }
+    } catch (err) {
+      // Roll back on failure.
+      setVaultedKeys((prev) => {
+        const next = new Set(prev)
+        if (wasSaved) next.add(key); else next.delete(key)
+        return next
+      })
+      alert('Could not update the Creator Vault: ' + err.message)
+    }
+  }, [vaultedKeys, config])
 
   const [liveStats, setLiveStats] = useState(() => {
     const cache = readCache()
@@ -933,6 +979,8 @@ export default function ResultsStep({ results, influencers, config, sessionId, o
           selectedAccounts={selectedAccounts}
           onToggleSelect={handleToggleSelect}
           selectionMode={selectionMode}
+          vaultedKeys={vaultedKeys}
+          onToggleVault={supabase ? handleToggleVault : null}
         />
         </div>
       </TableErrorBoundary>

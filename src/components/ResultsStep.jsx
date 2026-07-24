@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, Sparkles, Bookmark, BookmarkCheck } from 'lucide-react'
+import { Download, ExternalLink, Info, Loader2, RefreshCw, Send, Check, X, Sparkles, Bookmark, BookmarkCheck } from 'lucide-react'
 import { exportToCsv } from '../lib/exportCsv'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
@@ -174,9 +174,10 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
 
 function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, triage, onTriage, vaultedKeys, onToggleVault }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
-  // Fixed leading column holds the first-round Keep / Cut triage control (7rem
-  // wide → the Account column sticks just right of it at left-28).
-  const gridTemplate = `7rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
+  // Fixed leading column holds the first-round Keep / Cut triage control (11rem
+  // wide → the Account column sticks just right of it at left-44). The buttons
+  // mirror the brand manager's Approve / Reject in ReviewPage.
+  const gridTemplate = `11rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
 
   const renderCell = (col, r) => {
     try {
@@ -269,7 +270,7 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       <div className="sticky top-0 z-20 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
         <span className="sticky left-0 bg-surface z-10">Triage</span>
-        <span className="sticky left-28 bg-surface z-10">Account</span>
+        <span className="sticky left-44 bg-surface z-10">Account</span>
         {visibleCols.map((col) => (
           <ColumnHeaderCell
             key={col.id}
@@ -298,23 +299,23 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             onClick={() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r))}
             {...clickableRow(() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r)))}
           >
-            <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center gap-1">
+            <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center gap-2">
               <button
                 onClick={() => onTriage(rowKey(r), 'kept')}
                 title="Keep — shortlist for brand-manager review"
-                className={`px-1.5 py-0.5 rounded-[6px] text-[10px] font-mono border transition-colors ${triageStatus === 'kept' ? 'bg-sage/15 border-sage/40 text-sage font-semibold' : 'border-mist text-faint hover:border-sage/50 hover:text-sage'}`}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-[9px] text-[12px] transition-all ${triageStatus === 'kept' ? 'bg-sage text-white border border-transparent' : 'border border-sage/40 text-sage hover:bg-sage/10'}`}
               >
-                Keep
+                <Check size={12} /> Keep
               </button>
               <button
                 onClick={() => onTriage(rowKey(r), 'cut')}
                 title="Cut — set aside; won't be sent for review"
-                className={`px-1.5 py-0.5 rounded-[6px] text-[10px] font-mono border transition-colors ${triageStatus === 'cut' ? 'bg-rose/15 border-rose/40 text-rose font-semibold' : 'border-mist text-faint hover:border-rose/50 hover:text-rose'}`}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-[9px] text-[12px] transition-all ${triageStatus === 'cut' ? 'bg-rose text-white border border-transparent' : 'border border-rose/40 text-rose hover:bg-rose/10'}`}
               >
-                Cut
+                <X size={12} /> Cut
               </button>
             </div>
-            <div className="min-w-0 sticky left-28 z-[1] bg-white group-hover:bg-surface">
+            <div className="min-w-0 sticky left-44 z-[1] bg-white group-hover:bg-surface">
               <div className="flex items-center gap-2">
                 <a href={profileUrl(r)} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup, setCampaignAssignees, listAssignableUsers } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
-import { formatDate, campaignMetrics } from '../lib/utils'
+import { formatDate, campaignMetrics, money } from '../lib/utils'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import ImportCampaignModal from './ImportCampaignModal'
 import AssigneePicker from './core/AssigneePicker'
@@ -166,6 +166,27 @@ function CampaignPanel({
         </div>
       ) : (
         <p className="text-[11.5px] text-faint">Attach approved KOLs from the Review Queue, or run a seeding session to get started.</p>
+      )}
+
+      {/* Budget vs committed spend — only when a budget is set on the campaign */}
+      {m.budget != null && (
+        <div>
+          <div className="flex items-center justify-between text-[10.5px] mb-1.5">
+            <span className={`font-semibold ${m.budgetUsed != null && m.budgetUsed > 100 ? 'text-rose-strong' : 'text-muted'}`}>
+              {m.budgetUsed != null && m.budgetUsed > 100 ? 'Over budget' : 'Budget'}
+              {m.targetKols ? <span className="text-faint font-normal"> · {m.total}/{m.targetKols} creators</span> : null}
+            </span>
+            <span className="text-muted tabular-nums">
+              <b className="text-ink font-semibold">{money(m.spent)}</b> of {money(m.budget)}
+            </span>
+          </div>
+          <div className="flex h-2.5 rounded-full overflow-hidden bg-mist">
+            <span
+              className={m.budgetUsed != null && m.budgetUsed > 100 ? 'bg-rose-strong' : 'bg-sage'}
+              style={{ width: `${Math.min(100, m.budgetUsed || 0)}%` }}
+            />
+          </div>
+        </div>
       )}
 
       {/* Footer */}

@@ -138,9 +138,13 @@ export async function listCampaigns() {
   const ids = (campaigns || []).map((c) => c.id)
   const counts = {}
   const sessionCounts = {}
+  const spend = {}
   if (ids.length) {
     const [kolsRes, sessRes] = await Promise.all([
-      supabase.from('campaign_kols').select('campaign_id, state').in('campaign_id', ids),
+      supabase
+        .from('campaign_kols')
+        .select('campaign_id, state, agreed_fee, product_value')
+        .in('campaign_id', ids),
       supabase.from('sessions').select('campaign_id').in('campaign_id', ids),
     ])
     if (kolsRes.error) throw new Error(kolsRes.error.message)
@@ -148,6 +152,8 @@ export async function listCampaigns() {
     for (const k of kolsRes.data || []) {
       counts[k.campaign_id] = counts[k.campaign_id] || {}
       counts[k.campaign_id][k.state] = (counts[k.campaign_id][k.state] || 0) + 1
+      // Committed spend = fees + gifted product cost across every enrolled KOL.
+      spend[k.campaign_id] = (spend[k.campaign_id] || 0) + Number(k.agreed_fee || 0) + Number(k.product_value || 0)
     }
     for (const s of sessRes.data || []) {
       if (s.campaign_id) sessionCounts[s.campaign_id] = (sessionCounts[s.campaign_id] || 0) + 1
@@ -158,6 +164,7 @@ export async function listCampaigns() {
     ...c,
     counts: counts[c.id] || {},
     sessionCount: sessionCounts[c.id] || 0,
+    spent: spend[c.id] || 0,
   }))
 }
 
@@ -186,6 +193,8 @@ export async function createCampaign(fields) {
     default_step1: fields.default_step1 || {},
     default_step2: fields.default_step2 || {},
     product: fields.product?.trim() || null,
+    budget: fields.budget != null && fields.budget !== '' ? Number(fields.budget) : null,
+    target_kols: fields.target_kols != null && fields.target_kols !== '' ? Math.round(Number(fields.target_kols)) : null,
   }
   const { data, error } = await supabase.from('campaigns').insert(payload).select('*').single()
   if (error) throw new Error(error.message)
@@ -204,6 +213,9 @@ export async function updateCampaignSetup(id, fields) {
   if (fields.product !== undefined) patch.product = fields.product?.trim() || null
   if (fields.default_step1 !== undefined) patch.default_step1 = fields.default_step1 || {}
   if (fields.default_step2 !== undefined) patch.default_step2 = fields.default_step2 || {}
+  if (fields.budget !== undefined) patch.budget = fields.budget != null && fields.budget !== '' ? Number(fields.budget) : null
+  if (fields.target_kols !== undefined)
+    patch.target_kols = fields.target_kols != null && fields.target_kols !== '' ? Math.round(Number(fields.target_kols)) : null
   const { data, error } = await supabase.from('campaigns').update(patch).eq('id', id).select('*').single()
   if (error) throw new Error(error.message)
   return data
@@ -541,6 +553,26 @@ export async function setDeadlineOverride(kolId, dateOrNull) {
   return data
 }
 
+// Per-KOL cost: the agreed fee (0 for gifted) + retail value of the seeded
+// product. Sum of these across a campaign's KOLs is the committed spend the
+// budget bar compares against. Pass only the fields you're changing; '' clears
+// to 0 (a KOL always has a cost, even if zero).
+export async function setKolCost(kolId, fields) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const patch = { updated_at: new Date().toISOString() }
+  const num = (v) => (v == null || v === '' ? 0 : Number(v))
+  if (fields.agreed_fee !== undefined) patch.agreed_fee = num(fields.agreed_fee)
+  if (fields.product_value !== undefined) patch.product_value = num(fields.product_value)
+  const { data, error } = await supabase
+    .from('campaign_kols')
+    .update(patch)
+    .eq('id', kolId)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
 // Bulk import for historical/spreadsheet data: inserts campaign_kols with full
 // state (fee, tier, dates, notes) and logs verified_posts for any row that
 // already has a post URL (marked human_verified — a person recorded it).
@@ -749,6 +781,12 @@ function platformOf(acc) {
   return String(acc?.platform || '').toLowerCase().includes('thread') ? 'Threads' : 'IG'
 }
 function freePaid(k) { return k.tier === 'B' ? 'Paid' : 'Free' }
+// Money for the sheet, matching the template's "$0.00" style (2dp + thousands).
+function sheetMoney(n) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return ''
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 function shippingAddress(k) {
   return [k.recipient_address, k.recipient_district, k.recipient_area].filter(Boolean).join(', ')
 }
@@ -836,21 +874,27 @@ export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreB
   // ── Tab: Marketing Plan Master (grouped by platform bucket) ─────────────────
   const SECTIONS = ['IG Seeding', 'Threads Seeding', 'Reels', 'Media', 'Ad']
   const bucketOf = ({ acc }) => (platformOf(acc) === 'Threads' ? 'Threads Seeding' : 'IG Seeding')
+  // A KOL's Budget-column value = agreed fee, or product value when gifted.
+  const budgetOf = (k) => Number(k.agreed_fee ?? k.product_value ?? 0) || 0
   const planRows = []
   const sectionRows = []
   for (const sec of SECTIONS) {
+    const secItems = sec === 'IG Seeding' || sec === 'Threads Seeding'
+      ? items.filter((it) => bucketOf(it) === sec)
+      : []
+    // Monthly Total = sum of the section's Budget cells (section header rows are
+    // exempt from manual-cell preservation, so this recomputes on every sync).
+    const secTotal = secItems.reduce((t, { k }) => t + budgetOf(k), 0)
     sectionRows.push(planRows.length)
-    planRows.push(['', '', '', sec, '', '$0.00', '', '', '', '', '', '', ''])
-    if (sec === 'IG Seeding' || sec === 'Threads Seeding') {
-      items.filter((it) => bucketOf(it) === sec).forEach(({ k, rv, post }, i) => {
-        planRows.push([
-          '', '', i + 1, k.kol_handle, sheetFormats(k),
-          s(k.agreed_fee ?? k.product_value), planStatus(k, rv.dm_status),
-          day(post?.posted_at), post?.post_url || '', '',
-          s(k.notes), freePaid(k) === 'Free' ? 'No payment required' : 'Pending', '',
-        ])
-      })
-    }
+    planRows.push(['', sheetMoney(secTotal), '', sec, '', sheetMoney(secTotal), '', '', '', '', '', '', ''])
+    secItems.forEach(({ k, rv, post }, i) => {
+      planRows.push([
+        '', '', i + 1, k.kol_handle, sheetFormats(k),
+        s(k.agreed_fee ?? k.product_value), planStatus(k, rv.dm_status),
+        day(post?.posted_at), post?.post_url || '', '',
+        s(k.notes), freePaid(k) === 'Free' ? 'No payment required' : 'Pending', '',
+      ])
+    })
   }
   if (planRows.length) planRows[0][0] = campaign?.start_date ? MONTHS[+campaign.start_date.slice(5, 7) - 1] || '' : ''
   const planMaster = {
@@ -899,7 +943,33 @@ export function buildCampaignSheetValues(campaign, kols, postsByKol = {}, scoreB
     ],
   }
 
-  return { title: `${campaign.name}${SHEET_TITLE_SUFFIX}`, tabs: [allApproved, planMaster, shipment, dmTab] }
+  // ── Tab: Budget (campaign budget vs committed spend) ────────────────────────
+  // Spend = Σ agreed fee + product value across every attached KOL, matching the
+  // dashboard's budget bar. budget/target come off the campaign; blank ⇒ "—".
+  const bBudget = campaign?.budget != null ? Number(campaign.budget) : null
+  const bTarget = campaign?.target_kols != null ? Number(campaign.target_kols) : null
+  const bSpent = items.reduce((t, { k }) => t + (Number(k.agreed_fee || 0) + Number(k.product_value || 0)), 0)
+  const bRemaining = bBudget != null ? bBudget - bSpent : null
+  const bAllowance = bBudget != null && bTarget ? bBudget / bTarget : null
+  const bUsed = bBudget ? Math.round((bSpent / bBudget) * 100) : null
+  const budgetTab = {
+    name: 'Budget',
+    headers: ['Metric', 'Value'],
+    keyCol: 0,
+    manualCols: [],
+    headerFill: HEADER_FILL,
+    rows: [
+      ['Budget', bBudget != null ? sheetMoney(bBudget) : '—'],
+      ['Target creators', bTarget != null ? String(bTarget) : '—'],
+      ['Per-creator allowance', bAllowance != null ? sheetMoney(bAllowance) : '—'],
+      ['Creators seeded', String(items.length)],
+      ['Spend to date', sheetMoney(bSpent)],
+      ['Remaining', bRemaining != null ? sheetMoney(bRemaining) : '—'],
+      ['Budget used', bUsed != null ? `${bUsed}%` : '—'],
+    ],
+  }
+
+  return { title: `${campaign.name}${SHEET_TITLE_SUFFIX}`, tabs: [budgetTab, allApproved, planMaster, shipment, dmTab] }
 }
 
 export async function detachKol(kolId) {

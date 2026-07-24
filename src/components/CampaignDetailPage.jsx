@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
-  updateKolState, setDeadlineOverride, setTrackingNumber, sfTrackingUrl, setKolShipping, detachKol,
+  updateKolState, setDeadlineOverride, setTrackingNumber, sfTrackingUrl, setKolShipping, setKolCost, detachKol,
   effectiveDeadline, KOL_STATES,
   getVerifiedPostsByKol, getNudgesByKol, setHumanVerified,
   saveNudge, markNudgeSent,
@@ -24,7 +24,7 @@ import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '.
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
-import { formatDate } from '../lib/utils'
+import { formatDate, money } from '../lib/utils'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
@@ -61,6 +61,7 @@ const CAMPAIGN_COLS = [
   { id: 'shipped',  label: 'Shipped',  type: 'number' },
   { id: 'tracking', label: 'Tracking', type: 'text' },
   { id: 'deadline', label: 'Deadline', type: 'number' },
+  { id: 'cost',     label: 'Cost',     type: 'number' },
   { id: 'post',     label: 'Post',     type: 'text' },
 ]
 const CAMPAIGN_ACCESSORS = {
@@ -69,6 +70,7 @@ const CAMPAIGN_ACCESSORS = {
   status:   { filterValues: (k) => [STATE_META[k.state]?.label || k.state] },
   shipped:  { sortValue: (k) => (k.shipped_at ? Date.parse(k.shipped_at) : null) },
   deadline: { sortValue: (k) => (k.deadline_override ? Date.parse(k.deadline_override) : null) },
+  cost:     { sortValue: (k) => Number(k.agreed_fee || 0) + Number(k.product_value || 0) },
 }
 
 function AttachModal({ campaignId, existingHandles, onClose, onAttached }) {
@@ -292,6 +294,35 @@ function TrackingField({ kol, campaign, onSave }) {
           <Truck size={11} /> Track
         </a>
       )}
+    </span>
+  )
+}
+
+// Per-KOL cost: agreed fee + product value. Saves on blur (mirrors TrackingField).
+// The two together are what a KOL "costs" the campaign budget; either can be 0.
+function CostField({ kol, onSave, compact = false }) {
+  const [fee, setFee] = useState(kol.agreed_fee ?? '')
+  const [prod, setProd] = useState(kol.product_value ?? '')
+  useEffect(() => { setFee(kol.agreed_fee ?? '') }, [kol.agreed_fee])
+  useEffect(() => { setProd(kol.product_value ?? '') }, [kol.product_value])
+  const saveFee = () => { if (Number(fee || 0) !== Number(kol.agreed_fee || 0)) onSave(kol, { agreed_fee: fee }) }
+  const saveProd = () => { if (Number(prod || 0) !== Number(kol.product_value || 0)) onSave(kol, { product_value: prod }) }
+  const boxCls = 'px-2 py-1 border border-mist rounded-[8px] text-[11px] font-mono text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40'
+  const field = (val, setVal, save, ph, w) => (
+    <span className="relative inline-flex items-center">
+      <span className="absolute left-2 text-faint text-[10px] pointer-events-none">$</span>
+      <input type="number" min="0" step="any" value={val} placeholder={ph}
+        onChange={(e) => setVal(e.target.value)} onBlur={save}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        className={`${boxCls} pl-4`} style={{ width: w }} />
+    </span>
+  )
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {!compact && <span className="text-[10px] font-mono text-faint uppercase tracking-[.1em]">Fee</span>}
+      {field(fee, setFee, saveFee, 'fee', 64)}
+      {!compact && <span className="text-[10px] font-mono text-faint uppercase tracking-[.1em]">Product</span>}
+      {field(prod, setProd, saveProd, 'product', 64)}
     </span>
   )
 }
@@ -533,7 +564,7 @@ function DeadlineMeta({ kol, campaign }) {
   )
 }
 
-function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onTracking, onShipping, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
+function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverride, onTracking, onCost, onShipping, onDetach, onConfirmPost, onDraftNudge, onMarkSent, onSetFormats }) {
   const formats = kol.content_formats || []
   // Story/blog-only KOLs can't be auto-verified (see campaigns.js) — flag it so
   // the manager knows to mark them posted by hand.
@@ -573,6 +604,7 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
               className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
           </label>
           <TrackingField kol={kol} campaign={campaign} onSave={onTracking} />
+          <CostField kol={kol} onSave={onCost} />
         </div>
         <button onClick={() => onDetach(kol)} title="Remove from campaign"
           className="flex items-center justify-center w-8 h-8 rounded-[9px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
@@ -600,7 +632,7 @@ function KolRow({ kol, campaign, posts = [], nudges = [], onStateChange, onOverr
 // Spreadsheet-style view: one KOL per row. Same controls as the board (status,
 // format, deadline, post-confirm) in a compact grid. Nudge drafting stays in the
 // board view to keep the table lean.
-function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTracking, onDetach, onConfirmPost, onSetFormats }) {
+function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTracking, onCost, onDetach, onConfirmPost, onSetFormats }) {
   const { processed: sortedKols, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
     useTableControls(kols, { defaultSortId: null, accessors: CAMPAIGN_ACCESSORS, urlSync: true, urlKey: 'campaign' })
 
@@ -649,6 +681,9 @@ function KolTable({ kols, campaign, postsByKol, onStateChange, onOverride, onTra
                   <input type="date" value={kol.deadline_override || ''}
                     onChange={(e) => onOverride(kol, e.target.value || null)}
                     className="px-2 py-1 border border-mist rounded-[8px] text-[11px] text-ink bg-white focus:outline-none focus:border-ink/40" />
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap">
+                  <CostField kol={kol} onSave={onCost} compact />
                 </td>
                 <td className="px-3 py-3">
                   {posts.length ? posts.map((p) => (
@@ -776,7 +811,11 @@ function CampaignSetupPanel({ campaign, onSaved }) {
   const [editing, setEditing] = useState(!hasSetup) // fresh campaign opens ready to fill
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
-  const [form, setForm] = useState(() => toSetupForm(s1, s2))
+  const [form, setForm] = useState(() => ({
+    ...toSetupForm(s1, s2),
+    budget: campaign.budget ?? '',
+    targetKols: campaign.target_kols ?? '',
+  }))
   const [brandFacts, setBrandFacts] = useState(null)
   const [brief, setBrief] = useState('')
   const [tidying, setTidying] = useState(false)
@@ -794,7 +833,7 @@ function CampaignSetupPanel({ campaign, onSaved }) {
   }, [campaign.id])
 
   const startEdit = () => {
-    setForm(toSetupForm(s1, s2))
+    setForm({ ...toSetupForm(s1, s2), budget: campaign.budget ?? '', targetKols: campaign.target_kols ?? '' })
     setBrief(briefSeed(brandFacts || {}, s2, campaign.brand))
     setErr(null); setTidyErr(''); setEditing(true)
   }
@@ -830,6 +869,8 @@ function CampaignSetupPanel({ campaign, onSaved }) {
       }
       const updated = await updateCampaignSetup(campaign.id, {
         product: bf.newProduct || null, // fills the Shipment Record "Product" column
+        budget: form.budget,
+        target_kols: form.targetKols,
         default_step2: {
           ...s2, ...derived,
           targetAudience: form.targetAudience,
@@ -889,6 +930,16 @@ function CampaignSetupPanel({ campaign, onSaved }) {
                 : undefined}
             </SetupKV>
             <SetupKV label="Target location">{s2.locationTarget}</SetupKV>
+            <SetupKV label="Budget">
+              {campaign.budget != null ? (
+                <span>
+                  {money(campaign.budget)}
+                  {campaign.target_kols ? (
+                    <span className="text-faint"> · {campaign.target_kols} creators · {money(campaign.budget / campaign.target_kols)}/creator</span>
+                  ) : null}
+                </span>
+              ) : undefined}
+            </SetupKV>
           </div>
           <div>
             <SetupKV label="Scrape — platforms">
@@ -980,6 +1031,24 @@ function CampaignSetupPanel({ campaign, onSaved }) {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+          <div className="sm:col-span-2 grid grid-cols-2 gap-4 pt-1 border-t border-mist/60">
+            <div>
+              <label className={lblCls}>Budget <span className="text-faint normal-case tracking-normal">· fees + product</span></label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint text-[12.5px]">$</span>
+                <input type="number" min="0" step="any" className={inputCls + ' pl-5'} value={form.budget}
+                  onChange={(e) => set('budget', e.target.value)} placeholder="0" />
+              </div>
+            </div>
+            <div>
+              <label className={lblCls}>Target creators <span className="text-faint normal-case tracking-normal">· approx.</span></label>
+              <input type="number" min="0" step="1" className={inputCls} value={form.targetKols}
+                onChange={(e) => set('targetKols', e.target.value)} placeholder="e.g. 30" />
+              {Number(form.budget) > 0 && Number(form.targetKols) > 0 && (
+                <p className="text-[11px] text-faint mt-1">≈ {money(Number(form.budget) / Number(form.targetKols))} per creator</p>
+              )}
             </div>
           </div>
           {err && <p className="sm:col-span-2 text-[11px] text-rose">{err}</p>}
@@ -1216,6 +1285,21 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     }
   }, [load])
 
+  const handleCost = useCallback(async (kol, patch) => {
+    // optimistic — coerce blank to 0 to match the writer
+    const opt = {}
+    if (patch.agreed_fee !== undefined) opt.agreed_fee = patch.agreed_fee === '' ? 0 : Number(patch.agreed_fee)
+    if (patch.product_value !== undefined) opt.product_value = patch.product_value === '' ? 0 : Number(patch.product_value)
+    setKols((prev) => prev.map((k) => (k.id === kol.id ? { ...k, ...opt } : k)))
+    try {
+      const updated = await setKolCost(kol.id, patch)
+      setKols((prev) => prev.map((k) => (k.id === kol.id ? updated : k)))
+    } catch (e) {
+      setToast({ type: 'error', message: e.message })
+      load()
+    }
+  }, [load])
+
   const handleShipping = useCallback(async (kol, fields) => {
     try {
       const updated = await setKolShipping(kol.id, fields)
@@ -1404,6 +1488,13 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const eligible = total - optedOut
   const fulfillment = eligible > 0 ? Math.round((posted / eligible) * 100) : 0
 
+  // Live budget vs committed spend (Σ fee + product value across attached KOLs).
+  const spent = kols.reduce((s, k) => s + Number(k.agreed_fee || 0) + Number(k.product_value || 0), 0)
+  const budget = campaign.budget != null ? Number(campaign.budget) : null
+  const targetKols = campaign.target_kols != null ? Number(campaign.target_kols) : null
+  const budgetUsed = budget ? Math.round((spent / budget) * 100) : null
+  const overBudget = budget != null && spent > budget
+
   return (
     <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
@@ -1543,6 +1634,23 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
           <p className="text-[12px] font-mono text-ink font-medium" title="posted ÷ (attached − opted out)">
             {fulfillment}% fulfilled
           </p>
+          {budget != null && (
+            <>
+              <span className="text-mist">·</span>
+              <p className={`text-[12px] font-mono font-medium ${overBudget ? 'text-rose' : 'text-ink'}`}
+                title="Σ agreed fee + product value across attached KOLs, vs campaign budget">
+                {money(spent)} / {money(budget)}{budgetUsed != null ? ` · ${budgetUsed}%` : ''}
+              </p>
+            </>
+          )}
+          {targetKols != null && (
+            <>
+              <span className="text-mist">·</span>
+              <p className="text-[12px] font-mono text-muted" title="attached KOLs vs target creator count">
+                {total}/{targetKols} creators
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -1564,7 +1672,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
 
       {total > 0 && view === 'table' ? (
         <KolTable kols={kols} campaign={campaign} postsByKol={postsByKol}
-          onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onDetach={handleDetach}
+          onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onDetach={handleDetach}
           onConfirmPost={handleConfirmPost} onSetFormats={handleSetFormats} />
       ) : (
         <div className="space-y-6">
@@ -1581,7 +1689,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
                   {rows.map((kol) => (
                     <KolRow key={kol.id} kol={kol} campaign={campaign}
                       posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
-                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onShipping={handleShipping} onDetach={handleDetach}
+                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onShipping={handleShipping} onDetach={handleDetach}
                       onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
                       onSetFormats={handleSetFormats} />
                   ))}

@@ -31,6 +31,16 @@ export function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Money, for budget/fee/spend display. No decimals (seeding budgets are whole
+// numbers) with thousands separators; matches the sheet's "$" convention. The
+// campaigns span HK/TW markets, so we show a bare "$" rather than assume a
+// currency — the amount is what matters, the market column carries the rest.
+export function money(n) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  return '$' + Math.round(v).toLocaleString('en-US')
+}
+
 // Date + time, for the seeder session history where the clock matters.
 export function formatDateTime(iso) {
   if (!iso) return '—'
@@ -59,7 +69,21 @@ export function campaignMetrics(c) {
   // ring and the detail page disagree for any campaign with opt-outs.
   const optedOut = counts.opted_out || 0
   const eligible = total - optedOut
-  return { total, posted, overdue, optedOut, eligible, fulfilled: eligible > 0 ? Math.round((posted / eligible) * 100) : 0 }
+  // Budget: `budget`/`target_kols` are campaign columns, `spent` is the committed
+  // spend rolled up by listCampaigns (Σ agreed_fee + product_value). budget/target
+  // are null until set, so every derived number is null-safe (no budget → no bar).
+  const budget = c.budget != null ? Number(c.budget) : null
+  const targetKols = c.target_kols != null ? Number(c.target_kols) : null
+  const spent = Number(c.spent || 0)
+  const remaining = budget != null ? budget - spent : null
+  const allowance = budget != null && targetKols ? budget / targetKols : null
+  const budgetUsed = budget ? Math.round((spent / budget) * 100) : null
+  return {
+    total, posted, overdue, optedOut, eligible,
+    fulfilled: eligible > 0 ? Math.round((posted / eligible) * 100) : 0,
+    budget, targetKols, spent, remaining, allowance, budgetUsed,
+    targetProgress: targetKols ? Math.round((total / targetKols) * 100) : null,
+  }
 }
 
 // Group rows by their campaign (campaigns in listing order, only those with

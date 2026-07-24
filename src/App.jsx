@@ -738,9 +738,14 @@ function AuthGate() {
     await supabase.auth.signOut()
   }
 
-  // No Supabase configured (local dev) — skip auth
+  // No Supabase configured — skip auth ONLY in a local dev build. In production
+  // a missing config must fail closed: otherwise a build shipped without the
+  // VITE_SUPABASE_* env vars would open the whole app as admin with no login.
   if (!supabase) {
-    return <MainApp user={null} role="admin" onSignOut={() => {}} />
+    if (import.meta.env.DEV) {
+      return <MainApp user={null} role="admin" onSignOut={() => {}} />
+    }
+    return <LoginPage error="Authentication is not configured (missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)." />
   }
 
   if (authState.loading) {

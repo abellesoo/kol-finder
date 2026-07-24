@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Loader2, Trash2, ExternalLink, Search, BookMarked, Rocket, X, Check, Download, BookmarkPlus, AlertCircle } from 'lucide-react'
 import { listVault, removeFromVault, saveToVault } from '../lib/vault'
 import { listCampaigns, attachKols } from '../lib/campaigns'
@@ -61,11 +61,15 @@ function CampaignPickerModal({ count, onClose, onPick }) {
       .catch((e) => setError(e.message))
   }, [])
 
+  // Read onClose through a ref so an inline parent callback doesn't tear down
+  // and re-add the listener on every parent re-render (e.g. a toast update).
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose()
+    const onKey = (e) => e.key === 'Escape' && onCloseRef.current()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4" onClick={onClose}>
@@ -130,6 +134,10 @@ export default function VaultPage({ onNavigate }) {
   const [toast, setToast] = useState(null)
   const [lookupStatus, setLookupStatus] = useState('idle') // idle | loading | error
   const [lookupError, setLookupError] = useState(null)
+  // Guards the ~1-2 min live-scrape chain in handleLookup against setState after
+  // the user navigates away.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -237,12 +245,14 @@ export default function VaultPage({ onNavigate }) {
         avgLikes: stats.medianLikes,
         aiScore: null,
       })
+      if (!mountedRef.current) return
       setRows((prev) => [saved, ...prev.filter((r) => r.id !== saved.id)])
       setLookupStatus('idle')
       setToast(`Saved @${handle} to the vault`)
       setTimeout(() => setToast(null), 4000)
     } catch (err) {
       console.error('Vault lookup failed', err)
+      if (!mountedRef.current) return
       setLookupError(err.message)
       setLookupStatus('error')
     }

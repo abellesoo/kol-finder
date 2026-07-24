@@ -27,5 +27,16 @@ export function useUrlParam(key, defaultValue) {
     }
   }, [key, value, defaultValue])
 
+  // Strip our key on unmount so this view toggle doesn't leak onto other pages
+  // after navigating away (stable dep → cleanup runs only on unmount).
+  useEffect(() => () => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has(key)) return
+    params.delete(key)
+    const qs = params.toString()
+    const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
+    window.history.replaceState(window.history.state, '', next)
+  }, [key])
+
   return [value, setValue]
 }

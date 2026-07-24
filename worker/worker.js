@@ -337,8 +337,8 @@ let jwksCache = null
 let jwksCacheAt = 0
 const JWKS_TTL_MS = 10 * 60 * 1000
 
-async function getJwks(supabaseUrl) {
-  if (jwksCache && Date.now() - jwksCacheAt < JWKS_TTL_MS) return jwksCache
+async function getJwks(supabaseUrl, force = false) {
+  if (!force && jwksCache && Date.now() - jwksCacheAt < JWKS_TTL_MS) return jwksCache
   const res = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/.well-known/jwks.json`)
   if (!res.ok) throw new Error(`Failed to fetch Supabase JWKS (${res.status})`)
   const { keys } = await res.json()
@@ -373,8 +373,13 @@ async function verifyJwt(token, env) {
       valid = await crypto.subtle.verify('HMAC', key, signature, data)
     } else if (header.alg === 'ES256') {
       if (!env.SUPABASE_URL) return null
-      const keys = await getJwks(env.SUPABASE_URL)
-      const jwk = keys.find((k) => k.kid === header.kid)
+      let jwk = (await getJwks(env.SUPABASE_URL)).find((k) => k.kid === header.kid)
+      if (!jwk) {
+        // Unknown kid — Supabase may have just rotated its signing key. Force one
+        // cache refresh before rejecting, so rotation doesn't 401 valid tokens
+        // for up to the 10-minute TTL.
+        jwk = (await getJwks(env.SUPABASE_URL, true)).find((k) => k.kid === header.kid)
+      }
       if (!jwk) return null
       const key = await crypto.subtle.importKey(
         'jwk',
@@ -775,6 +780,10 @@ export default {
     const authError = await verifyAuth(request, env)
     if (authError) return authError
 
+    // Wrap all routing so a malformed JSON body or an upstream (Apify/Sheets)
+    // network error returns a real JSON error *with CORS headers*, instead of a
+    // bare Cloudflare 500 that the browser can only report as a CORS failure.
+    try {
     const { pathname } = new URL(request.url)
     const KEY = env.APIFY_API_KEY
 
@@ -850,6 +859,7 @@ export default {
     // GET /run-status/:runId
     if (pathname.startsWith('/run-status/') && request.method === 'GET') {
       const runId = pathname.slice('/run-status/'.length)
+      if (!/^[\w-]+$/.test(runId)) return json({ error: 'Invalid run id' }, 400, origin)
       const res = await fetch(`${BASE}/actor-runs/${runId}?token=${KEY}`)
       return json(await res.json(), res.status, origin)
     }
@@ -861,6 +871,7 @@ export default {
     // so the client keeps iterating it directly).
     if (pathname.startsWith('/dataset/') && request.method === 'GET') {
       const datasetId = pathname.slice('/dataset/'.length)
+      if (!/^[\w-]+$/.test(datasetId)) return json({ error: 'Invalid dataset id' }, 400, origin)
       const PAGE_SIZE = 1000
       const HARD_CEILING = 10000
       const items = []
@@ -1335,6 +1346,9 @@ Return ONLY valid JSON, no markdown, in exactly this shape:
     }
 
     return new Response('Not found', { status: 404, headers: corsHeaders(origin) })
+    } catch (err) {
+      return json({ error: String(err?.message || err || 'Worker error') }, 500, origin)
+    }
   },
 
   // ── Cron: verify every active campaign, unattended (~2×/day per wrangler.toml).

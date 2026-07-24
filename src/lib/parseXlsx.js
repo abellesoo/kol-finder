@@ -10,7 +10,9 @@ const LOCATION_SIGNALS = {
   ],
   'Taiwan': [
     '台灣', 'taiwan', '台北', 'taipei', '高雄', '台中',
-    'nt$', '國語', '台語', '繁體', '正體',
+    'nt$', '國語', '台語',
+    // NOTE: '繁體'/'正體' (Traditional Chinese) were removed — Hong Kong writes
+    // Traditional Chinese too, so they misclassified HK creators as Taiwan.
   ],
   'Singapore': ['singapore', '新加坡', 'sgig', 'sgfashion', 'sgbeauty', 'sgd', 'orchard', 'sentosa'],
   'Macau': ['macau', 'macao', '澳門'],
@@ -20,12 +22,23 @@ const LOCATION_SIGNALS = {
 // LOCATION_SIGNALS entry and return the name with the most keyword hits, or ''
 // if nothing matches. Shared by IG (structured-field fallback) and Threads
 // (only signal available — Threads posts carry no city/country/locationName).
+// Short ASCII tokens (tst, cwb, sgd) substring-match unrelated words ("artist",
+// "greatest"), so require a word boundary for them; CJK and longer tokens match
+// by plain inclusion.
+function matchesSignal(lower, kw) {
+  const k = kw.toLowerCase()
+  if (/^[a-z0-9]{1,3}$/.test(k)) {
+    return new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`).test(lower)
+  }
+  return lower.includes(k)
+}
+
 function matchLocationSignals(searchText) {
   const lower = searchText.toLowerCase()
   let bestLocation = ''
   let bestCount = 0
   for (const [loc, signals] of Object.entries(LOCATION_SIGNALS)) {
-    const count = signals.filter((kw) => lower.includes(kw.toLowerCase())).length
+    const count = signals.filter((kw) => matchesSignal(lower, kw)).length
     if (count > bestCount) {
       bestCount = count
       bestLocation = loc

@@ -94,6 +94,27 @@ export function useTableControls(rows, {
     writeUrlTableState(urlPrefix, { sortId, sortDir, filters, defaultSortId, defaultSortDir })
   }, [urlSync, urlPrefix, sortId, sortDir, filters, defaultSortId, defaultSortDir])
 
+  // On unmount, strip our namespaced params so a table's sort/filters don't leak
+  // onto other pages — or silently pre-filter a fresh session — after navigating
+  // away. Stable deps → cleanup runs only on unmount. While mounted the write
+  // effect above keeps the URL populated and shareable.
+  useEffect(() => {
+    if (!urlSync) return
+    return () => {
+      const params = new URLSearchParams(window.location.search)
+      const sortParam = `${urlPrefix}sort`
+      const fpref = `${urlPrefix}f_`
+      let changed = false
+      for (const key of new Set([...params.keys()])) {
+        if (key === sortParam || key.startsWith(fpref)) { params.delete(key); changed = true }
+      }
+      if (!changed) return
+      const qs = params.toString()
+      const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
+      window.history.replaceState(window.history.state, '', next)
+    }
+  }, [urlSync, urlPrefix])
+
   // Header click on a numeric column: same column cycles desc → asc → off;
   // a new column starts at desc. Two flat setStates (no nested updater) so it
   // stays correct under StrictMode's double-invoked updaters.

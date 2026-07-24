@@ -44,6 +44,11 @@ export function formatDateTime(iso) {
 
 // Roll a campaign's per-state counts up to the numbers the cards/table/dashboard
 // show. Was duplicated verbatim in DashboardPage and CampaignsPage.
+// Coerce a campaign's assigned_to to an id array. Tolerates the pre-migration
+// scalar uuid (db/campaign_multi_assignee.sql) and null, so the "mine" filters
+// never run .includes() against a bare string (substring match → false owners).
+export const toIdArray = (v) => (Array.isArray(v) ? v : v ? [v] : [])
+
 export function campaignMetrics(c) {
   const counts = c.counts || {}
   const total = Object.values(counts).reduce((a, b) => a + b, 0)

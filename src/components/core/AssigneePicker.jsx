@@ -114,6 +114,10 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
   const ids = Array.isArray(value) ? value : value ? [value] : []
   const idSet = new Set(ids)
   const selected = users.filter((u) => idSet.has(u.id))
+  // Chip appearance keys off the raw id count, not `selected` — otherwise an
+  // assigned campaign flashes the dashed "Assign" state on every load until the
+  // async roster arrives, and a deleted/unresolved assignee undercounts.
+  const count = ids.length
 
   const toggle = (id) => {
     const next = idSet.has(id) ? ids.filter((x) => x !== id) : [...ids, id]
@@ -128,27 +132,32 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
         type="button"
         disabled={disabled}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
-        title={selected.length ? `Assigned to ${selected.map((s) => s.email).join(', ')}` : 'Unassigned — click to assign'}
+        title={count ? (selected.length ? `Assigned to ${selected.map((s) => s.email).join(', ')}` : `${count} assignee${count > 1 ? 's' : ''}`) : 'Unassigned — click to assign'}
         className={`flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-full border text-[12px] transition-all disabled:opacity-50 ${
-          selected.length
+          count
             ? 'border-card-edge bg-white text-body hover:border-ink/30'
             : 'border-dashed border-mist text-faint hover:text-ink hover:border-ink/30'
         }`}
       >
-        {selected.length === 0 ? (
+        {count === 0 ? (
           <>
             <UserCircle2 size={18} className="text-faint" strokeWidth={1.5} />
             <span>Assign</span>
           </>
-        ) : selected.length === 1 ? (
+        ) : count === 1 && selected.length === 1 ? (
           <>
             <AssigneeAvatar user={selected[0]} size={20} />
             <span className="max-w-[92px] truncate font-medium">{shortName(selected[0].email)}</span>
           </>
-        ) : (
+        ) : selected.length > 0 ? (
           <>
             <AssigneeAvatarStack users={selected} size={20} />
-            <span className="font-medium">{selected.length} people</span>
+            <span className="font-medium">{count} people</span>
+          </>
+        ) : (
+          <>
+            <UserCircle2 size={18} className="text-faint" strokeWidth={1.5} />
+            <span className="font-medium">{count === 1 ? 'Assigned' : `${count} people`}</span>
           </>
         )}
         <ChevronDown size={12} className="text-faint" />

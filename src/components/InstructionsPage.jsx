@@ -455,7 +455,7 @@ export default function InstructionsPage() {
             {
               n: 1,
               title: 'Create or import a campaign',
-              text: <>In the <strong>Campaigns</strong> tab, click <strong>New</strong> and set the brand, market, and posting deadline — plus the <strong>#hashtags</strong> and <strong>@mentions</strong> that count as "posted". Those are the signals the tracker matches against, so choose them carefully. Already have a marketing-plan sheet? Click <strong>Import</strong> to pull handles, budgets, and formats straight from the .xlsx. Flip between <strong>card</strong> and <strong>table</strong> views — the table shows KOLs, Posted, Overdue, and a <strong>Fulfilled %</strong> per campaign.</>,
+              text: <>In the <strong>Campaigns</strong> tab, click <strong>New</strong> and set the brand, market, and posting deadline — plus the <strong>#hashtags</strong> and <strong>@mentions</strong> that count as "posted". Those are the signals the tracker matches against, so choose them carefully. Already have a marketing-plan sheet? Click <strong>Import</strong> to pull handles, budgets, and formats straight from the .xlsx (dates are read <strong>day-month-year</strong>, HK style — e.g. 03/11 is 3 Nov). Flip between <strong>card</strong> and <strong>table</strong> views — the table shows KOLs, Posted, Overdue, and a <strong>Fulfilled %</strong> per campaign. Fulfilled % is posted ÷ eligible KOLs, where <strong>opted-out KOLs are excluded</strong> — so dropping out doesn't drag the score down.</>,
             },
             {
               n: 2,

@@ -82,6 +82,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
   const commitEdit = async (e) => {
     e?.stopPropagation()
     const id = editingId
+    if (id == null) return // input blur already committed — the Save click is a no-op
     const title = editingTitle.trim()
     setEditingId(null)
     setEditingTitle('')

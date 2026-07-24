@@ -106,10 +106,19 @@ export const SF_DEFAULTS = {
 const RECEIVER_AREA_CODE = { HK: '852', TW: '886', MO: '853', CN: '86' }
 const RECEIVER_CITY = { HK: '香港', TW: '台灣', MO: '澳門' }
 
+// Guard against CSV/formula injection: prefix any string starting with a
+// formula/control character so Excel treats it as literal text. Recipient
+// name/address and the campaign name are DB/user-controlled and land in cells
+// unescaped otherwise. Mirrors sanitizeCell in exportCsv.js.
+function sanitizeCell(v) {
+  if (typeof v !== 'string') return v
+  return /^[=+\-@\t\r]/.test(v) ? `'${v}` : v
+}
+
 function buildSfRow(k, campaign, sender) {
   const market = String(campaign?.market || 'HK').toUpperCase()
   const row = new Array(SF_HEADER_ROW.length).fill('')
-  const set = (letters, v) => { row[colIdx(letters)] = v == null ? '' : v }
+  const set = (letters, v) => { row[colIdx(letters)] = v == null ? '' : sanitizeCell(v) }
 
   set('A', `@${k.kol_handle}`) // customer order id → maps the waybill back to the KOL
   // Sender (Markato)

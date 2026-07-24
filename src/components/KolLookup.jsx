@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Search, Loader2, Heart, Eye, EyeOff, ExternalLink, AlertCircle } from 'lucide-react'
 import { startReelScraper, pollUntilDone, getDatasetItems } from '../lib/apifyApi'
 import { computeStats } from '../lib/computeStats'
@@ -15,6 +15,9 @@ export default function KolLookup({ initialUsername = '' }) {
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
   const [resolvedUsername, setResolvedUsername] = useState(null)
+  // The scrape chain runs 1–2 min; bail on any setState if we've unmounted.
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
 
   const handleFetch = useCallback(async () => {
     if (!input.trim()) return
@@ -26,14 +29,18 @@ export default function KolLookup({ initialUsername = '' }) {
 
     try {
       const run = await startReelScraper(user)
+      if (!mountedRef.current) return
       setStatus('running')
       const completed = await pollUntilDone(run)
+      if (!mountedRef.current) return
       setStatus('fetching')
       const items = await getDatasetItems(completed.defaultDatasetId)
+      if (!mountedRef.current) return
       const computed = computeStats(items)
       setStats(computed)
       setStatus('done')
     } catch (err) {
+      if (!mountedRef.current) return
       setError(err.message)
       setStatus('error')
     }

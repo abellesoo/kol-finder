@@ -59,7 +59,10 @@ function extractHandle(cell) {
   const s = String(cell ?? '').trim()
   if (!s) return ''
   const at = s.match(/@\s*([A-Za-z0-9._]+)/) // "Emma Wong @rwy___" → rwy___
-  if (at) return normalizeHandle(at[1])
+  if (at) {
+    const h = normalizeHandle(at[1])
+    return SECTION_WORDS.has(h) ? '' : h   // "@total", "@ig" → section label, not a handle
+  }
   if (/^[A-Za-z0-9._]+$/.test(s)) {           // bare single-token username
     const h = normalizeHandle(s)
     return SECTION_WORDS.has(h) ? '' : h
@@ -69,19 +72,29 @@ function extractHandle(cell) {
 
 function parseMoney(cell) {
   if (cell == null || cell === '') return 0
-  const n = Number(String(cell).replace(/[^0-9.\-]/g, ''))
-  return isNaN(n) ? 0 : n
+  if (typeof cell === 'number') return isNaN(cell) ? 0 : cell
+  // Take the first numeric token so ranges ("1000-2000" → 1000) don't collapse
+  // to NaN→0, and strip thousands separators. (EU decimal-comma is not handled;
+  // the sheets in use are US/English-formatted.)
+  const m = String(cell).replace(/,/g, '').match(/\d+(?:\.\d+)?/)
+  return m ? Number(m[0]) : 0
 }
 
 function toISODate(cell) {
   if (!cell) return null
   if (cell instanceof Date && !isNaN(cell)) return cell.toISOString().slice(0, 10)
   const s = String(cell).trim()
-  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/) // M/D/YYYY
+  // HK/EU day-month-year (matching utils.js formatDate). If read as day-month
+  // the month lands > 12, fall back to month-day; reject anything still invalid
+  // instead of emitting a bogus "2026-13-04".
+  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/)
   if (m) {
-    let [, mo, d, y] = m
+    let [, a, b, y] = m
     if (y.length === 2) y = '20' + y
-    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    let day = Number(a), mo = Number(b)
+    if (mo > 12 && day <= 12) { [day, mo] = [mo, day] } // sheet was month/day
+    if (mo < 1 || mo > 12 || day < 1 || day > 31) return null
+    return `${y}-${String(mo).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
   const parsed = new Date(s)
   return isNaN(parsed) ? null : parsed.toISOString().slice(0, 10)

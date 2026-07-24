@@ -6,7 +6,11 @@ const LOCAL_KEY = 'kol_session_history'
 
 export async function saveSession({ fileNames, config, results, influencers, campaignId = null }) {
   const session = {
-    id: Date.now(),
+    // Collision-resistant while staying a time-sortable bigint inside Number's
+    // safe range: ms × 1000 + a random suffix. Plain Date.now() collided when
+    // two saves landed in the same millisecond (a double-click, or two
+    // teammates finishing runs together) → duplicate-PK insert error, lost run.
+    id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
     campaign_id: campaignId || null,
     file_names: fileNames || [],
     account_count: results.length,
@@ -32,6 +36,17 @@ export async function saveSession({ fileNames, config, results, influencers, cam
 // a Threads row (or vice versa). null = legacy behavior, all rows.
 export async function updateSessionLiveStats(id, statsMap, platform = null) {
   if (!supabase || !id) return
+  // Preferred path: an atomic, row-locked merge in the DB (db/session_live_stats_merge.sql)
+  // so two concurrent passes (IG + Threads, or two teammates on one session)
+  // can't clobber each other's writes. Falls back to the read-modify-write
+  // below when the RPC isn't present, so nothing breaks pre-migration.
+  const { error: rpcError } = await supabase.rpc('merge_session_live_stats', {
+    p_id: id,
+    p_stats: statsMap || {},
+    p_platform: platform,
+  })
+  if (!rpcError) return
+  // Fallback (non-atomic): last writer wins under concurrency.
   const { data } = await supabase.from('sessions').select('results').eq('id', id).single()
   if (!data) return
   const matchesPlatform = (r) =>
@@ -147,7 +162,9 @@ function normalizeRow(row) {
   return {
     id: row.id,
     campaignId: row.campaign_id ?? null,
-    date: row.created_at || new Date(row.id).toISOString(),
+    // created_at is the source of truth; the id fallback handles legacy rows.
+    // New ids are ms×1000, so scale them back down before treating as a date.
+    date: row.created_at || new Date(row.id > 1e14 ? Math.floor(row.id / 1000) : row.id).toISOString(),
     fileNames: row.file_names || [],
     accountCount: row.account_count || 0,
     config: row.config || {},

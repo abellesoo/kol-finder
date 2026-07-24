@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { reviewKey, campaignDmDraft, loadReviewSubmissions } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
 import { listCampaigns } from '../lib/campaigns'
-import { clickableRow, formatDate, campaignMetrics } from '../lib/utils'
+import { clickableRow, formatDate, campaignMetrics, toIdArray } from '../lib/utils'
 
 // Time-of-day greeting — the dashboard's first job is to feel like it knows who
 // just walked in.
@@ -120,7 +120,7 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
   const {
     approved, dmsSent, pendingReview, dmReady, pendingReviewMine, dmReadyMine, reviewedAccounts,
   } = useMemo(() => {
-    const ownersByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || []]))
+    const ownersByCampaign = new Map(campaignOps.map((c) => [c.id, toIdArray(c.assigned_to)]))
     let approved = 0, dmsSent = 0, pendingReview = 0, dmReady = 0
     let pendingReviewMine = 0, dmReadyMine = 0, reviewedAccounts = 0
     campaigns.forEach((c) => {
@@ -231,7 +231,16 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
 
       {/* Needs-you-now action strip */}
       {supabase && !loading && hasAttention && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-9 anim-rise anim-d1">
+        <div className="mb-9 anim-rise anim-d1">
+          <div className="flex items-baseline gap-2.5 mb-3.5">
+            <p className="font-mono text-[9.5px] tracking-[.13em] text-faint uppercase">
+              {hasMine ? 'Needs you now' : 'Team-wide'}
+            </p>
+            {!hasMine && (
+              <span className="text-[11.5px] text-muted">Nothing’s assigned to you — showing the whole team’s queue</span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {reviewValue > 0 && (
             <ActionCard
               tone="amber"
@@ -258,6 +267,7 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
               onClick={() => onNavigate?.('ready_to_send')}
             />
           )}
+          </div>
         </div>
       )}
 

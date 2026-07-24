@@ -69,11 +69,19 @@ function FilterDropdown({ colId, label, options, selected, onChange }) {
   const active = selected.length > 0
 
   // Fixed positioning (like the info tooltips) so the panel isn't clipped by the
-  // table's overflow-auto / sticky header.
+  // table's overflow-auto / sticky header. Re-anchor on scroll/resize — the
+  // table body scrolls inside its own container, so a static position would
+  // leave the panel detached from its button (capture:true catches inner scroll).
   useLayoutEffect(() => {
     if (!open) return
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setPos({ top: r.bottom + 6, left: Math.max(8, r.left + r.width / 2) })
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect()
+      if (r) setPos({ top: r.bottom + 6, left: Math.max(8, r.left + r.width / 2) })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place) }
   }, [open])
 
   useEffect(() => {

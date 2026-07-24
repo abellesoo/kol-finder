@@ -10,10 +10,11 @@ export default function ColumnPicker({ selected, onChange, label = 'Columns' }) 
   const ref = useRef(null)
 
   useEffect(() => {
+    if (!open) return
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [open])
 
   const toggle = (id) => {
     if (selected.includes(id)) {

@@ -8,7 +8,7 @@ import { AssigneeAvatarStack } from './core/AssigneePicker'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
-import { formatDate, groupByCampaign } from '../lib/utils'
+import { formatDate, groupByCampaign, toIdArray } from '../lib/utils'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 
 export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId }) {
@@ -43,7 +43,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
   // campaign id → owner ids (assigned_to array), and id → user record for avatars.
   const ownersByCampaign = useMemo(() => {
     const m = new Map()
-    for (const c of campaigns) m.set(c.id, c.assigned_to || [])
+    for (const c of campaigns) m.set(c.id, toIdArray(c.assigned_to))
     return m
   }, [campaigns])
   const userById = useMemo(() => {

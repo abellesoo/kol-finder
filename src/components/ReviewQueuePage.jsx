@@ -188,7 +188,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
         <div className="flex flex-col items-center py-24">
           <CheckCircle2 size={32} className="text-faint mb-4" />
           <h2 className="text-[17px] font-semibold text-ink mb-2">All caught up</h2>
-          <p className="text-[13.5px] text-muted text-center">No accounts are waiting for brand manager review right now</p>
+          <p className="text-[13.5px] text-muted text-center">No accounts are waiting for review right now</p>
         </div>
       )}
 

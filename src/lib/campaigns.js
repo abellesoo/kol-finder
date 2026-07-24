@@ -235,7 +235,7 @@ export async function setCampaignStatus(id, status) {
 }
 
 // ── Assignment ───────────────────────────────────────────────────────────────
-// Assign a campaign to a brand manager (or null to unassign). Reviews and ops
+// Assign a campaign to a teammate (or null to unassign). Reviews and ops
 // for the campaign inherit this owner. Requires db/campaign_assignee.sql.
 export async function setCampaignAssignee(id, userId) {
   if (!supabase) throw new Error('Supabase not configured')
@@ -250,7 +250,7 @@ export async function setCampaignAssignee(id, userId) {
   }
 }
 
-// The team members a campaign can be assigned to (brand managers + admins).
+// The team members a campaign can be assigned to (everyone who has signed in).
 // Fetched via a SECURITY DEFINER RPC because users is self-read-only under RLS.
 // Cached module-side: several views (Campaigns, Review Queue, Dashboard) need
 // the same small roster, so they share one request per page load.
@@ -467,7 +467,7 @@ export async function attachKols(campaignId, kols, existingHandles = []) {
   return data ? data.length : 0
 }
 
-// Set a KOL's state. This is a manual ops tool, so a brand manager can move a
+// Set a KOL's state. This is a manual ops tool, so a reviewer can move a
 // KOL to ANY state to correct mistakes (e.g. a false-positive `posted` back to
 // `awaiting_post`) — the only guard is that it's a real state. Marking `shipped`
 // stamps shipped_at if not already set.
@@ -624,7 +624,7 @@ export async function getVerifiedPostsByKol(kolIds) {
 }
 
 // The Phase 2 safety toggle: the worker sets state=posted but leaves
-// human_verified=false; a brand manager confirms a match is genuine here.
+// human_verified=false; a reviewer confirms a match is genuine here.
 export async function setHumanVerified(postId, verified) {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase

@@ -129,7 +129,7 @@ export default function InstructionsPage() {
           {[
             ['Pick or create a campaign', 'Everything — brand, target niches, scoring formula, brief, and scrape targets — lives on the campaign. Set it up once.'],
             ['Run it', 'Scrape the campaign\'s Instagram / Threads targets, or upload an Apify .xlsx export. Every account is scored by Engagement + Relevancy instantly, and free.'],
-            ['Review & shortlist', 'Sort and filter the ranked table, tick your picks, then Send for Review — brand managers approve or reject in the Review Queue.'],
+            ['Review & shortlist', 'Sort and filter the ranked table, tick your picks, then Send for Review — a teammate approves or rejects in the Review Queue.'],
             ['Reach out', 'Approved KOLs share one campaign DM draft; copy it, send from Instagram, and track DM status per account.'],
             ['Track', 'Approved KOLs flow onto the campaign board — ship the product, then let the tracker auto-detect their published post.'],
           ].map(([t, d], i) => (
@@ -204,7 +204,7 @@ export default function InstructionsPage() {
             {
               n: 5,
               title: 'Team review',
-              text: <>Sent accounts land in the <strong>Review Queue</strong>, grouped by campaign. A brand manager opens a submission and <strong>approves or rejects</strong> each account — adding a 1–5 fit rating on approvals or a categorised reason on rejections, which trains the AI Fit score over time. They can edit the brief and seeding criteria and generate the one shared <strong>campaign DM draft</strong> here too.</>,
+              text: <>Sent accounts land in the <strong>Review Queue</strong>, grouped by campaign. A reviewer opens a submission and <strong>approves or rejects</strong> each account — adding a 1–5 fit rating on approvals or a categorised reason on rejections, which trains the AI Fit score over time. They can edit the brief and seeding criteria and generate the one shared <strong>campaign DM draft</strong> here too.</>,
             },
             {
               n: 6,
@@ -367,7 +367,7 @@ export default function InstructionsPage() {
                   <li>DeepSeek reads the examples as context and imitates your demonstrated taste — criteria and brief first, then the patterns in what you've approved vs. rejected.</li>
                 </ol>
                 <p className="mb-2">Because it re-reads your latest decisions every run, it gets sharper the moment your team logs more reviews — no training step, no waiting. Two trade-offs: it only sees the <strong>most recent ~40 decisions</strong> (a token-budget limit, not your whole history), and it matches demonstrated patterns rather than tracking specific past "mistakes" with a correction signal. On a brand-new database with no decisions yet, it scores on the brief alone and stays deliberately moderate.</p>
-                <p className="text-[12px] text-faint">This is why <strong className="text-body">consistent reviewing matters</strong>: the more consistently brand managers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
+                <p className="text-[12px] text-faint">This is why <strong className="text-body">consistent reviewing matters</strong>: the more consistently reviewers categorise rejections and rate approvals in the Review Queue, the sharper this score gets.</p>
               </div>
               <p>It's <strong>advisory</strong> by default — it gets its own column but doesn't move the Overall score. Tick <strong>Blend into Overall</strong> only once you've sanity-checked it against a few real campaigns; blending gives AI Fit <strong>40% of Overall</strong>, with the rest split by the run's formula — the <strong>Health</strong> formula reweights to 35% Engagement + 25% Relevancy + 40% AI Fit, the <strong>Beauty</strong> formula to 50% Engagement + 10% Relevancy + 40% AI Fit. Under the Health formula the off-niche cap still applies — a below-floor Relevancy caps Overall at 40, high AI Fit or not.</p>
             </>}
@@ -512,7 +512,7 @@ export default function InstructionsPage() {
           </div>
           <div>
             <p className="text-[14px] font-semibold text-ink mb-0.5">Roles &amp; access</p>
-            <p className="text-[13px] text-body leading-relaxed">Sign-in is limited to <code className="font-mono text-[11px] bg-surface px-1 rounded">@markato.com</code> accounts. <strong>Brand managers</strong> see the Review Queue and Campaigns but not the Seeder, History, or Ready to Send; <strong>assistants</strong> see the full seeding workflow; <strong>admins</strong> also get the Team tab to manage roles. Shared links respect the opener's role — a link into a tab they can't access falls back to this page.</p>
+            <p className="text-[13px] text-body leading-relaxed">Sign-in is limited to <code className="font-mono text-[11px] bg-surface px-1 rounded">@markato.com</code> accounts. Everyone who signs in gets the full workflow — Seeder, History, Campaigns, Review Queue, and Ready to Send — and can be <strong>assigned</strong> a campaign to own. <strong>Admins</strong> additionally get the Team tab to manage who's an admin. A campaign's assignee reviews its submissions and sees it under "your review" on the Dashboard.</p>
           </div>
         </div>
       </Details>

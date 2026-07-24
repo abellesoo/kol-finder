@@ -969,7 +969,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
 
       {selectionMode && shareStatus !== 'done' && (
         <div className="mb-4 px-4 py-3 bg-accent-dim/30 border border-accent/20 rounded-[12px] text-[12px] text-body">
-          Tick the accounts you want the brand manager to review, then click <strong>Send for Review</strong>.
+          Tick the accounts you want reviewed, then click <strong>Send for Review</strong>.
         </div>
       )}
 

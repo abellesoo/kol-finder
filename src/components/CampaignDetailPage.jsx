@@ -421,7 +421,7 @@ function AddressEditor({ kol, onSave }) {
 
 // A worker- or import-detected post. The Confirm toggle is the Phase 2 safety
 // gate: the worker sets state=posted but human_verified stays false until a
-// brand manager confirms the match is genuine here.
+// a reviewer confirms the match is genuine here.
 function VerifiedPost({ post, onConfirm }) {
   const [busy, setBusy] = useState(false)
   const confirm = async () => {

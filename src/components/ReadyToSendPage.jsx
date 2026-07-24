@@ -215,7 +215,7 @@ export default function ReadyToSendPage() {
         <div className="flex flex-col items-center py-24">
           <SendHorizonal size={32} className="text-faint mb-4" />
           <h2 className="text-[17px] font-semibold text-ink mb-2">Nothing ready to send</h2>
-          <p className="text-[13.5px] text-muted text-center">Accounts approved by your brand manager will appear here with their drafted DMs</p>
+          <p className="text-[13.5px] text-muted text-center">Approved accounts will appear here with their drafted DMs</p>
         </div>
       )}
 

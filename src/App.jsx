@@ -28,16 +28,16 @@ const NAV_GROUPS = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'campaigns', label: 'Campaigns', icon: Rocket },
-      { id: 'seeder', label: 'Seeder', icon: Search, restricted: ['brand_manager'] },
+      { id: 'seeder', label: 'Seeder', icon: Search },
       { id: 'vault', label: 'Creator Vault', icon: BookMarked },
-      { id: 'history', label: 'History', icon: Clock, restricted: ['brand_manager'] },
+      { id: 'history', label: 'History', icon: Clock },
     ],
   },
   {
     label: 'Approvals',
     items: [
       { id: 'review_queue', label: 'Review Queue', icon: ClipboardList },
-      { id: 'ready_to_send', label: 'Ready to Send', icon: Send, restricted: ['brand_manager'] },
+      { id: 'ready_to_send', label: 'Ready to Send', icon: Send },
     ],
   },
   {
@@ -59,7 +59,6 @@ function navGroupsForRole(role) {
     ...group,
     items: group.items.filter((item) => {
       if (item.adminOnly) return role === 'admin'
-      if (item.restricted) return !item.restricted.includes(role)
       return true
     }),
   })).filter((group) => group.items.length > 0)
@@ -448,7 +447,7 @@ function MainApp({ user, role, onSignOut }) {
 
   const handleNav = (newMode) => {
     // Enforce role-based nav gating here too, so links like the dashboard
-    // empty-state button can't route a brand_manager into a restricted view.
+    // empty-state button can't route a non-admin into the Team view.
     // Detail views (review_detail, campaign_detail) aren't nav items — exempt them.
     if (newMode !== 'review_detail' && newMode !== 'campaign_detail') {
       const allowed = new Set(navGroupsForRole(role).flatMap((g) => g.items.map((i) => i.id)))
@@ -717,13 +716,13 @@ function AuthGate() {
     if (!record) {
       const { data: inserted } = await supabase
         .from('users')
-        .insert({ id: user.id, email: user.email, role: 'assistant_bm' })
+        .insert({ id: user.id, email: user.email, role: 'member' })
         .select('role')
         .single()
       record = inserted
     }
 
-    setAuthState({ loading: false, user, role: record?.role || 'assistant_bm', error: null })
+    setAuthState({ loading: false, user, role: record?.role || 'member', error: null })
   }
 
   const handleSignOut = async () => {

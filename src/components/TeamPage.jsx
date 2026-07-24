@@ -5,12 +5,15 @@ import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
 
-const ROLE_LABELS = { assistant_bm: 'Assistant BM', brand_manager: 'Brand Manager', admin: 'Admin' }
+const ROLE_LABELS = { member: 'Member', admin: 'Admin' }
 const ROLE_STYLES = {
-  assistant_bm: 'bg-accent-dim text-[#8A6A22]',
-  brand_manager: 'bg-mist text-body',
+  member: 'bg-mist text-body',
   admin: 'bg-sage/15 text-sage',
 }
+// Everyone who isn't an admin is a plain member. Legacy roles (assistant_bm /
+// brand_manager) collapse here too, so rows still render before db/role_merge.sql
+// has been applied.
+const normalizeRole = (role) => (role === 'admin' ? 'admin' : 'member')
 
 const AVATAR_COLORS = [
   'bg-[#D6CFC4] text-[#5C5340]',
@@ -106,10 +109,10 @@ export default function TeamPage() {
 
                 {/* Role dropdown */}
                 <select
-                  value={u.role}
+                  value={normalizeRole(u.role)}
                   disabled={saving === u.id}
                   onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                  className={`text-[12px] font-medium px-[10px] py-[5px] rounded-[9px] border border-card-edge outline-none cursor-pointer appearance-none pr-[24px] bg-no-repeat ${ROLE_STYLES[u.role]} ${saving === u.id ? 'opacity-50' : ''}`}
+                  className={`text-[12px] font-medium px-[10px] py-[5px] rounded-[9px] border border-card-edge outline-none cursor-pointer appearance-none pr-[24px] bg-no-repeat ${ROLE_STYLES[normalizeRole(u.role)]} ${saving === u.id ? 'opacity-50' : ''}`}
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23A89E8C' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundPosition: 'right 8px center' }}
                 >
                   {Object.entries(ROLE_LABELS).map(([val, label]) => (

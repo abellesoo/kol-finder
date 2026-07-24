@@ -103,7 +103,7 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
             {value == null && <Check size={13} className="text-sage" />}
           </button>
           {users.length === 0 ? (
-            <p className="px-3 py-2 text-[11.5px] text-faint">No brand managers found</p>
+            <p className="px-3 py-2 text-[11.5px] text-faint">No teammates yet — people appear here once they sign in</p>
           ) : (
             users.map((u) => (
               <button

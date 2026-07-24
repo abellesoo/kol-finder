@@ -69,7 +69,7 @@ export default function LoginPage({ error }) {
           </TextEffect>
         </div>
         <ul className="text-sm text-[#1a1a1a]/60 space-y-1">
-          {['Score accounts automatically', 'Send for brand manager review', 'Draft and send DMs'].map((item, i) => (
+          {['Score accounts automatically', 'Send for team review', 'Draft and send DMs'].map((item, i) => (
             <motion.li
               key={item}
               initial={{ opacity: 0, y: 4 }}

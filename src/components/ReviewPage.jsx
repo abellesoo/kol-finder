@@ -775,7 +775,7 @@ export default function ReviewPage({ reviewId, onBack }) {
     )
   }
 
-  // Brand manager approval view
+  // Reviewer approval view
   const approvedCount = Object.values(reviewState).filter((e) => e.status === 'approved').length
   const rejectedCount = Object.values(reviewState).filter((e) => e.status === 'rejected').length
   const pendingCount = accounts.length - approvedCount - rejectedCount

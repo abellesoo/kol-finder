@@ -512,7 +512,11 @@ export default function InstructionsPage() {
           </div>
           <div>
             <p className="text-[14px] font-semibold text-ink mb-0.5">Roles &amp; access</p>
-            <p className="text-[13px] text-body leading-relaxed">Sign-in is limited to <code className="font-mono text-[11px] bg-surface px-1 rounded">@markato.com</code> accounts. Everyone who signs in gets the full workflow — Seeder, History, Campaigns, Review Queue, and Ready to Send — and can be <strong>assigned</strong> a campaign to own. <strong>Admins</strong> additionally get the Team tab to manage who's an admin. A campaign's assignee reviews its submissions and sees it under "your review" on the Dashboard.</p>
+            <p className="text-[13px] text-body leading-relaxed">Sign-in is limited to <code className="font-mono text-[11px] bg-surface px-1 rounded">@markato.com</code> accounts. Everyone who signs in gets the full workflow — Seeder, History, Campaigns, Review Queue, and Ready to Send — and <strong>everyone can see and edit every campaign</strong>. <strong>Admins</strong> additionally get the Team tab to manage who's an admin.</p>
+          </div>
+          <div>
+            <p className="text-[14px] font-semibold text-ink mb-0.5">Assigning campaigns</p>
+            <p className="text-[13px] text-body leading-relaxed">Use the <strong>Assign</strong> button on a campaign to put <strong>one or more</strong> teammates on point for it — anyone who's signed in shows up in the list. Assignment is just a <em>who's-responsible</em> label, <strong>not a permission</strong>: it doesn't hide the campaign from anyone or lock others out of editing. What it does do is power the "mine" views — an assignee sees the campaign's pending work under <strong>"your review"</strong> on the Dashboard, and can filter the <strong>Review Queue</strong> to <strong>"assigned to me."</strong> A campaign can have several assignees; it counts as "yours" if you're any one of them. Leave it unassigned and its work simply shows in the team-wide totals.</p>
           </div>
         </div>
       </Details>

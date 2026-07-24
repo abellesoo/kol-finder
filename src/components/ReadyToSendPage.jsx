@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ExternalLink, Copy, Check, Loader2, RefreshCw, Download, SendHorizonal, FolderOpen } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { ExternalLink, Copy, Check, RefreshCw, Download, SendHorizonal, FolderOpen, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { listCampaigns, createCampaign } from '../lib/campaigns'
 import { exportToCsv } from '../lib/exportCsv'
@@ -7,8 +7,12 @@ import { mergeReviewEntry, reviewKey, campaignDmDraft, setResultCampaign, loadRe
 import { profileUrl } from '../lib/platforms'
 import { TABLE_COLUMNS, ALWAYS_EXPORT_IDS } from '../lib/columnDefs'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
+import { formatDate, groupByCampaign } from '../lib/utils'
 import ColumnPicker from './table/ColumnPicker'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
+import PageHeader from './core/PageHeader'
+import Loading from './core/Loading'
+import EmptyState from './core/EmptyState'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -17,11 +21,6 @@ const DM_STATUS_STYLES = {
   sent:        'bg-info-tint text-info',
   replied:     'bg-sage/12 text-sage',
   no_response: 'bg-rose/10 text-rose/70',
-}
-
-function formatDate(isoStr) {
-  if (!isoStr) return '—'
-  return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function ReadyToSendPage() {
@@ -95,25 +94,30 @@ export default function ReadyToSendPage() {
 
   // … then those submissions bucket under their campaign (campaigns in listing
   // order, only those with approvals) plus a trailing "Unassigned" group.
-  const campaignGroups = useMemo(() => {
-    const byId = new Map()
-    const unassigned = []
-    for (const sub of submissionGroups) {
-      const cid = sub.campaignId || null
-      if (!cid) { unassigned.push(sub); continue }
-      if (!byId.has(cid)) byId.set(cid, [])
-      byId.get(cid).push(sub)
+  const campaignGroups = useMemo(
+    () => groupByCampaign(submissionGroups, campaigns, (s) => s.campaignId),
+    [submissionGroups, campaigns]
+  )
+
+  // Accordion state: which campaign groups are expanded. Collapsed by default so
+  // the page is scannable — click a campaign header to reveal its approved
+  // creators. The first group starts open so the page never lands fully empty.
+  const [openGroups, setOpenGroups] = useState(() => new Set())
+  const didInitOpen = useRef(false)
+  useEffect(() => {
+    if (!didInitOpen.current && campaignGroups.length > 0) {
+      didInitOpen.current = true
+      setOpenGroups(new Set([campaignGroups[0].id ?? '__unassigned__']))
     }
-    const out = []
-    for (const c of campaigns) {
-      const subs = byId.get(c.id)
-      if (subs && subs.length) out.push({ id: c.id, name: c.name, subs })
-    }
-    const known = new Set(campaigns.map((c) => c.id))
-    for (const [cid, subs] of byId) if (!known.has(cid)) unassigned.push(...subs)
-    if (unassigned.length) out.push({ id: null, name: 'Unassigned', subs: unassigned })
-    return out
-  }, [submissionGroups, campaigns])
+  }, [campaignGroups])
+  const groupKey = (id) => id ?? '__unassigned__'
+  const toggleGroup = (id) =>
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      const k = groupKey(id)
+      next.has(k) ? next.delete(k) : next.add(k)
+      return next
+    })
 
   useEffect(() => { load() }, [load])
   useEffect(() => { listCampaigns().then(setCampaigns).catch((e) => console.error('Failed to load campaigns', e)) }, [])
@@ -161,76 +165,84 @@ export default function ReadyToSendPage() {
     if (item.dm_draft) await persistStatus(item, 'sent')
   }, [persistStatus])
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-faint" />
-      </div>
-    )
+  if (loading) return <Loading label="Loading approved accounts…" />
+
+  const exportXlsx = () => {
+    const results = items.map((item) => item.accountData || { username: item.username })
+    const influencers = items.map((item) => item.accountData || { username: item.username, fullName: item.fullName })
+    // The DM draft is campaign-level now; fold it onto each account's entry so
+    // the exporter's per-row dm_draft column stays populated.
+    const reviewState = Object.fromEntries(items.map((item) => [item.stateKey, { ...item.reviewEntry, dm_draft: item.dm_draft }]))
+    const exportIds = [
+      ...ALWAYS_EXPORT_IDS,
+      ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
+    ]
+    exportToCsv(results, influencers, exportIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
   }
 
   return (
     <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Ready to Send</p>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">
-            {items.length} {items.length === 1 ? 'account' : 'accounts'} approved
-          </h1>
-          <p className="text-[14px] text-muted">Copy each DM draft and open the Instagram profile to send.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} label="Export columns" />
-          <button
-            onClick={() => {
-              const results = items.map((item) => item.accountData || { username: item.username })
-              const influencers = items.map((item) => item.accountData || { username: item.username, fullName: item.fullName })
-              // The DM draft is campaign-level now; fold it onto each account's
-              // entry so the exporter's per-row dm_draft column stays populated.
-              const reviewState = Object.fromEntries(items.map((item) => [item.stateKey, { ...item.reviewEntry, dm_draft: item.dm_draft }]))
-              const exportIds = [
-                ...ALWAYS_EXPORT_IDS,
-                ...TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id)).flatMap((c) => c.exportIds),
-              ]
-              exportToCsv(results, influencers, exportIds, {}, reviewState, { reachoutDefault: 'Sent' }).catch(console.error)
-            }}
-            className="flex items-center gap-2 px-4 py-2 border border-transparent bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap"
-          >
-            <Download size={14} /> Export XLSX
-          </button>
-          <button
-            onClick={load}
-            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
-          >
-            <RefreshCw size={13} /> Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-8"
+        label="Ready to Send"
+        title={`${items.length} ${items.length === 1 ? 'account' : 'accounts'} approved`}
+        subtitle="Copy each DM draft and open the Instagram profile to send."
+        actions={
+          <>
+            <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} label="Export columns" />
+            <button
+              onClick={exportXlsx}
+              className="flex items-center gap-2 px-4 py-2 border border-transparent bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap"
+            >
+              <Download size={14} /> Export XLSX
+            </button>
+            <button
+              onClick={load}
+              className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </>
+        }
+      />
 
       {error && (
         <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>
       )}
 
       {items.length === 0 && !error && (
-        <div className="flex flex-col items-center py-24">
-          <SendHorizonal size={32} className="text-faint mb-4" />
-          <h2 className="text-[17px] font-semibold text-ink mb-2">Nothing ready to send</h2>
-          <p className="text-[13.5px] text-muted text-center">Approved accounts will appear here with their drafted DMs</p>
-        </div>
+        <EmptyState
+          icon={SendHorizonal}
+          tone="sage"
+          title="Nothing ready to send"
+          description="Approved accounts will appear here with their drafted DMs."
+        />
       )}
 
-      <div className="space-y-10">
-        {campaignGroups.map((cg) => (
-          <div key={cg.id || 'unassigned'}>
-            <div className="flex items-center gap-2 mb-4">
+      <div className="space-y-3">
+        {campaignGroups.map((cg) => {
+          const approvedCount = cg.items.reduce((n, s) => n + s.items.length, 0)
+          const isOpen = openGroups.has(groupKey(cg.id))
+          return (
+          <div key={cg.id || 'unassigned'} className="border border-card-edge rounded-[14px] bg-white overflow-hidden">
+            <button
+              onClick={() => toggleGroup(cg.id)}
+              aria-expanded={isOpen}
+              className="w-full flex items-center gap-2.5 px-5 py-4 text-left hover:bg-surface transition-colors"
+            >
+              <ChevronRight
+                size={16}
+                className={`flex-shrink-0 text-faint transition-transform ${isOpen ? 'rotate-90' : ''}`}
+              />
               <FolderOpen size={15} className={cg.id ? 'text-sage' : 'text-faint'} />
-              <h2 className="text-[16px] font-serif font-bold text-ink">{cg.name}</h2>
-              <span className="font-mono text-[10px] text-faint">
-                {cg.subs.reduce((n, s) => n + s.items.length, 0)} approved
+              <h2 className="text-[16px] font-serif font-bold text-ink flex-1 min-w-0 truncate">{cg.name}</h2>
+              <span className="font-mono text-[11px] text-faint tabular-nums flex-shrink-0">
+                {approvedCount} approved
               </span>
-            </div>
-            <div className="space-y-8 pl-1">
-        {cg.subs.map((group) => (
+            </button>
+            {isOpen && (
+            <div className="space-y-8 px-5 pb-6 pt-1 border-t border-mist">
+        {cg.items.map((group) => (
           <div key={group.rowId}>
             <div className="flex items-center gap-3 mb-3 pb-3 border-b border-mist">
               <div className="min-w-0 flex-1">
@@ -316,8 +328,10 @@ export default function ReadyToSendPage() {
           </div>
         ))}
             </div>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

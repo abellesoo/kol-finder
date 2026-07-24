@@ -67,7 +67,9 @@ function navGroupsForRole(role) {
 // Validate an incoming URL state against the user's role — a shared link must
 // not route someone into a view their nav doesn't offer.
 function resolveUrlState(state, role) {
-  if (!state) return { mode: 'help' }
+  // A bare URL (no ?page=) lands on the Dashboard — the workspace home — not the
+  // Instructions doc. Dashboard is available to every role.
+  if (!state) return { mode: 'dashboard' }
   const allowed = new Set(navGroupsForRole(role).flatMap((g) => g.items.map((i) => i.id)))
   if (state.mode === 'review_detail') return allowed.has('review_queue') ? state : { mode: 'help' }
   if (state.mode === 'campaign_detail') return allowed.has('campaigns') ? state : { mode: 'help' }
@@ -109,14 +111,21 @@ function Sidebar({ mode, onNav, user, role, onSignOut }) {
       style={{ width: 236, minWidth: 236 }}
       className="flex flex-col h-screen sticky top-0 border-r border-mist bg-sidebar shrink-0"
     >
-      {/* Logo */}
+      {/* Logo — returns to the Dashboard (the workspace home) */}
       <div className="px-4 py-3 border-b border-mist">
-        <img
-          src="/kol-finder/markato-logo.png"
-          alt="Markato"
-          style={{ width: 88, mixBlendMode: 'multiply', opacity: 0.85 }}
-        />
-        <p className="font-mono text-[9px] tracking-[.16em] text-faint uppercase mt-[4px]">Seeding Studio</p>
+        <button
+          onClick={() => onNav('dashboard')}
+          title="Go to Dashboard"
+          aria-label="Go to Dashboard"
+          className="block rounded-[6px] text-left transition-opacity hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+        >
+          <img
+            src="/kol-finder/markato-logo.png"
+            alt="Markato"
+            style={{ width: 88, mixBlendMode: 'multiply', opacity: 0.85 }}
+          />
+          <p className="font-mono text-[9px] tracking-[.16em] text-faint uppercase mt-[4px]">Seeding Studio</p>
+        </button>
       </div>
 
       {/* Nav groups */}

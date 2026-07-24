@@ -1,33 +1,25 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload,
-  LayoutGrid, Table2, FileSpreadsheet, Trash2, AlertTriangle, Pencil, Check,
+  Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload, Search,
+  FileSpreadsheet, Trash2, AlertTriangle, Pencil, Check,
 } from 'lucide-react'
 import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup, setCampaignAssignee, listAssignableUsers } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
-import { useUrlParam } from '../lib/useUrlParam'
+import { formatDate, campaignMetrics } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import ImportCampaignModal from './ImportCampaignModal'
 import AssigneePicker from './core/AssigneePicker'
+import PageHeader from './core/PageHeader'
+import EmptyState from './core/EmptyState'
+import Loading from './core/Loading'
 
-// Roll a campaign's per-state counts up to the numbers the table view shows.
-function campaignMetrics(c) {
-  const counts = c.counts || {}
-  const total = Object.values(counts).reduce((a, b) => a + b, 0)
-  const posted = counts.posted || 0
-  const overdue = counts.overdue || 0
-  return { total, posted, overdue, fulfilled: total ? Math.round((posted / total) * 100) : 0 }
-}
-
-// Opens the campaign's live Google Sheet (created in Phase 4). Disabled until the
-// sheet exists so it never dead-ends.
-function OpenSheetButton({ url, size = 'sm' }) {
-  const cls = size === 'sm'
-    ? 'px-2.5 py-1.5 text-[12px]'
-    : 'px-4 py-2 text-[13px]'
+// Opens the campaign's live Google Sheet. Disabled until the sheet exists so it
+// never dead-ends.
+function OpenSheetButton({ url }) {
   if (!url) {
     return (
-      <span title="Created automatically once the campaign's list is approved (Phase 4)"
-        className={`inline-flex items-center gap-1.5 ${cls} border border-mist rounded-[10px] text-faint/70 cursor-not-allowed whitespace-nowrap`}>
+      <span title="Created automatically once the campaign's list is approved"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] border border-mist rounded-[9px] text-faint/70 cursor-not-allowed whitespace-nowrap">
         <FileSpreadsheet size={13} /> Sheet
       </span>
     )
@@ -35,26 +27,164 @@ function OpenSheetButton({ url, size = 'sm' }) {
   return (
     <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
       title="Open the campaign's Google Sheet"
-      className={`inline-flex items-center gap-1.5 ${cls} border border-mist rounded-[10px] text-ink hover:border-ink/40 hover:bg-surface transition-all whitespace-nowrap`}>
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] border border-mist rounded-[9px] text-body hover:border-ink/40 hover:bg-surface transition-all whitespace-nowrap">
       <FileSpreadsheet size={13} /> Sheet
     </a>
   )
 }
 
-function formatDate(isoStr) {
-  if (!isoStr) return '—'
-  return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+// Counts we surface on a campaign panel, in pipeline order. `bar` is the
+// segmented-progress-bar colour; `sw`/`text` drive the legend swatch + label.
+const COUNT_ORDER = [
+  { key: 'approved', label: 'approved', bar: 'bg-faint', sw: 'bg-faint', text: 'text-muted' },
+  { key: 'shipped', label: 'shipped', bar: 'bg-info', sw: 'bg-info', text: 'text-muted' },
+  { key: 'awaiting_post', label: 'awaiting', bar: 'bg-[#8A6A22]', sw: 'bg-[#8A6A22]', text: 'text-muted' },
+  { key: 'overdue', label: 'overdue', bar: 'bg-rose', sw: 'bg-rose', text: 'text-rose-strong' },
+  { key: 'posted', label: 'posted', bar: 'bg-sage', sw: 'bg-sage', text: 'text-muted' },
+  { key: 'opted_out', label: 'opted out', bar: 'bg-faint/40', sw: 'bg-faint/40', text: 'text-faint' },
+]
+
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
+  { id: 'attention', label: 'Needs attention' },
+  { id: 'completed', label: 'Completed' },
+]
+
+// Days until a deadline (null if none / already past-counted elsewhere).
+function daysUntil(iso) {
+  if (!iso) return null
+  const ms = new Date(iso).getTime() - Date.now()
+  return Math.ceil(ms / 86400000)
 }
 
-// Counts we surface on a campaign card, in pipeline order.
-const COUNT_ORDER = [
-  { key: 'approved', label: 'approved', cls: 'text-faint' },
-  { key: 'shipped', label: 'shipped', cls: 'text-info' },
-  { key: 'awaiting_post', label: 'awaiting', cls: 'text-[#8A6A22]' },
-  { key: 'overdue', label: 'overdue', cls: 'text-rose/80' },
-  { key: 'posted', label: 'posted', cls: 'text-sage font-medium' },
-  { key: 'opted_out', label: 'opted out', cls: 'text-faint/70' },
-]
+// A single campaign panel: identity + status, a fulfillment ring, a segmented
+// pipeline bar, a count legend, and the action footer. Overdue campaigns get a
+// warning tint so what needs attention reads at a glance.
+function CampaignPanel({
+  c, assignees, editingId, editingName, onStartRename, onEditingNameChange,
+  onCommitRename, onCancelRename, onRenameKeyDown, onAssign, onOpen, onDelete,
+}) {
+  const m = campaignMetrics(c)
+  const counts = c.counts || {}
+  const hasKols = m.total > 0
+  const overdue = counts.overdue || 0
+  const dLeft = daysUntil(c.posting_deadline)
+  const isDone = c.status !== 'active'
+  const segments = COUNT_ORDER.filter(({ key }) => counts[key])
+
+  const meta = [
+    c.brand,
+    c.market,
+    c.campaign_type,
+    c.posting_deadline && `deadline ${formatDate(c.posting_deadline)}`,
+    `${c.sessionCount || 0} session${c.sessionCount === 1 ? '' : 's'}`,
+  ].filter(Boolean)
+
+  return (
+    <div className={`group/card flex flex-col gap-3.5 rounded-[16px] border p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(34,30,24,0.06)] ${
+      overdue > 0 ? 'border-[#E7D3A8] bg-gradient-to-b from-[#FDFAF2] to-white' : 'border-card-edge bg-white hover:border-accent'
+    }`}>
+      {/* Identity */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {editingId === c.id ? (
+            <span className="flex items-center gap-1.5">
+              <input autoFocus value={editingName} onChange={(e) => onEditingNameChange(e.target.value)}
+                onKeyDown={onRenameKeyDown} onBlur={onCommitRename}
+                className="font-serif font-bold text-[17px] text-ink bg-transparent border-b border-ink/40 outline-none max-w-[220px]" />
+              <button onClick={onCommitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={15} /></button>
+              <button onMouseDown={(e) => { e.preventDefault(); onCancelRename(e) }} title="Cancel" className="text-faint hover:text-ink"><X size={15} /></button>
+            </span>
+          ) : (
+            <span className="group/name flex items-center gap-1.5 min-w-0">
+              <h2 className="font-serif font-bold text-[17px] leading-tight text-ink truncate">{c.name}</h2>
+              <button onClick={(e) => onStartRename(e, c)} title="Rename"
+                className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
+                <Pencil size={12} />
+              </button>
+            </span>
+          )}
+          <p className="text-[11.5px] text-faint mt-1 leading-snug">
+            {meta.map((part, i) => (
+              <span key={i}>{i > 0 && <span className="text-card-edge mx-1.5">·</span>}{part}</span>
+            ))}
+          </p>
+        </div>
+        <span className={`flex-shrink-0 text-[9.5px] font-semibold uppercase tracking-[.05em] px-2.5 py-1 rounded-full ${
+          isDone ? 'bg-ink/5 text-faint' : 'bg-sage/12 text-sage'
+        }`}>{c.status}</span>
+      </div>
+
+      {/* Fulfillment ring + segmented pipeline bar */}
+      <div className="flex items-center gap-4">
+        <div
+          className="relative w-14 h-14 rounded-full grid place-items-center flex-shrink-0"
+          style={{ background: hasKols
+            ? `conic-gradient(var(--ring) ${m.fulfilled}%, #E1DCD0 0)`
+            : '#E1DCD0', '--ring': overdue > 0 ? '#8A6A22' : '#4A7C59' }}
+        >
+          <span className="w-[42px] h-[42px] bg-white rounded-full grid place-items-center text-[12.5px] font-bold text-ink tabular-nums">
+            {hasKols ? `${m.fulfilled}%` : '—'}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between text-[10.5px] mb-1.5">
+            {overdue > 0 ? (
+              <span className="font-semibold text-rose-strong">
+                {overdue} overdue{dLeft != null && dLeft >= 0 ? ` · deadline in ${dLeft}d` : ''}
+              </span>
+            ) : (
+              <span className="text-muted">{hasKols ? 'Fulfilled' : 'Not started'}</span>
+            )}
+            <span className="text-muted tabular-nums">
+              {hasKols ? <><b className="text-ink font-semibold">{m.posted}</b> of {m.total} posted</> : <span className="text-faint">no KOLs attached</span>}
+            </span>
+          </div>
+          {hasKols ? (
+            <div className="flex h-2.5 rounded-full overflow-hidden bg-mist">
+              {segments.map(({ key, bar }) => (
+                <span key={key} className={bar} style={{ width: `${(counts[key] / m.total) * 100}%` }} />
+              ))}
+            </div>
+          ) : (
+            <div className="h-2.5 rounded-full" style={{ background: 'repeating-linear-gradient(45deg,#FAF8F3,#FAF8F3 5px,#E1DCD0 5px,#E1DCD0 10px)' }} />
+          )}
+        </div>
+      </div>
+
+      {/* Count legend / empty prompt */}
+      {hasKols ? (
+        <div className="flex flex-wrap gap-x-3.5 gap-y-1">
+          {segments.map(({ key, label, sw, text }) => (
+            <span key={key} className={`inline-flex items-center gap-1.5 text-[11px] tabular-nums ${text}`}>
+              <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${sw}`} />
+              <b className="text-ink font-semibold">{counts[key]}</b> {label}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-faint">Attach approved KOLs from the Review Queue, or run a seeding session to get started.</p>
+      )}
+
+      {/* Footer */}
+      <div className="flex items-center gap-2 pt-3 border-t border-surface mt-auto">
+        <div className="mr-auto" onClick={(e) => e.stopPropagation()}>
+          <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => onAssign(c, uid)} align="left" />
+        </div>
+        <OpenSheetButton url={c.sheet_url} />
+        <button onClick={() => onOpen(c.id)}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-ink text-white rounded-[9px] text-[12px] hover:bg-ink/80 transition-all">
+          {hasKols ? 'Open' : 'Set up'} <ArrowRight size={13} />
+        </button>
+        <button onClick={() => onDelete(c)} title="Delete campaign"
+          className="flex items-center justify-center w-8 h-8 rounded-[9px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all flex-shrink-0">
+          <Trash2 size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // Minimal create: name + brand only. Everything else (audience, keywords, brief,
 // location, scrape targets) is set on the campaign page the user lands on next —
@@ -64,6 +194,7 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
   const [brand, setBrand] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const dialogRef = useFocusTrap(true)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !saving) onClose() }
@@ -92,7 +223,8 @@ function NewCampaignModal({ onClose, onCreated, initialName = '', seededCount = 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
       onClick={() => !saving && onClose()}>
-      <div className="w-full max-w-[460px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Create a campaign"
+        className="w-full max-w-[460px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-5">
           <div>
             <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">New campaign</p>
@@ -152,7 +284,8 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
   const [campaigns, setCampaigns] = useState([])
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [view, setView] = useUrlParam('campaigns_view', 'cards') // 'cards' | 'table' (shareable via URL)
+  const [filter, setFilter] = useState('all') // all | active | attention | completed
+  const [query, setQuery] = useState('')
   const [seedState, setSeedState] = useState(null) // { runId, name, count }
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -160,6 +293,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
   const [editingName, setEditingName] = useState('')
   const [assignees, setAssignees] = useState([])
   const seedRunRef = useRef(null)
+  const deleteDialogRef = useFocusTrap(!!deleteTarget)
 
   useEffect(() => {
     listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
@@ -283,216 +417,106 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
     return () => window.removeEventListener('keydown', onKey)
   }, [deleteTarget, deleting])
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-faint" />
-      </div>
-    )
-  }
+  if (loading) return <Loading label="Loading campaigns…" />
 
   const active = campaigns.filter((c) => c.status === 'active').length
+  const attentionCount = campaigns.filter((c) => (c.counts?.overdue || 0) > 0).length
+  const completedCount = campaigns.filter((c) => c.status !== 'active').length
+  const filterCounts = { all: campaigns.length, active, attention: attentionCount, completed: completedCount }
+
+  const q = query.trim().toLowerCase()
+  const filtered = campaigns.filter((c) => {
+    if (q && !`${c.name || ''} ${c.brand || ''} ${c.market || ''}`.toLowerCase().includes(q)) return false
+    if (filter === 'active') return c.status === 'active'
+    if (filter === 'completed') return c.status !== 'active'
+    if (filter === 'attention') return (c.counts?.overdue || 0) > 0
+    return true
+  })
+
+  const panelHandlers = {
+    assignees, editingId, editingName,
+    onStartRename: startRename, onEditingNameChange: setEditingName,
+    onCommitRename: commitRename, onCancelRename: cancelRename, onRenameKeyDown: renameKeyDown,
+    onAssign: handleAssign, onOpen: onOpenCampaign, onDelete: setDeleteTarget,
+  }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Campaigns</p>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">
-            {campaigns.length} {campaigns.length === 1 ? 'campaign' : 'campaigns'}
-          </h1>
-          <p className="text-[14px] text-muted">
-            {active} active · seeding operations from shipped to posted.
-          </p>
+    <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
+      <PageHeader
+        className="mb-6"
+        label="Campaigns"
+        title={`${campaigns.length} ${campaigns.length === 1 ? 'campaign' : 'campaigns'}`}
+        subtitle={`${active} active · seeding operations from shipped to posted.`}
+        actions={
+          <>
+            <button onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white whitespace-nowrap">
+              <Upload size={14} /> Import
+            </button>
+            <button onClick={() => setShowNew(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
+              <Plus size={14} /> New campaign
+            </button>
+            <button onClick={load} title="Refresh"
+              className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
+              <RefreshCw size={13} />
+            </button>
+          </>
+        }
+      />
+
+      {/* Filter rail + search — replaces the old card/table toggle */}
+      {campaigns.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap mb-6">
+          {FILTERS.map((f) => (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              className={`text-[12px] px-3 py-1.5 rounded-full border transition-all ${
+                filter === f.id ? 'bg-ink text-white border-ink' : 'bg-white border-mist text-muted hover:border-ink/25 hover:text-ink'
+              }`}>
+              {f.label}
+              <span className={`ml-1.5 tabular-nums ${filter === f.id ? 'opacity-70' : 'opacity-55'}`}>{filterCounts[f.id]}</span>
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-2 border border-mist rounded-[10px] bg-white px-3 py-2 min-w-[200px]">
+            <Search size={13} className="text-faint flex-shrink-0" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search campaigns…"
+              className="w-full bg-transparent outline-none text-[12.5px] text-ink placeholder:text-faint" />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {campaigns.length > 0 && (
-            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5 mr-1">
-              <button onClick={() => setView('cards')} title="Card view"
-                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
-                  view === 'cards' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
-                <LayoutGrid size={14} />
-              </button>
-              <button onClick={() => setView('table')} title="Table view"
-                className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
-                  view === 'table' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
-                <Table2 size={14} />
-              </button>
-            </div>
-          )}
-          <button onClick={() => setShowImport(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white whitespace-nowrap">
-            <Upload size={14} /> Import
-          </button>
-          <button onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
-            <Plus size={14} /> New campaign
-          </button>
-          <button onClick={load}
-            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
-            <RefreshCw size={13} /> Refresh
-          </button>
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>
       )}
 
       {campaigns.length === 0 && !error && (
-        <div className="flex flex-col items-center py-24">
-          <Rocket size={32} className="text-faint mb-4" />
-          <h2 className="text-[17px] font-semibold text-ink mb-2">No campaigns yet</h2>
-          <p className="text-[13.5px] text-muted text-center mb-5">Create a campaign, then attach approved KOLs from the Review Queue.</p>
-          <button onClick={() => setShowNew(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
-            <Plus size={14} /> New campaign
-          </button>
+        <EmptyState
+          icon={Rocket}
+          title="No campaigns yet"
+          description="Create a campaign, then attach approved KOLs from the Review Queue."
+          action={
+            <button onClick={() => setShowNew(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
+              <Plus size={14} /> New campaign
+            </button>
+          }
+        />
+      )}
+
+      {campaigns.length > 0 && filtered.length === 0 && (
+        <p className="text-[13px] text-muted text-center py-16 border border-dashed border-mist rounded-[14px]">
+          No campaigns match {query ? `“${query}”` : 'this filter'}.
+        </p>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {filtered.map((c) => (
+            <CampaignPanel key={c.id} c={c} {...panelHandlers} />
+          ))}
         </div>
       )}
 
-      {view === 'table' && campaigns.length > 0 ? (
-        <div className="overflow-x-auto border border-card-edge rounded-[14px] bg-white">
-          <table className="w-full text-[12.5px] border-collapse">
-            <thead>
-              <tr className="text-left font-mono text-[10px] uppercase tracking-[.12em] text-faint border-b border-mist">
-                <th className="px-4 py-3 font-normal">Campaign</th>
-                <th className="px-3 py-3 font-normal">Brand</th>
-                <th className="px-3 py-3 font-normal">Market</th>
-                <th className="px-3 py-3 font-normal">Deadline</th>
-                <th className="px-3 py-3 font-normal text-right">Sessions</th>
-                <th className="px-3 py-3 font-normal text-right">KOLs</th>
-                <th className="px-3 py-3 font-normal text-right">Posted</th>
-                <th className="px-3 py-3 font-normal text-right">Overdue</th>
-                <th className="px-3 py-3 font-normal text-right">Fulfilled</th>
-                <th className="px-3 py-3 font-normal">Owner</th>
-                <th className="px-3 py-3 font-normal">Status</th>
-                <th className="px-4 py-3 font-normal"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((c) => {
-                const m = campaignMetrics(c)
-                return (
-                  <tr key={c.id} onClick={() => onOpenCampaign(c.id)}
-                    className="border-b border-mist/60 last:border-0 hover:bg-surface cursor-pointer transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-ink max-w-[220px]"
-                      onClick={(e) => { if (editingId === c.id) e.stopPropagation() }}>
-                      {editingId === c.id ? (
-                        <span className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={renameKeyDown} onBlur={commitRename}
-                            className="min-w-0 flex-1 bg-transparent border-b border-ink/40 outline-none text-ink" />
-                          <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={13} /></button>
-                          <button onMouseDown={(e) => { e.preventDefault(); cancelRename(e) }} title="Cancel" className="text-faint hover:text-ink"><X size={13} /></button>
-                        </span>
-                      ) : (
-                        <span className="group/name flex items-center gap-1.5">
-                          <span className="truncate">{c.name}</span>
-                          <button onClick={(e) => startRename(e, c)} title="Rename"
-                            className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
-                            <Pencil size={12} />
-                          </button>
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-body">{c.brand}</td>
-                    <td className="px-3 py-2.5 text-body font-mono">{c.market}</td>
-                    <td className="px-3 py-2.5 text-body font-mono whitespace-nowrap">{formatDate(c.posting_deadline)}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-body">{c.sessionCount || '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-body">{m.total || '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-sage">{m.posted || '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-rose/80">{m.overdue || '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-body">{m.total ? `${m.fulfilled}%` : '—'}</td>
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => handleAssign(c, uid)} align="left" />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'}`}>{c.status}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                      <span onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-2">
-                        <OpenSheetButton url={c.sheet_url} />
-                        <button onClick={() => setDeleteTarget(c)} title="Delete campaign"
-                          className="flex items-center justify-center w-8 h-8 rounded-[10px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
-                          <Trash2 size={13} />
-                        </button>
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {campaigns.map((c) => {
-            const total = Object.values(c.counts || {}).reduce((a, b) => a + b, 0)
-            return (
-              <div key={c.id}
-                className="border border-card-edge rounded-[14px] px-5 py-4 bg-white hover:border-[#D6CEBD] transition-all">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {editingId === c.id ? (
-                        <span className="flex items-center gap-1.5">
-                          <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                            onKeyDown={renameKeyDown} onBlur={commitRename}
-                            className="font-semibold text-[14px] text-ink bg-transparent border-b border-ink/40 outline-none max-w-[220px]" />
-                          <button onClick={commitRename} title="Save" className="text-sage hover:text-sage/70"><Check size={14} /></button>
-                          <button onMouseDown={(e) => { e.preventDefault(); cancelRename(e) }} title="Cancel" className="text-faint hover:text-ink"><X size={14} /></button>
-                        </span>
-                      ) : (
-                        <span className="group/name flex items-center gap-1.5 min-w-0">
-                          <p className="font-semibold text-[14px] text-ink truncate">{c.name}</p>
-                          <button onClick={(e) => startRename(e, c)} title="Rename"
-                            className="text-faint hover:text-ink transition-colors opacity-0 group-hover/name:opacity-100 flex-shrink-0">
-                            <Pencil size={12} />
-                          </button>
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                        c.status === 'active' ? 'bg-sage/10 text-sage' : 'bg-ink/5 text-faint'
-                      }`}>{c.status}</span>
-                    </div>
-                    <p className="text-[11px] text-faint font-mono">
-                      {[
-                        c.brand,
-                        c.market,
-                        c.campaign_type,
-                        c.posting_deadline && `deadline ${formatDate(c.posting_deadline)}`,
-                        `${c.sessionCount || 0} session${c.sessionCount === 1 ? '' : 's'}`,
-                      ].filter(Boolean).join(' · ')}
-                    </p>
-                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-2">
-                      {total === 0 && <span className="text-[11px] font-mono text-faint">no KOLs attached</span>}
-                      {COUNT_ORDER.map(({ key, label, cls }) => (
-                        (c.counts || {})[key] ? (
-                          <span key={key} className={`text-[11px] font-mono ${cls}`}>{c.counts[key]} {label}</span>
-                        ) : null
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => handleAssign(c, uid)} />
-                    <OpenSheetButton url={c.sheet_url} size="lg" />
-                    <button onClick={() => onOpenCampaign(c.id)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
-                      Open <ArrowRight size={13} />
-                    </button>
-                    <button onClick={() => setDeleteTarget(c)} title="Delete campaign"
-                      className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-card-edge text-faint hover:text-rose hover:border-rose/30 hover:bg-rose/5 transition-all">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {showNew && (
         <NewCampaignModal
@@ -513,7 +537,8 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
           onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="w-full max-w-[400px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+          <div ref={deleteDialogRef} role="dialog" aria-modal="true" aria-label="Delete campaign"
+            className="w-full max-w-[400px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-center w-10 h-10 rounded-full bg-rose/10 mb-4">
               <AlertTriangle size={18} className="text-rose" />
             </div>

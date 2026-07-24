@@ -121,14 +121,18 @@ export async function fetchAiScores(candidates, { criteria = '', campaignBrief =
         if (r?.username != null) byLower[String(r.username).toLowerCase()] = r
       }
       for (const c of batch) {
+        // Key results by the candidate's `key` when provided (platform:username,
+        // so the same handle on Instagram and Threads doesn't collide), falling
+        // back to bare username for callers that don't pass one.
+        const outKey = c.key || c.username
         const r = byLower[String(c.username).toLowerCase()]
         if (r) {
           // Worker rates 0–100 (finer AI granularity); the app displays and
           // scores on a 0–10 scale like Relevancy/Engagement, so convert here.
           const score10 = Math.round(Number(r.fit_score) || 0) / 10
-          scoreMap[c.username] = { score: score10, reason: r.reason }
+          scoreMap[outKey] = { score: score10, reason: r.reason }
         } else {
-          failed.push(c.username)
+          failed.push(outKey)
         }
       }
     } catch (err) {

@@ -9,6 +9,7 @@ import { TABLE_COLUMNS } from '../lib/columnDefs'
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
+import { clickableRow } from '../lib/utils'
 import ColumnPicker from './table/ColumnPicker'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
 
@@ -396,11 +397,12 @@ function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns, vaul
   return (
     <>
       <div
-        className={`group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center ${
+        className={`group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${
           isApproved ? 'bg-sage/[0.05]' : isRejected ? 'opacity-60' : ''
         }`}
         style={{ gridTemplateColumns: gridTemplate }}
         onClick={() => setExpanded((v) => !v)}
+        {...clickableRow(() => setExpanded((v) => !v))}
       >
         <div className="min-w-0 flex flex-col justify-center sticky left-0 z-[1] bg-white group-hover:bg-surface">
           <div className="flex items-center gap-1.5">

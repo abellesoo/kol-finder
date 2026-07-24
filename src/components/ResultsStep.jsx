@@ -15,6 +15,7 @@ import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluenc
 import { updateSessionLiveStats } from '../lib/sessionHistory'
 import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
 import { supabase } from '../lib/supabase'
+import { clickableRow } from '../lib/utils'
 import TableErrorBoundary from './TableErrorBoundary'
 import StepProgress from './core/StepProgress'
 
@@ -290,9 +291,10 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       {filtered.map((r) => (
         <div key={rowKey(r)}>
           <div
-            className="group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center"
+            className="group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r))}
+            {...clickableRow(() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r)))}
           >
             {selectionMode && (
               <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center justify-center">
@@ -500,11 +502,13 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   const [fetchedThisSession, setFetchedThisSession] = useState(false)
   const [exporting, setExporting] = useState(false)
 
-  // AI fit scoring (Phase 2) — advisory by default. { [username]: {score, reason} }
+  // AI fit scoring (Phase 2) — advisory by default. Keyed by platform:username
+  // (rowKey) so an account present on both Instagram and Threads in one run
+  // keeps a distinct score per row. { [platform:username]: {score, reason} }
   const [aiStats, setAiStats] = useState(() => {
     const seed = {}
     for (const r of results) {
-      if (r.aiScore != null) seed[r.username] = { score: r.aiScore, reason: r.aiReason || '' }
+      if (r.aiScore != null) seed[rowKey(r)] = { score: r.aiScore, reason: r.aiReason || '' }
     }
     return seed
   })
@@ -544,7 +548,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       const followerCount = isThreads
         ? (tstats?.followerCount ?? r.followerCount ?? inf?.followerCount ?? null)
         : (r.followerCount ?? inf?.followerCount ?? null)
-      const ai = aiStats[r.username]
+      const ai = aiStats[rowKey(r)]
       const hasLive = medLikes != null || medViews != null
       const engScore = hasLive
         ? computeLiveEngagementScore(medLikes, medViews, medComments, followerCount)
@@ -588,8 +592,11 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   const { processed: filtered, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
     useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc', urlSync: true, urlKey: 'results' })
 
-  const highCount = enriched.filter((r) => r.overall >= 70).length
-  const midCount = enriched.filter((r) => r.overall >= 45 && r.overall < 70).length
+  // Breakdown is computed from `filtered` (the visible set), not `enriched`, so
+  // the three sub-counts always sum to the headline's "{filtered.length}
+  // accounts" — applying a min-score/flag filter now updates both together.
+  const highCount = filtered.filter((r) => r.overall >= 70).length
+  const midCount = filtered.filter((r) => r.overall >= 45 && r.overall < 70).length
 
   // One handler for both platforms: IG rows re-scrape via fetchBatchStats,
   // Threads rows re-run profile enrichment (chunked ≤20 handles per actor run).
@@ -677,6 +684,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     setAiProgress({ done: 0, total: enriched.length })
     try {
       const candidates = enriched.map((r) => ({
+        key: rowKey(r), // platform:username — keeps IG/Threads scores distinct
         username: r.username,
         bio: r.bio,
         hashtags: r.hashtags,
@@ -814,7 +822,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
             {' · '}
             <span className="text-body font-semibold">{midCount} possible</span>
             {' · '}
-            {enriched.length - highCount - midCount} low score
+            {filtered.length - highCount - midCount} low score
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">

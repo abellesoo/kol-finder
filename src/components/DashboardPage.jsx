@@ -1,24 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { ArrowRight, ClipboardCheck, Send, Rocket, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { reviewKey, campaignDmDraft, loadReviewSubmissions } from '../lib/reviewState'
 import { loadHistory } from '../lib/sessionHistory'
 import { listCampaigns } from '../lib/campaigns'
-
-// Roll a campaign's per-state counts up to the numbers the dashboard shows.
-function campaignMetrics(c) {
-  const counts = c.counts || {}
-  const total = Object.values(counts).reduce((a, b) => a + b, 0)
-  const posted = counts.posted || 0
-  const overdue = counts.overdue || 0
-  return { total, posted, overdue, fulfilled: total ? Math.round((posted / total) * 100) : 0 }
-}
-
-function formatDate(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
+import { clickableRow, formatDate, campaignMetrics } from '../lib/utils'
 
 // Time-of-day greeting — the dashboard's first job is to feel like it knows who
 // just walked in.
@@ -131,39 +117,38 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
   // = submissions whose campaign is assigned to the current user (assignment
   // lives on the campaigns table, inherited via campaign_id).
   const userId = user?.id || null
-  const ownerByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || null]))
-  let approved = 0
-  let dmsSent = 0
-  let pendingReview = 0
-  let dmReady = 0
-  let pendingReviewMine = 0
-  let dmReadyMine = 0
-  let reviewedAccounts = 0
-
-  campaigns.forEach((c) => {
-    const rs = c.review_state || {}
-    const accounts = c.accounts || []
-    reviewedAccounts += accounts.length
-    const mine = !!(userId && c.campaign_id && ownerByCampaign.get(c.campaign_id) === userId)
-    // One DM draft per campaign — an approved account is "ready" when the
-    // campaign has a draft and its own DM hasn't gone out yet.
-    const hasDraft = !!campaignDmDraft(rs)
-    accounts.forEach((a) => {
-      const entry = rs[reviewKey(a)]
-      if (!entry?.status || entry.status === 'pending') {
-        pendingReview++
-        if (mine) pendingReviewMine++
-      } else if (entry.status === 'approved') {
-        approved++
-        const dmStatus = entry.dm_status || 'not_sent'
-        if (dmStatus === 'sent' || dmStatus === 'replied') dmsSent++
-        if (dmStatus === 'not_sent' && hasDraft) {
-          dmReady++
-          if (mine) dmReadyMine++
+  const {
+    approved, dmsSent, pendingReview, dmReady, pendingReviewMine, dmReadyMine, reviewedAccounts,
+  } = useMemo(() => {
+    const ownerByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || null]))
+    let approved = 0, dmsSent = 0, pendingReview = 0, dmReady = 0
+    let pendingReviewMine = 0, dmReadyMine = 0, reviewedAccounts = 0
+    campaigns.forEach((c) => {
+      const rs = c.review_state || {}
+      const accounts = c.accounts || []
+      reviewedAccounts += accounts.length
+      const mine = !!(userId && c.campaign_id && ownerByCampaign.get(c.campaign_id) === userId)
+      // One DM draft per campaign — an approved account is "ready" when the
+      // campaign has a draft and its own DM hasn't gone out yet.
+      const hasDraft = !!campaignDmDraft(rs)
+      accounts.forEach((a) => {
+        const entry = rs[reviewKey(a)]
+        if (!entry?.status || entry.status === 'pending') {
+          pendingReview++
+          if (mine) pendingReviewMine++
+        } else if (entry.status === 'approved') {
+          approved++
+          const dmStatus = entry.dm_status || 'not_sent'
+          if (dmStatus === 'sent' || dmStatus === 'replied') dmsSent++
+          if (dmStatus === 'not_sent' && hasDraft) {
+            dmReady++
+            if (mine) dmReadyMine++
+          }
         }
-      }
+      })
     })
-  })
+    return { approved, dmsSent, pendingReview, dmReady, pendingReviewMine, dmReadyMine, reviewedAccounts }
+  }, [campaigns, campaignOps, userId])
 
   // Prefer the "yours" figure whenever the user owns any of the outstanding work;
   // fall back to the team-wide total otherwise.
@@ -424,7 +409,8 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
                 <div
                   key={c.id}
                   onClick={() => (onOpenReview ? onOpenReview(c.id) : onNavigate?.('review_queue'))}
-                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[14px] items-center cursor-pointer hover:bg-surface transition-colors ${
+                  {...clickableRow(() => (onOpenReview ? onOpenReview(c.id) : onNavigate?.('review_queue')))}
+                  className={`grid grid-cols-[1fr_80px_80px_80px_110px_36px] gap-4 px-[20px] py-[14px] items-center cursor-pointer hover:bg-surface transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${
                     i !== Math.min(campaigns.length, 6) - 1 ? 'border-b border-[#F0ECE2]' : ''
                   }`}
                 >

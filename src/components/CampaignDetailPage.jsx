@@ -24,15 +24,12 @@ import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '.
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
+import { formatDate } from '../lib/utils'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 // Match a campaign's brand name to a BRAND_CATALOG entry (casing/punctuation).
 const normBrand = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
-function formatDate(isoStr) {
-  if (!isoStr) return '—'
-  return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
 const STATE_META = {
@@ -1100,10 +1097,20 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const [nameDraft, setNameDraft] = useState('')
   const [assignees, setAssignees] = useState([])
   const [view, setView] = useUrlParam('campaign_view', 'board') // 'board' | 'table' (shareable via URL)
+  const [setupOpen, setSetupOpen] = useState(null) // null until campaign loads; then false if already configured
 
   useEffect(() => {
     listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
   }, [])
+
+  // Collapse the setup editors by default once a campaign is configured, so the
+  // KOL board is reachable without scrolling past them. Fresh campaigns open
+  // expanded so the user fills them in. Only auto-sets once (null → bool).
+  useEffect(() => {
+    if (campaign && setupOpen === null) {
+      setSetupOpen(Object.keys(campaign.default_step1 || {}).length === 0)
+    }
+  }, [campaign, setupOpen])
 
   const handleAssign = async (userId) => {
     if (!campaign) return
@@ -1488,8 +1495,24 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
         </div>
       </div>
 
-      <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
-      <DmMessagesPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
+      <div className="mb-6 border border-card-edge rounded-[14px] bg-white overflow-hidden">
+        <button
+          onClick={() => setSetupOpen((o) => !o)}
+          aria-expanded={!!setupOpen}
+          className="w-full flex items-center gap-2.5 px-5 py-3.5 text-left hover:bg-surface transition-colors"
+        >
+          <ChevronRight size={16} className={`flex-shrink-0 text-faint transition-transform ${setupOpen ? 'rotate-90' : ''}`} />
+          <span className="font-semibold text-[14px] text-ink">Campaign setup</span>
+          <span className="text-[11.5px] text-faint ml-2">config · DM messages</span>
+          {!setupOpen && <span className="ml-auto text-[11.5px] text-faint">Show</span>}
+        </button>
+        {setupOpen && (
+          <div className="px-4 pb-4 pt-1 border-t border-mist [&>div:last-child]:mb-0">
+            <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
+            <DmMessagesPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
+          </div>
+        )}
+      </div>
       <SessionsPanel
         sessions={sessions}
         onOpenSession={(id) => onOpenSession?.(id)}

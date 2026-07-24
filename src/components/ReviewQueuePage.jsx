@@ -5,33 +5,11 @@ import { listCampaigns, createCampaign, listAssignableUsers } from '../lib/campa
 import { setResultCampaign, loadReviewSubmissions } from '../lib/reviewState'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
 import { AssigneeAvatar } from './core/AssigneePicker'
-
-function formatDate(isoStr) {
-  if (!isoStr) return '—'
-  return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-// Per-campaign groups (campaigns in listing order, only those with rows) plus a
-// trailing "Unassigned" bucket. Shared with the getter used across review views.
-function groupByCampaign(rows, campaigns) {
-  const byId = new Map()
-  const unassigned = []
-  for (const r of rows) {
-    const cid = r.campaign_id || null
-    if (!cid) { unassigned.push(r); continue }
-    if (!byId.has(cid)) byId.set(cid, [])
-    byId.get(cid).push(r)
-  }
-  const groups = []
-  for (const c of campaigns) {
-    const items = byId.get(c.id)
-    if (items && items.length) groups.push({ id: c.id, name: c.name, items })
-  }
-  const known = new Set(campaigns.map((c) => c.id))
-  for (const [cid, items] of byId) if (!known.has(cid)) unassigned.push(...items)
-  if (unassigned.length) groups.push({ id: null, name: 'Unassigned', items: unassigned })
-  return groups
-}
+import PageHeader from './core/PageHeader'
+import Loading from './core/Loading'
+import EmptyState from './core/EmptyState'
+import { formatDate, groupByCampaign } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId }) {
   const [loading, setLoading] = useState(true)
@@ -43,6 +21,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [toast, setToast] = useState(null)
+  const deleteDialogRef = useFocusTrap(!!deleteTarget)
 
   const load = useCallback(async () => {
     if (!supabase) { setLoading(false); return }
@@ -84,7 +63,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
     [rows, mineOnly, userId, ownerByCampaign]
   )
 
-  const groups = useMemo(() => groupByCampaign(visibleRows, campaigns), [visibleRows, campaigns])
+  const groups = useMemo(() => groupByCampaign(visibleRows, campaigns, (r) => r.campaign_id), [visibleRows, campaigns])
 
   const moveRow = async (row, campaignId) => {
     await setResultCampaign(row.id, campaignId)
@@ -134,73 +113,72 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
     setToast({ type: 'success', message: `${label} deleted` })
   }
 
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-faint" />
-      </div>
-    )
-  }
+  if (loading) return <Loading label="Loading review queue…" />
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <p className="font-mono text-[10px] tracking-[.18em] text-faint uppercase mb-[8px]">Review Queue</p>
-          <h1 className="text-[34px] font-serif font-bold tracking-[0.02em] text-ink mb-1">{rows.length} {rows.length === 1 ? 'submission' : 'submissions'}</h1>
-          <p className="text-[14px] text-muted">All accounts sent for review, newest first.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {userId && mineCount > 0 && (
-            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5">
-              <button
-                onClick={() => setMineOnly(true)}
-                className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
-                  mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
-                }`}
-              >
-                Assigned to me <span className="tabular-nums opacity-70">{mineCount}</span>
-              </button>
-              <button
-                onClick={() => setMineOnly(false)}
-                className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
-                  !mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
-                }`}
-              >
-                Everyone
-              </button>
-            </div>
-          )}
-          <button
-            onClick={load}
-            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
-          >
-            <RefreshCw size={13} /> Refresh
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
+      <PageHeader
+        className="mb-8"
+        label="Review Queue"
+        title={`${rows.length} ${rows.length === 1 ? 'submission' : 'submissions'}`}
+        subtitle="All accounts sent for review, newest first."
+        actions={
+          <>
+            {userId && mineCount > 0 && (
+              <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5">
+                <button
+                  onClick={() => setMineOnly(true)}
+                  className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
+                    mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
+                  }`}
+                >
+                  Assigned to me <span className="tabular-nums opacity-70">{mineCount}</span>
+                </button>
+                <button
+                  onClick={() => setMineOnly(false)}
+                  className={`px-3 py-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors ${
+                    !mineOnly ? 'bg-ink text-white' : 'text-faint hover:text-ink'
+                  }`}
+                >
+                  Everyone
+                </button>
+              </div>
+            )}
+            <button
+              onClick={load}
+              className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white"
+            >
+              <RefreshCw size={13} /> Refresh
+            </button>
+          </>
+        }
+      />
 
       {error && (
         <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>
       )}
 
       {rows.length === 0 && !error && (
-        <div className="flex flex-col items-center py-24">
-          <CheckCircle2 size={32} className="text-faint mb-4" />
-          <h2 className="text-[17px] font-semibold text-ink mb-2">All caught up</h2>
-          <p className="text-[13.5px] text-muted text-center">No accounts are waiting for review right now</p>
-        </div>
+        <EmptyState
+          icon={CheckCircle2}
+          tone="sage"
+          title="All caught up"
+          description="No accounts are waiting for review right now."
+        />
       )}
 
       {rows.length > 0 && visibleRows.length === 0 && mineOnly && !error && (
-        <div className="flex flex-col items-center py-24">
-          <CheckCircle2 size={32} className="text-faint mb-4" />
-          <h2 className="text-[17px] font-serif font-bold text-ink mb-2">Nothing assigned to you</h2>
-          <p className="text-[13.5px] text-muted text-center mb-5">No submissions on campaigns you own are waiting. Switch to Everyone to see the full queue.</p>
-          <button onClick={() => setMineOnly(false)} className="px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all">
-            Show everyone
-          </button>
-        </div>
+        <EmptyState
+          icon={CheckCircle2}
+          tone="sage"
+          title="Nothing assigned to you"
+          description="No submissions on campaigns you own are waiting. Switch to Everyone to see the full queue."
+          action={
+            <button onClick={() => setMineOnly(false)} className="px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/85 transition-all">
+              Show everyone
+            </button>
+          }
+        />
       )}
 
       <div className="space-y-8">
@@ -292,6 +270,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
           onClick={() => !deleting && setDeleteTarget(null)}
         >
           <div
+            ref={deleteDialogRef} role="dialog" aria-modal="true" aria-label="Delete review submission"
             className="w-full max-w-[380px] bg-white rounded-[16px] shadow-xl p-6"
             onClick={(e) => e.stopPropagation()}
           >

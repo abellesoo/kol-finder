@@ -6,39 +6,7 @@ import CampaignMoveMenu from './core/CampaignMoveMenu'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
-
-// Split sessions into per-campaign groups (campaigns in their listing order,
-// only those with sessions) plus a trailing "Unassigned" bucket. So the Seeder
-// history reads campaign-first, matching the rest of the app.
-function groupSessions(sessions, campaigns) {
-  const byId = new Map()
-  const unassigned = []
-  for (const s of sessions) {
-    const cid = s.campaignId || null
-    if (!cid) { unassigned.push(s); continue }
-    if (!byId.has(cid)) byId.set(cid, [])
-    byId.get(cid).push(s)
-  }
-  const groups = []
-  for (const c of campaigns) {
-    const items = byId.get(c.id)
-    if (items && items.length) groups.push({ id: c.id, name: c.name, items })
-  }
-  // Sessions whose campaign no longer exists fall through to Unassigned too.
-  const knownIds = new Set(campaigns.map((c) => c.id))
-  for (const [cid, items] of byId) if (!knownIds.has(cid)) unassigned.push(...items)
-  if (unassigned.length) groups.push({ id: null, name: 'Unassigned', items: unassigned })
-  return groups
-}
-
-function formatDate(iso) {
-  const d = new Date(iso)
-  return (
-    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  )
-}
+import { formatDateTime, groupByCampaign } from '../lib/utils'
 
 function formatConfig(config) {
   if (!config) return ''
@@ -73,7 +41,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
     listCampaigns().then(setCampaigns).catch((err) => console.error('Failed to load campaigns', err))
   }, [])
 
-  const groups = useMemo(() => groupSessions(sessions, campaigns), [sessions, campaigns])
+  const groups = useMemo(() => groupByCampaign(sessions, campaigns, (s) => s.campaignId), [sessions, campaigns])
 
   const moveSession = async (session, campaignId) => {
     await setSessionCampaign(session.id, campaignId)
@@ -170,7 +138,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
   }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
       <PageHeader
         className="mb-9"
         label="History"
@@ -249,7 +217,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
                   {session.config?.sessionTitle && (
                     <p className="text-[11.5px] text-muted mt-[1px]">{session.accountCount} accounts{formatConfig(session.config) ? ` · ${formatConfig(session.config)}` : ''}</p>
                   )}
-                  <p className="font-mono text-[11px] text-faint mt-0.5">{formatDate(session.date)}</p>
+                  <p className="font-mono text-[11px] text-faint mt-0.5">{formatDateTime(session.date)}</p>
                   {session.fileNames?.length > 0 && (
                     <p className="font-mono text-[10px] text-faint/60 truncate mt-0.5">
                       {session.fileNames.join(', ')}

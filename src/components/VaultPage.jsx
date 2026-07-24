@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
+import { formatDate } from '../lib/utils'
 
 // Pull a bare Instagram handle out of what the user typed — accepts "@handle",
 // "handle", or a pasted instagram.com/handle URL.
@@ -43,10 +44,6 @@ function downloadCsv(rows, filename) {
   URL.revokeObjectURL(url)
 }
 
-function formatDate(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function num(n) {
   return n != null ? Number(n).toLocaleString() : '—'

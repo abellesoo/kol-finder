@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Loader2, X, Upload, FileSpreadsheet, ArrowRight } from 'lucide-react'
 import { createCampaign, importCampaignKols, tierLabel } from '../lib/campaigns'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import {
   readWorkbook, detectHeaderRow, detectColumns, buildRows,
   IMPORT_FIELDS, IMPORT_FIELD_LABELS, REQUIRED_FIELDS,
@@ -44,6 +45,7 @@ export default function ImportCampaignModal({ onClose, onImported }) {
     name: '', brand: '', market: 'HK', campaign_type: 'mixed', start_date: '', posting_deadline: '',
   })
   const [importing, setImporting] = useState(false)
+  const dialogRef = useFocusTrap(true)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !importing && !parsing) onClose() }
@@ -133,7 +135,8 @@ export default function ImportCampaignModal({ onClose, onImported }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
       onClick={() => !importing && !parsing && onClose()}>
-      <div className="w-full max-w-[640px] max-h-[90vh] flex flex-col bg-white rounded-[16px] shadow-xl"
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Import a campaign from a spreadsheet"
+        className="w-full max-w-[640px] max-h-[90vh] flex flex-col bg-white rounded-[16px] shadow-xl"
         onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4">

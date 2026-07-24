@@ -12,7 +12,7 @@ import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluencers'
-import { updateSessionLiveStats, updateSessionAiScores } from '../lib/sessionHistory'
+import { updateSessionLiveStats, updateSessionAiScores, updateSessionTriage } from '../lib/sessionHistory'
 import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
 import { supabase } from '../lib/supabase'
 import { clickableRow } from '../lib/utils'
@@ -172,12 +172,11 @@ function MiniBar({ value, max = 10, color = 'bg-accent' }) {
   )
 }
 
-function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, selectedAccounts, onToggleSelect, selectionMode, vaultedKeys, onToggleVault }) {
+function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, sortId, sortDir, toggleSort, filters, setFilter, distinctValues, liveStats, liveStatus, aiStatus, reviewState, triage, onTriage, vaultedKeys, onToggleVault }) {
   const visibleCols = TABLE_COLUMNS.filter((c) => selectedColumns.includes(c.id))
-  // Extra leading column for checkbox when in selection mode
-  const gridTemplate = selectionMode
-    ? `2rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
-    : `2fr ${visibleCols.map((c) => c.width).join(' ')}`
+  // Fixed leading column holds the first-round Keep / Cut triage control (7rem
+  // wide → the Account column sticks just right of it at left-28).
+  const gridTemplate = `7rem 2fr ${visibleCols.map((c) => c.width).join(' ')}`
 
   const renderCell = (col, r) => {
     try {
@@ -269,8 +268,8 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
     <div className="border border-card-edge rounded-[14px] overflow-auto max-h-[70vh] bg-white">
       <div className="sticky top-0 z-20 grid gap-3 px-4 py-3 bg-surface border-b border-[#EDE8DC] text-[9.5px] font-mono text-faint uppercase tracking-[.13em]"
         style={{ gridTemplateColumns: gridTemplate }}>
-        {selectionMode && <span className="sticky left-0 bg-surface z-10" />}
-        <span className={`sticky ${selectionMode ? 'left-8' : 'left-0'} bg-surface z-10`}>Account</span>
+        <span className="sticky left-0 bg-surface z-10">Triage</span>
+        <span className="sticky left-28 bg-surface z-10">Account</span>
         {visibleCols.map((col) => (
           <ColumnHeaderCell
             key={col.id}
@@ -289,25 +288,33 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
       {filtered.length === 0 && (
         <div className="px-4 py-12 text-center text-[13.5px] text-muted">No accounts match your filters.</div>
       )}
-      {filtered.map((r) => (
+      {filtered.map((r) => {
+        const triageStatus = triage[rowKey(r)]
+        return (
         <div key={rowKey(r)}>
           <div
-            className="group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
+            className={`group grid gap-3 px-4 py-3 border-b border-[#F0ECE2] hover:bg-surface cursor-pointer transition-colors items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${triageStatus === 'cut' ? 'opacity-45' : ''}`}
             style={{ gridTemplateColumns: gridTemplate }}
             onClick={() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r))}
             {...clickableRow(() => setExpandedRow(expandedRow === rowKey(r) ? null : rowKey(r)))}
           >
-            {selectionMode && (
-              <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center justify-center">
-                <input
-                  type="checkbox"
-                  checked={selectedAccounts.has(rowKey(r))}
-                  onChange={() => onToggleSelect(rowKey(r))}
-                  className="w-4 h-4 accent-ink cursor-pointer"
-                />
-              </div>
-            )}
-            <div className={`min-w-0 sticky ${selectionMode ? 'left-8' : 'left-0'} z-[1] bg-white group-hover:bg-surface`}>
+            <div onClick={(e) => e.stopPropagation()} className="sticky left-0 z-[1] bg-white group-hover:bg-surface flex items-center gap-1">
+              <button
+                onClick={() => onTriage(rowKey(r), 'kept')}
+                title="Keep — shortlist for brand-manager review"
+                className={`px-1.5 py-0.5 rounded-[6px] text-[10px] font-mono border transition-colors ${triageStatus === 'kept' ? 'bg-sage/15 border-sage/40 text-sage font-semibold' : 'border-mist text-faint hover:border-sage/50 hover:text-sage'}`}
+              >
+                Keep
+              </button>
+              <button
+                onClick={() => onTriage(rowKey(r), 'cut')}
+                title="Cut — set aside; won't be sent for review"
+                className={`px-1.5 py-0.5 rounded-[6px] text-[10px] font-mono border transition-colors ${triageStatus === 'cut' ? 'bg-rose/15 border-rose/40 text-rose font-semibold' : 'border-mist text-faint hover:border-rose/50 hover:text-rose'}`}
+              >
+                Cut
+              </button>
+            </div>
+            <div className="min-w-0 sticky left-28 z-[1] bg-white group-hover:bg-surface">
               <div className="flex items-center gap-2">
                 <a href={profileUrl(r)} target="_blank" rel="noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -370,7 +377,8 @@ function ResultsTable({ selectedColumns, filtered, expandedRow, setExpandedRow, 
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -405,9 +413,19 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     saveColumnPrefs(next)
   }, [])
 
-  // Selection + share state
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedAccounts, setSelectedAccounts] = useState(new Set())
+  // First-round triage (Keep / Cut) — the assistant's shortlist BEFORE anything
+  // reaches the brand manager. Persisted onto the session's results (seeded from
+  // r.triageStatus) so a reload keeps the shortlisting. Keyed by rowKey
+  // (platform:username). "Approve / Reject" stays reserved for the brand manager
+  // in the Review Queue; here we only Keep (shortlist) or Cut (set aside).
+  const [triage, setTriage] = useState(() => {
+    const seed = {}
+    for (const r of results) {
+      if (r.triageStatus === 'kept' || r.triageStatus === 'cut') seed[rowKey(r)] = r.triageStatus
+    }
+    return seed
+  })
+  const [triageFilter, setTriageFilter] = useState('all') // all | kept | cut | undecided
   const [shareStatus, setShareStatus] = useState('idle') // idle | loading | done | error
   const [toast, setToast] = useState(null)
   useAutoDismissToast(toast, setToast)
@@ -589,8 +607,11 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     if (filterFlag !== 'all') list = list.filter((r) => (r.flags || []).includes(filterFlag))
     if (videoFilter === 'video') list = list.filter((r) => (r.flags || []).includes('video-creator'))
     else if (videoFilter === 'novideo') list = list.filter((r) => !(r.flags || []).includes('video-creator'))
+    if (triageFilter === 'kept') list = list.filter((r) => triage[rowKey(r)] === 'kept')
+    else if (triageFilter === 'cut') list = list.filter((r) => triage[rowKey(r)] === 'cut')
+    else if (triageFilter === 'undecided') list = list.filter((r) => !triage[rowKey(r)])
     return list
-  }, [enriched, filterFlag, minScore, videoFilter])
+  }, [enriched, filterFlag, minScore, videoFilter, triageFilter, triage])
 
   const { processed: filtered, sortId, sortDir, toggleSort, filters, setFilter, distinctValues } =
     useTableControls(preFiltered, { defaultSortId: 'overall', defaultSortDir: 'desc', urlSync: true, urlKey: 'results' })
@@ -600,6 +621,25 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   // accounts" — applying a min-score/flag filter now updates both together.
   const highCount = filtered.filter((r) => r.overall >= 70).length
   const midCount = filtered.filter((r) => r.overall >= 45 && r.overall < 70).length
+
+  // Triage tallies over the full result set (not the filtered view) so the
+  // Keep / Cut counts stay stable while the user filters.
+  const keptCount = enriched.filter((r) => triage[rowKey(r)] === 'kept').length
+  const cutCount = enriched.filter((r) => triage[rowKey(r)] === 'cut').length
+  const undecidedCount = enriched.length - keptCount - cutCount
+
+  // Set one row's first-round status; clicking the active status again clears it
+  // back to undecided. Persisted onto the session (fire-and-forget) so it
+  // survives reloads, mirroring the AI-score write.
+  const handleTriage = useCallback((key, status) => {
+    setTriage((prev) => {
+      const next = { ...prev }
+      if (next[key] === status) delete next[key]
+      else next[key] = status
+      updateSessionTriage(sessionIdRef.current, { [key]: next[key] ?? null }).catch(console.error)
+      return next
+    })
+  }, [])
 
   // One handler for both platforms: IG rows re-scrape via fetchBatchStats,
   // Threads rows re-run profile enrichment (chunked ≤20 handles per actor run).
@@ -738,25 +778,14 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
     }
   }
 
-  const handleToggleSelect = (key) => {
-    setSelectedAccounts((prev) => {
-      const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
-      return next
-    })
-  }
-
-  const handleSelectAll = () => {
-    setSelectedAccounts(new Set(filtered.map((r) => rowKey(r))))
-  }
-
-  // Send selected accounts to the Review Queue
+  // Send the kept shortlist to the Review Queue, where the brand manager does
+  // the real Approve / Reject. Only Kept rows go up — Cut and undecided stay put.
   const handleShare = async () => {
-    if (selectedAccounts.size === 0) return
+    if (keptCount === 0) return
     setShareStatus('loading')
     try {
       const accountsToShare = enriched
-        .filter((r) => selectedAccounts.has(rowKey(r)))
+        .filter((r) => triage[rowKey(r)] === 'kept')
         .map((r) => ({
           username: r.username,
           fullName: r.fullName || '',
@@ -797,11 +826,9 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
 
       if (error) throw new Error(error.message)
       setShareStatus('done')
-      setTimeout(() => {
-        setShareStatus('idle')
-        setSelectionMode(false)
-        setSelectedAccounts(new Set())
-      }, 3000)
+      // Keep the triage state — the shortlist is a record of what was sent, not a
+      // transient selection to clear. Just drop the "Sent" confirmation back to idle.
+      setTimeout(() => setShareStatus('idle'), 3000)
     } catch (err) {
       console.error('Send for review failed:', err)
       setShareStatus('error')
@@ -834,39 +861,22 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} />
 
-          {/* Selection + Send for Review controls */}
-          {!selectionMode ? (
-            <button
-              onClick={() => setSelectionMode(true)}
-              className="flex items-center gap-2 px-4 py-2 border border-accent/40 text-accent rounded-[10px] text-[13px] hover:bg-accent-dim/30 transition-all"
-            >
-              <Send size={14} />
-              Send for Review
-            </button>
-          ) : shareStatus === 'done' ? (
+          {/* First-round triage → send the kept shortlist to brand-manager review */}
+          {shareStatus === 'done' ? (
             <div className="flex items-center gap-2 px-4 py-2 bg-sage/10 border border-sage/30 rounded-[10px]">
               <Check size={14} className="text-sage" />
               <span className="text-[13px] text-sage font-semibold">Sent to Review Queue</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <button onClick={handleSelectAll} className="text-[11px] text-faint hover:text-ink font-mono px-2 py-1 border border-mist rounded-[8px]">
-                Select all
-              </button>
-              <span className="text-[11px] font-mono text-muted">{selectedAccounts.size} selected</span>
-              <button
-                onClick={handleShare}
-                disabled={selectedAccounts.size === 0 || shareStatus === 'loading'}
-                className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-[10px] text-[13px] hover:bg-accent/80 transition-all disabled:opacity-40"
-              >
-                {shareStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                {shareStatus === 'loading' ? 'Sending…' : 'Send for Review'}
-              </button>
-              <button onClick={() => { setSelectionMode(false); setSelectedAccounts(new Set()) }}
-                className="text-[11px] text-faint hover:text-ink px-2 py-1 border border-mist rounded-[8px]">
-                Cancel
-              </button>
-            </div>
+            <button
+              onClick={handleShare}
+              disabled={keptCount === 0 || shareStatus === 'loading'}
+              title={keptCount === 0 ? 'Keep at least one KOL first' : `Send ${keptCount} kept KOL${keptCount === 1 ? '' : 's'} to brand-manager review`}
+              className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-[10px] text-[13px] hover:bg-accent/80 transition-all disabled:opacity-40"
+            >
+              {shareStatus === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {shareStatus === 'loading' ? 'Sending…' : `Send ${keptCount} kept for review`}
+            </button>
           )}
 
           {/* Live stats */}
@@ -955,6 +965,20 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
             ))}
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-faint font-mono">Triage:</span>
+          <div className="flex items-center bg-mist rounded-[9px] p-1 gap-1">
+            {[['all', 'All'], ['kept', `Kept ${keptCount}`], ['cut', `Cut ${cutCount}`], ['undecided', `To review ${undecidedCount}`]].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setTriageFilter(val)}
+                className={`px-2.5 py-1 rounded-[7px] text-[12px] font-medium transition-all ${triageFilter === val ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[11px] text-faint font-mono">Min score:</span>
           <input type="number" value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}
@@ -981,9 +1005,9 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
         <div className="mb-4 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">Failed to send for review. Check your Supabase env vars.</div>
       )}
 
-      {selectionMode && shareStatus !== 'done' && (
+      {shareStatus !== 'done' && (
         <div className="mb-4 px-4 py-3 bg-accent-dim/30 border border-accent/20 rounded-[12px] text-[12px] text-body">
-          Tick the accounts you want reviewed, then click <strong>Send for Review</strong>.
+          First-round pass: <strong>Keep</strong> the KOLs worth a brand manager's time and <strong>Cut</strong> the rest, then click <strong>Send kept for review</strong>. The brand manager does the final Approve / Reject in the Review Queue.
         </div>
       )}
 
@@ -1004,9 +1028,8 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
           liveStatus={liveStatus}
           aiStatus={aiStatus}
           reviewState={reviewState}
-          selectedAccounts={selectedAccounts}
-          onToggleSelect={handleToggleSelect}
-          selectionMode={selectionMode}
+          triage={triage}
+          onTriage={handleTriage}
           vaultedKeys={vaultedKeys}
           onToggleVault={supabase ? handleToggleVault : null}
         />

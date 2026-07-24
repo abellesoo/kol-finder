@@ -84,6 +84,29 @@ export async function updateSessionAiScores(id, scoreMap) {
   await supabase.from('sessions').update({ results }).eq('id', id)
 }
 
+// Persist first-round triage (Keep / Cut) back onto the session's results so an
+// assistant's shortlisting survives a reload — the counterpart to
+// updateSessionAiScores. This is the FIRST gate: the assistant keeps the KOLs
+// worth a brand manager's time and cuts the rest, before any are sent to the
+// Review Queue where the brand manager does the real Approve / Reject.
+// triageMap is keyed by `${platform}:${username}` (the rowKey the UI seeds
+// from); each value is 'kept', 'cut', or null to clear. Non-atomic
+// read-modify-write: last writer wins if two people triage one session at once.
+export async function updateSessionTriage(id, triageMap) {
+  if (!supabase || !id || !triageMap) return
+  const { data } = await supabase.from('sessions').select('results').eq('id', id).single()
+  if (!data) return
+  const rowKey = (r) => `${r.platform || 'instagram'}:${r.username}`
+  const results = (data.results || []).map((r) => {
+    const key = rowKey(r)
+    if (!(key in triageMap)) return r
+    const status = triageMap[key]
+    // null/undefined clears the row back to undecided so the field never lingers.
+    return { ...r, triageStatus: status === 'kept' || status === 'cut' ? status : null }
+  })
+  await supabase.from('sessions').update({ results }).eq('id', id)
+}
+
 export async function loadHistory() {
   if (supabase) {
     const { data, error } = await supabase

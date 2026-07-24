@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronDown, UserCircle2 } from 'lucide-react'
 
 // Avatar tint pool, keyed by a stable hash of the user id so a person keeps the
@@ -69,16 +70,46 @@ export function AssigneeAvatarStack({ users = [], size = 20, max = 3 }) {
 // people can be toggled in one go; "Unassigned" clears all and closes.
 export default function AssigneePicker({ users = [], value, onChange, disabled = false, align = 'right' }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef(null)
+  const [coords, setCoords] = useState(null)
+  const btnRef = useRef(null)
+  const menuRef = useRef(null)
 
+  // Click-outside / Escape. The menu is portaled to <body>, so it's outside
+  // btnRef — check both the trigger and the menu before closing.
   useEffect(() => {
     if (!open) return
-    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const onDoc = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     const onKey = (e) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
   }, [open])
+
+  // Anchor the fixed-position menu to the trigger's rect. Recomputed on open and
+  // on scroll/resize so it tracks the button. Flips above when there's no room
+  // below. Rendered in a portal so no card's stacking context can cover it.
+  useLayoutEffect(() => {
+    if (!open) { setCoords(null); return }
+    const place = () => {
+      const r = btnRef.current?.getBoundingClientRect()
+      if (!r) return
+      const below = window.innerHeight - r.bottom
+      const up = below < 280 && r.top > below
+      setCoords({
+        left: align === 'right' ? null : Math.round(r.left),
+        right: align === 'right' ? Math.round(window.innerWidth - r.right) : null,
+        top: up ? null : Math.round(r.bottom + 6),
+        bottom: up ? Math.round(window.innerHeight - r.top + 6) : null,
+      })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place) }
+  }, [open, align])
 
   const ids = Array.isArray(value) ? value : value ? [value] : []
   const idSet = new Set(ids)
@@ -91,8 +122,9 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
   const clearAll = () => { setOpen(false); if (ids.length) onChange?.([]) }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
@@ -122,12 +154,12 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
         <ChevronDown size={12} className="text-faint" />
       </button>
 
-      {open && (
+      {open && coords && createPortal(
         <div
+          ref={menuRef}
           onClick={(e) => e.stopPropagation()}
-          className={`absolute z-50 mt-1.5 min-w-[190px] max-h-[260px] overflow-y-auto bg-white border border-card-edge rounded-[12px] shadow-lg py-1 ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          style={{ position: 'fixed', top: coords.top ?? undefined, bottom: coords.bottom ?? undefined, left: coords.left ?? undefined, right: coords.right ?? undefined, zIndex: 1000 }}
+          className="min-w-[190px] max-h-[260px] overflow-y-auto bg-white border border-card-edge rounded-[12px] shadow-lg py-1"
         >
           <button
             onClick={clearAll}
@@ -154,7 +186,8 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

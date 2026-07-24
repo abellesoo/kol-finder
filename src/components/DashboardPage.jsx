@@ -120,14 +120,14 @@ export default function DashboardPage({ user, onNavigate, onOpenReview, onOpenCa
   const {
     approved, dmsSent, pendingReview, dmReady, pendingReviewMine, dmReadyMine, reviewedAccounts,
   } = useMemo(() => {
-    const ownerByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || null]))
+    const ownersByCampaign = new Map(campaignOps.map((c) => [c.id, c.assigned_to || []]))
     let approved = 0, dmsSent = 0, pendingReview = 0, dmReady = 0
     let pendingReviewMine = 0, dmReadyMine = 0, reviewedAccounts = 0
     campaigns.forEach((c) => {
       const rs = c.review_state || {}
       const accounts = c.accounts || []
       reviewedAccounts += accounts.length
-      const mine = !!(userId && c.campaign_id && ownerByCampaign.get(c.campaign_id) === userId)
+      const mine = !!(userId && c.campaign_id && (ownersByCampaign.get(c.campaign_id) || []).includes(userId))
       // One DM draft per campaign — an approved account is "ready" when the
       // campaign has a draft and its own DM hasn't gone out yet.
       const hasDraft = !!campaignDmDraft(rs)

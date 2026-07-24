@@ -39,8 +39,34 @@ export function AssigneeAvatar({ user, size = 22, title }) {
   )
 }
 
-// Assign a campaign to someone from `users` (the assignable pool). `value` is the
-// assigned user id or null. Renders a chip that opens a small menu.
+// A row of overlapping assignee avatars — used to *display* one or more owners
+// inline (no interaction). Shows up to `max`, then a "+N" chip.
+export function AssigneeAvatarStack({ users = [], size = 20, max = 3 }) {
+  const shown = users.slice(0, max)
+  const extra = users.length - shown.length
+  return (
+    <span className="flex -space-x-1.5 items-center">
+      {shown.map((u) => (
+        <span key={u.id} className="rounded-full ring-1 ring-white">
+          <AssigneeAvatar user={u} size={size} />
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className="inline-grid place-items-center rounded-full ring-1 ring-white bg-[#E4DECF] text-[#5C5340] font-semibold"
+          style={{ width: size, height: size, fontSize: size * 0.4 }}
+        >
+          +{extra}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// Assign a campaign to zero or more people from `users` (the assignable pool).
+// `value` is an array of assigned user ids (tolerates a legacy scalar / null).
+// `onChange` receives the next array of ids. The menu stays open so several
+// people can be toggled in one go; "Unassigned" clears all and closes.
 export default function AssigneePicker({ users = [], value, onChange, disabled = false, align = 'right' }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -54,9 +80,15 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
   }, [open])
 
-  const selected = users.find((u) => u.id === value) || null
+  const ids = Array.isArray(value) ? value : value ? [value] : []
+  const idSet = new Set(ids)
+  const selected = users.filter((u) => idSet.has(u.id))
 
-  const pick = (id) => { setOpen(false); if (id !== value) onChange?.(id) }
+  const toggle = (id) => {
+    const next = idSet.has(id) ? ids.filter((x) => x !== id) : [...ids, id]
+    onChange?.(next)
+  }
+  const clearAll = () => { setOpen(false); if (ids.length) onChange?.([]) }
 
   return (
     <div className="relative" ref={ref}>
@@ -64,22 +96,27 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
         type="button"
         disabled={disabled}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
-        title={selected ? `Assigned to ${selected.email}` : 'Unassigned — click to assign'}
+        title={selected.length ? `Assigned to ${selected.map((s) => s.email).join(', ')}` : 'Unassigned — click to assign'}
         className={`flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-full border text-[12px] transition-all disabled:opacity-50 ${
-          selected
+          selected.length
             ? 'border-card-edge bg-white text-body hover:border-ink/30'
             : 'border-dashed border-mist text-faint hover:text-ink hover:border-ink/30'
         }`}
       >
-        {selected ? (
-          <>
-            <AssigneeAvatar user={selected} size={20} />
-            <span className="max-w-[92px] truncate font-medium">{shortName(selected.email)}</span>
-          </>
-        ) : (
+        {selected.length === 0 ? (
           <>
             <UserCircle2 size={18} className="text-faint" strokeWidth={1.5} />
             <span>Assign</span>
+          </>
+        ) : selected.length === 1 ? (
+          <>
+            <AssigneeAvatar user={selected[0]} size={20} />
+            <span className="max-w-[92px] truncate font-medium">{shortName(selected[0].email)}</span>
+          </>
+        ) : (
+          <>
+            <AssigneeAvatarStack users={selected} size={20} />
+            <span className="font-medium">{selected.length} people</span>
           </>
         )}
         <ChevronDown size={12} className="text-faint" />
@@ -93,14 +130,14 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
           }`}
         >
           <button
-            onClick={() => pick(null)}
+            onClick={clearAll}
             className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-left hover:bg-surface transition-colors"
           >
             <span className="w-5 h-5 grid place-items-center rounded-full border border-dashed border-mist flex-shrink-0">
               <UserCircle2 size={13} className="text-faint" strokeWidth={1.5} />
             </span>
             <span className="flex-1 text-muted">Unassigned</span>
-            {value == null && <Check size={13} className="text-sage" />}
+            {ids.length === 0 && <Check size={13} className="text-sage" />}
           </button>
           {users.length === 0 ? (
             <p className="px-3 py-2 text-[11.5px] text-faint">No teammates yet — people appear here once they sign in</p>
@@ -108,12 +145,12 @@ export default function AssigneePicker({ users = [], value, onChange, disabled =
             users.map((u) => (
               <button
                 key={u.id}
-                onClick={() => pick(u.id)}
+                onClick={() => toggle(u.id)}
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-left hover:bg-surface transition-colors"
               >
                 <AssigneeAvatar user={u} size={20} />
                 <span className="flex-1 min-w-0 truncate text-ink">{shortName(u.email)}</span>
-                {u.id === value && <Check size={13} className="text-sage" />}
+                {idSet.has(u.id) && <Check size={13} className="text-sage" />}
               </button>
             ))
           )}

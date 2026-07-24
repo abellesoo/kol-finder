@@ -235,13 +235,16 @@ export async function setCampaignStatus(id, status) {
 }
 
 // ── Assignment ───────────────────────────────────────────────────────────────
-// Assign a campaign to a teammate (or null to unassign). Reviews and ops
-// for the campaign inherit this owner. Requires db/campaign_assignee.sql.
-export async function setCampaignAssignee(id, userId) {
+// Assign a campaign to zero or more teammates. Reviews and ops for the campaign
+// inherit these owners; a campaign is "mine" when the caller is any of them.
+// Pass an array of user ids (empty → Unassigned). Requires
+// db/campaign_assignee.sql + db/campaign_multi_assignee.sql (uuid[] column).
+export async function setCampaignAssignees(id, userIds) {
   if (!supabase) throw new Error('Supabase not configured')
+  const list = (Array.isArray(userIds) ? userIds : userIds ? [userIds] : []).filter(Boolean)
   const { data, error } = await supabase
     .from('campaigns')
-    .update({ assigned_to: userId || null })
+    .update({ assigned_to: list.length ? list : null })
     .eq('id', id)
     .select('id')
   if (error) throw new Error(error.message)

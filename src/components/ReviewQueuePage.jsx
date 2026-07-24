@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { listCampaigns, createCampaign, listAssignableUsers } from '../lib/campaigns'
 import { setResultCampaign, loadReviewSubmissions } from '../lib/reviewState'
 import CampaignMoveMenu from './core/CampaignMoveMenu'
-import { AssigneeAvatar } from './core/AssigneePicker'
+import { AssigneeAvatarStack } from './core/AssigneePicker'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
@@ -40,10 +40,10 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
   useEffect(() => { listCampaigns().then(setCampaigns).catch((e) => console.error('Failed to load campaigns', e)) }, [])
   useEffect(() => { listAssignableUsers().then(setAssignees).catch(() => setAssignees([])) }, [])
 
-  // campaign id → owner (assigned_to), and id → user record for avatars.
-  const ownerByCampaign = useMemo(() => {
+  // campaign id → owner ids (assigned_to array), and id → user record for avatars.
+  const ownersByCampaign = useMemo(() => {
     const m = new Map()
-    for (const c of campaigns) m.set(c.id, c.assigned_to || null)
+    for (const c of campaigns) m.set(c.id, c.assigned_to || [])
     return m
   }, [campaigns])
   const userById = useMemo(() => {
@@ -54,13 +54,13 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
 
   // How many submissions belong to the current user (via their campaign's owner).
   const mineCount = useMemo(
-    () => (userId ? rows.filter((r) => r.campaign_id && ownerByCampaign.get(r.campaign_id) === userId).length : 0),
-    [rows, ownerByCampaign, userId]
+    () => (userId ? rows.filter((r) => r.campaign_id && (ownersByCampaign.get(r.campaign_id) || []).includes(userId)).length : 0),
+    [rows, ownersByCampaign, userId]
   )
 
   const visibleRows = useMemo(
-    () => (mineOnly && userId ? rows.filter((r) => r.campaign_id && ownerByCampaign.get(r.campaign_id) === userId) : rows),
-    [rows, mineOnly, userId, ownerByCampaign]
+    () => (mineOnly && userId ? rows.filter((r) => r.campaign_id && (ownersByCampaign.get(r.campaign_id) || []).includes(userId)) : rows),
+    [rows, mineOnly, userId, ownersByCampaign]
   )
 
   const groups = useMemo(() => groupByCampaign(visibleRows, campaigns, (r) => r.campaign_id), [visibleRows, campaigns])
@@ -183,16 +183,17 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
 
       <div className="space-y-8">
         {groups.map((grp) => {
-          const owner = grp.id ? userById.get(ownerByCampaign.get(grp.id)) : null
+          const owners = grp.id ? (ownersByCampaign.get(grp.id) || []).map((uid) => userById.get(uid)).filter(Boolean) : []
           return (
           <div key={grp.id || 'unassigned'}>
             <div className="flex items-center gap-2 mb-3">
               <FolderOpen size={14} className={grp.id ? 'text-sage' : 'text-faint'} />
               <p className="text-[15px] font-serif font-bold text-ink">{grp.name}</p>
               <span className="font-mono text-[10px] text-faint tabular-nums">{grp.items.length}</span>
-              {owner && (
+              {owners.length > 0 && (
                 <span className="flex items-center gap-1.5 ml-1 text-[11px] text-faint">
-                  <AssigneeAvatar user={owner} size={18} /> {owner.email.split('@')[0]}
+                  <AssigneeAvatarStack users={owners} size={18} />
+                  {owners.length === 1 ? owners[0].email.split('@')[0] : `${owners.length} people`}
                 </span>
               )}
             </div>

@@ -13,7 +13,7 @@ import {
   saveNudge, markNudgeSent,
   tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
   getScoringByHandle, getReviewMetaByHandle, buildCampaignSheetValues, updateCampaignSetup, saveDmMessages,
-  getBrandById, updateBrandFacts, setCampaignAssignee, listAssignableUsers,
+  getBrandById, updateBrandFacts, setCampaignAssignees, listAssignableUsers,
 } from '../lib/campaigns'
 import { listSessionsForCampaign } from '../lib/sessionHistory'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
@@ -1112,16 +1112,16 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     }
   }, [campaign, setupOpen])
 
-  const handleAssign = async (userId) => {
+  const handleAssign = async (ids) => {
     if (!campaign) return
-    const prev = campaign.assigned_to || null
-    setCampaign((c) => ({ ...c, assigned_to: userId || null }))
+    const prev = campaign.assigned_to || []
+    setCampaign((c) => ({ ...c, assigned_to: ids }))
     try {
-      await setCampaignAssignee(campaign.id, userId)
+      await setCampaignAssignees(campaign.id, ids)
     } catch (e) {
       console.error('Assign campaign failed', e)
       setCampaign((c) => ({ ...c, assigned_to: prev }))
-      window.alert(e.message || 'Failed to change the owner — please try again.')
+      window.alert(e.message || 'Failed to change the owners — please try again.')
     }
   }
 
@@ -1436,7 +1436,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
           </p>
           <div className="flex items-center gap-2 mt-3">
             <span className="font-mono text-[10px] tracking-[.14em] uppercase text-faint">Owner</span>
-            <AssigneePicker users={assignees} value={campaign.assigned_to || null} onChange={handleAssign} align="left" />
+            <AssigneePicker users={assignees} value={campaign.assigned_to || []} onChange={handleAssign} align="left" />
           </div>
           {(campaign.mention_handles?.length > 0 || campaign.hashtags?.length > 0) && (
             <div className="flex items-center flex-wrap gap-1.5 mt-3">

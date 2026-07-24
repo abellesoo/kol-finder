@@ -3,7 +3,7 @@ import {
   Loader2, RefreshCw, ArrowRight, Rocket, Plus, X, Upload, Search,
   FileSpreadsheet, Trash2, AlertTriangle, Pencil, Check,
 } from 'lucide-react'
-import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup, setCampaignAssignee, listAssignableUsers } from '../lib/campaigns'
+import { listCampaigns, createCampaign, getOrCreateBrand, getApprovedKolsForRun, attachKols, deleteCampaign, updateCampaignSetup, setCampaignAssignees, listAssignableUsers } from '../lib/campaigns'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import { formatDate, campaignMetrics } from '../lib/utils'
 import { useFocusTrap } from '../hooks/useFocusTrap'
@@ -170,7 +170,7 @@ function CampaignPanel({
       {/* Footer */}
       <div className="flex items-center gap-2 pt-3 border-t border-surface mt-auto">
         <div className="mr-auto" onClick={(e) => e.stopPropagation()}>
-          <AssigneePicker users={assignees} value={c.assigned_to || null} onChange={(uid) => onAssign(c, uid)} align="left" />
+          <AssigneePicker users={assignees} value={c.assigned_to || []} onChange={(ids) => onAssign(c, ids)} align="left" />
         </div>
         <OpenSheetButton url={c.sheet_url} />
         <button onClick={() => onOpen(c.id)}
@@ -299,16 +299,16 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
     listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
   }, [])
 
-  // Optimistic assignee change — revert on failure.
-  const handleAssign = async (campaign, userId) => {
-    const prev = campaign.assigned_to || null
-    setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: userId || null } : c)))
+  // Optimistic assignee change — revert on failure. `ids` is the full next list.
+  const handleAssign = async (campaign, ids) => {
+    const prev = campaign.assigned_to || []
+    setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: ids } : c)))
     try {
-      await setCampaignAssignee(campaign.id, userId)
+      await setCampaignAssignees(campaign.id, ids)
     } catch (e) {
       console.error('Assign campaign failed', e)
       setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: prev } : c)))
-      window.alert(e.message || 'Failed to change the owner — please try again.')
+      window.alert(e.message || 'Failed to change the owners — please try again.')
     }
   }
 

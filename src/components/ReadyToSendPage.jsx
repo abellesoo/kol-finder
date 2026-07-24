@@ -13,6 +13,7 @@ import CampaignMoveMenu from './core/CampaignMoveMenu'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
+import Toast, { useAutoDismissToast } from './core/Toast'
 
 const DM_STATUS_OPTIONS = ['not_sent', 'sent', 'replied', 'no_response']
 const DM_STATUS_LABELS = { not_sent: 'Not sent', sent: 'Sent', replied: 'Replied', no_response: 'No response' }
@@ -30,6 +31,8 @@ export default function ReadyToSendPage() {
   const [sessionMeta, setSessionMeta] = useState({})
   const [campaigns, setCampaigns] = useState([])
   const [copiedUser, setCopiedUser] = useState(null)
+  const [toast, setToast] = useState(null)
+  useAutoDismissToast(toast, setToast)
   // Column visibility is remembered across tabs + reloads (Phase 4).
   const [selectedColumns, setSelectedColumns] = useState(loadColumnPrefs)
   const handleColumnsChange = useCallback((next) => {
@@ -151,7 +154,7 @@ export default function ReadyToSendPage() {
           ? { ...i, dmStatus: prevStatus, reviewEntry: { ...i.reviewEntry, dm_status: prevStatus } }
           : i
       ))
-      window.alert('Couldn’t save the DM status — please try again.')
+      setToast({ type: 'error', message: 'Couldn’t save the DM status — please try again.' })
     }
   }, [])
 
@@ -333,6 +336,7 @@ export default function ReadyToSendPage() {
           )
         })}
       </div>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

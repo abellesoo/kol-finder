@@ -6,7 +6,9 @@ import CampaignMoveMenu from './core/CampaignMoveMenu'
 import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
+import Toast, { useAutoDismissToast } from './core/Toast'
 import { formatDateTime, groupByCampaign } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 function formatConfig(config) {
   if (!config) return ''
@@ -24,7 +26,10 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [campaigns, setCampaigns] = useState([])
+  const [toast, setToast] = useState(null)
+  useAutoDismissToast(toast, setToast)
   const inputRef = useRef(null)
+  const deleteDialogRef = useFocusTrap(!!deleteTarget)
 
   useEffect(() => {
     loadHistory()
@@ -95,7 +100,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
       )
     } catch (err) {
       console.error('Failed to update session title', err)
-      window.alert('Failed to rename session. Please try again.')
+      setToast({ type: 'error', message: 'Failed to rename session. Please try again.' })
     }
   }
 
@@ -120,7 +125,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
       setDeleteTarget(null)
     } catch (err) {
       console.error('Failed to delete session', err)
-      window.alert('Failed to delete session. Please try again.')
+      setToast({ type: 'error', message: 'Failed to delete session. Please try again.' })
     } finally {
       setDeleting(false)
     }
@@ -283,6 +288,9 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
           onClick={() => !deleting && setDeleteTarget(null)}
         >
           <div
+            ref={deleteDialogRef}
+            role="dialog"
+            aria-modal="true"
             className="w-full max-w-[380px] bg-white rounded-[16px] shadow-xl p-6"
             onClick={(e) => e.stopPropagation()}
           >
@@ -314,6 +322,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

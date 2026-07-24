@@ -82,7 +82,10 @@ export async function fetchAiScores(candidates, { criteria = '', campaignBrief =
 
   const headers = await authHeaders()
 
-  for (const batch of batches) {
+  // Score one batch: mutates the shared scoreMap/failed, then reports progress.
+  // A single batch's failure is isolated (its usernames go to `failed`) so the
+  // rest of the run still lands — same contract as the old serial loop.
+  const processBatch = async (batch) => {
     try {
       const res = await fetch(`${PROXY}/ai-score`, {
         method: 'POST',
@@ -142,6 +145,20 @@ export async function fetchAiScores(candidates, { criteria = '', campaignBrief =
     done += batch.length
     if (onProgress) onProgress(Math.min(done, total), total)
   }
+
+  // Run the batches through a bounded worker pool instead of strictly one at a
+  // time. A whole scoring run used to be ceil(N/15) serial round-trips to the
+  // proxy — for a few hundred candidates that's a long, visibly slow wait.
+  // POOL keeps a few requests in flight without overwhelming the worker.
+  const POOL = 4
+  let next = 0
+  const worker = async () => {
+    while (next < batches.length) {
+      const batch = batches[next++]
+      await processBatch(batch)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(POOL, batches.length) }, worker))
 
   Object.defineProperty(scoreMap, '_failed', { value: failed, enumerable: false })
   return scoreMap

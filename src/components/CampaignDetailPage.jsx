@@ -25,6 +25,7 @@ import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
 import { formatDate } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
 // Match a campaign's brand name to a BRAND_CATALOG entry (casing/punctuation).
@@ -77,6 +78,7 @@ function AttachModal({ campaignId, existingHandles, onClose, onAttached }) {
   const [selected, setSelected] = useState(() => new Set())
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
+  const dialogRef = useFocusTrap(true)
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !saving) onClose() }
@@ -130,7 +132,11 @@ function AttachModal({ campaignId, existingHandles, onClose, onAttached }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4"
       onClick={() => !saving && onClose()}>
-      <div className="w-full max-w-[540px] max-h-[86vh] flex flex-col bg-white rounded-[16px] shadow-xl"
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-[540px] max-h-[86vh] flex flex-col bg-white rounded-[16px] shadow-xl"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between p-6 pb-4">
           <div>
@@ -295,6 +301,7 @@ function TrackingField({ kol, campaign, onSave }) {
 // data — name + mobile — and the repo is public, so they never go in code).
 function SfSenderModal({ onClose, onSaved }) {
   const [s, setS] = useState(() => getSfSender())
+  const dialogRef = useFocusTrap(true)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -309,7 +316,7 @@ function SfSenderModal({ onClose, onSaved }) {
   const cls = 'w-full px-2 py-1.5 border border-mist rounded-[8px] text-[12.5px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-[2px] px-4" onClick={onClose}>
-      <div className="w-full max-w-[440px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" className="w-full max-w-[440px] bg-white rounded-[16px] shadow-xl p-6" onClick={(e) => e.stopPropagation()}>
         <p className="font-mono text-[10px] tracking-[.16em] text-faint uppercase mb-1">SF bulk file</p>
         <h2 className="text-[17px] font-semibold text-ink mb-1">Sender details</h2>
         <p className="text-[12px] text-muted mb-4">
@@ -1121,7 +1128,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     } catch (e) {
       console.error('Assign campaign failed', e)
       setCampaign((c) => ({ ...c, assigned_to: prev }))
-      window.alert(e.message || 'Failed to change the owners — please try again.')
+      setToast({ type: 'error', message: e.message || 'Failed to change the owners — please try again.' })
     }
   }
 
@@ -1137,7 +1144,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     } catch (err) {
       console.error('Rename campaign failed', err)
       setCampaign(prev)
-      window.alert(err.message || 'Failed to rename campaign — please try again.')
+      setToast({ type: 'error', message: err.message || 'Failed to rename campaign — please try again.' })
     }
   }
   const renameKeyDown = (e) => {

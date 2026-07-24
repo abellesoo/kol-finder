@@ -12,6 +12,7 @@ import { loadColumnPrefs, saveColumnPrefs } from '../lib/columnPrefs'
 import { clickableRow } from '../lib/utils'
 import ColumnPicker from './table/ColumnPicker'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
+import Toast, { useAutoDismissToast } from './core/Toast'
 
 const PROXY = (import.meta.env.VITE_PROXY_URL || 'https://kol-finder-proxy.asoo.workers.dev').replace(/\/$/, '')
 
@@ -533,6 +534,8 @@ export default function ReviewPage({ reviewId, onBack }) {
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
+  const [toast, setToast] = useState(null)
+  useAutoDismissToast(toast, setToast)
 
   // Creator Vault — which accounts in this review are already saved.
   const [vaultedKeys, setVaultedKeys] = useState(() => new Set())
@@ -557,7 +560,7 @@ export default function ReviewPage({ reviewId, onBack }) {
         if (wasSaved) next.add(key); else next.delete(key)
         return next
       })
-      alert('Could not update the Creator Vault: ' + err.message)
+      setToast({ type: 'error', message: 'Could not update the Creator Vault: ' + err.message })
     }
   }, [vaultedKeys, reviewId])
   // Column visibility is remembered across tabs + reloads (Phase 4).
@@ -1012,6 +1015,7 @@ export default function ReviewPage({ reviewId, onBack }) {
       <p className="mt-8 text-[11px] text-faint font-mono text-center">
         Approved accounts share the campaign DM draft above · Changes save automatically
       </p>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

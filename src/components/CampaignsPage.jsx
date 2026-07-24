@@ -12,6 +12,7 @@ import AssigneePicker from './core/AssigneePicker'
 import PageHeader from './core/PageHeader'
 import EmptyState from './core/EmptyState'
 import Loading from './core/Loading'
+import Toast, { useAutoDismissToast } from './core/Toast'
 
 // Opens the campaign's live Google Sheet. Disabled until the sheet exists so it
 // never dead-ends.
@@ -292,6 +293,8 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const [assignees, setAssignees] = useState([])
+  const [toast, setToast] = useState(null)
+  useAutoDismissToast(toast, setToast)
   const seedRunRef = useRef(null)
   const deleteDialogRef = useFocusTrap(!!deleteTarget)
 
@@ -308,7 +311,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
     } catch (e) {
       console.error('Assign campaign failed', e)
       setCampaigns((cs) => cs.map((c) => (c.id === campaign.id ? { ...c, assigned_to: prev } : c)))
-      window.alert(e.message || 'Failed to change the owners — please try again.')
+      setToast({ type: 'error', message: e.message || 'Failed to change the owners — please try again.' })
     }
   }
 
@@ -386,7 +389,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
     } catch (err) {
       console.error('Rename campaign failed', err)
       setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, name: current.name } : c)))
-      window.alert(err.message || 'Failed to rename campaign — please try again.')
+      setToast({ type: 'error', message: err.message || 'Failed to rename campaign — please try again.' })
     }
   }
   const renameKeyDown = (e) => {
@@ -404,7 +407,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
       setDeleteTarget(null)
     } catch (e) {
       console.error('Delete campaign failed', e)
-      window.alert(e.message || 'Failed to delete campaign — please try again.')
+      setToast({ type: 'error', message: e.message || 'Failed to delete campaign — please try again.' })
     } finally {
       setDeleting(false)
     }
@@ -566,6 +569,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

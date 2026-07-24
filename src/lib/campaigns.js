@@ -131,30 +131,25 @@ export async function listCampaigns() {
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
 
-  // Roll up per-campaign state counts in one query rather than N.
+  // Roll up per-campaign KOL-state counts and Seeder-session counts. Both are
+  // independent single queries keyed by the same campaign ids, so fire them in
+  // parallel — three serial round-trips (campaigns → kols → sessions) was the
+  // dominant latency on every tab that lists campaigns.
   const ids = (campaigns || []).map((c) => c.id)
   const counts = {}
+  const sessionCounts = {}
   if (ids.length) {
-    const { data: kols, error: e2 } = await supabase
-      .from('campaign_kols')
-      .select('campaign_id, state')
-      .in('campaign_id', ids)
-    if (e2) throw new Error(e2.message)
-    for (const k of kols || []) {
+    const [kolsRes, sessRes] = await Promise.all([
+      supabase.from('campaign_kols').select('campaign_id, state').in('campaign_id', ids),
+      supabase.from('sessions').select('campaign_id').in('campaign_id', ids),
+    ])
+    if (kolsRes.error) throw new Error(kolsRes.error.message)
+    if (sessRes.error) throw new Error(sessRes.error.message)
+    for (const k of kolsRes.data || []) {
       counts[k.campaign_id] = counts[k.campaign_id] || {}
       counts[k.campaign_id][k.state] = (counts[k.campaign_id][k.state] || 0) + 1
     }
-  }
-
-  // Seeder-session count per campaign — same one-query rollup as the KOL counts.
-  const sessionCounts = {}
-  if (ids.length) {
-    const { data: sess, error: e3 } = await supabase
-      .from('sessions')
-      .select('campaign_id')
-      .in('campaign_id', ids)
-    if (e3) throw new Error(e3.message)
-    for (const s of sess || []) {
+    for (const s of sessRes.data || []) {
       if (s.campaign_id) sessionCounts[s.campaign_id] = (sessionCounts[s.campaign_id] || 0) + 1
     }
   }

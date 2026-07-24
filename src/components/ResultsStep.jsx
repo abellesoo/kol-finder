@@ -17,6 +17,7 @@ import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '.
 import { supabase } from '../lib/supabase'
 import { clickableRow } from '../lib/utils'
 import TableErrorBoundary from './TableErrorBoundary'
+import Toast, { useAutoDismissToast } from './core/Toast'
 import StepProgress from './core/StepProgress'
 
 const COLUMN_INFO = {
@@ -408,6 +409,8 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedAccounts, setSelectedAccounts] = useState(new Set())
   const [shareStatus, setShareStatus] = useState('idle') // idle | loading | done | error
+  const [toast, setToast] = useState(null)
+  useAutoDismissToast(toast, setToast)
 
   // Review state (kept for column rendering; populated if this session had a prior share)
   const [reviewState] = useState({})
@@ -441,7 +444,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
         if (wasSaved) next.add(key); else next.delete(key)
         return next
       })
-      alert('Could not update the Creator Vault: ' + err.message)
+      setToast({ type: 'error', message: 'Could not update the Creator Vault: ' + err.message })
     }
   }, [vaultedKeys, config])
 
@@ -726,7 +729,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       await exportToCsv(filtered, influencers, exportIds, liveStats, reviewState)
     } catch (e) {
       console.error('Export failed', e)
-      alert('Export failed: ' + (e?.message || 'unknown error'))
+      setToast({ type: 'error', message: 'Export failed: ' + (e?.message || 'unknown error') })
     } finally {
       setExporting(false)
     }
@@ -1010,6 +1013,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       <p className="mt-4 text-[11px] text-faint font-mono text-center">
         Click any row to expand · Engagement &amp; Relevancy scores are deterministic keyword + arithmetic logic
       </p>
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   )
 }

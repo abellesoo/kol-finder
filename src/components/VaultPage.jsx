@@ -10,6 +10,7 @@ import PageHeader from './core/PageHeader'
 import Loading from './core/Loading'
 import EmptyState from './core/EmptyState'
 import { formatDate } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 // Pull a bare Instagram handle out of what the user typed — accepts "@handle",
 // "handle", or a pasted instagram.com/handle URL.
@@ -54,6 +55,7 @@ function CampaignPickerModal({ count, onClose, onPick }) {
   const [campaigns, setCampaigns] = useState(null)
   const [error, setError] = useState(null)
   const [attachingId, setAttachingId] = useState(null)
+  const dialogRef = useFocusTrap(true)
 
   useEffect(() => {
     listCampaigns()
@@ -73,7 +75,7 @@ function CampaignPickerModal({ count, onClose, onPick }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 px-4" onClick={onClose}>
-      <div className="bg-white rounded-[16px] w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" className="bg-white rounded-[16px] w-full max-w-md max-h-[80vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-mist flex items-center justify-between">
           <div>
             <p className="font-mono text-[9.5px] tracking-[.14em] text-faint uppercase mb-0.5">Add to campaign</p>
@@ -131,13 +133,22 @@ export default function VaultPage({ onNavigate }) {
   const [nicheFilter, setNicheFilter] = useState(null)
   const [selected, setSelected] = useState(() => new Set())
   const [picking, setPicking] = useState(false)
-  const [toast, setToast] = useState(null)
+  const [toast, setToast] = useState(null) // { text, kind: 'ok' | 'error' } | null
   const [lookupStatus, setLookupStatus] = useState('idle') // idle | loading | error
   const [lookupError, setLookupError] = useState(null)
   // Guards the ~1-2 min live-scrape chain in handleLookup against setState after
   // the user navigates away.
   const mountedRef = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
+
+  // Single auto-dismiss timer for the toast. A per-call setTimeout would let a
+  // second toast's arrival cancel the first toast's timer early (and never gets
+  // cleaned up on unmount); one effect keyed on `toast` avoids both.
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 4000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -184,14 +195,17 @@ export default function VaultPage({ onNavigate }) {
   const selectedRows = rows.filter((r) => selected.has(r.id))
 
   const handleRemove = async (row) => {
+    // Snapshot the current list so a failed delete can restore the row exactly
+    // where it was, instead of a jarring native alert + full page reload.
+    const prevRows = rows
     setRows((prev) => prev.filter((r) => r.id !== row.id))
     setSelected((prev) => { const n = new Set(prev); n.delete(row.id); return n })
     try {
       await removeFromVault(row.id)
     } catch (err) {
       console.error('Failed to remove from vault', err)
-      window.alert('Failed to remove. Reloading to resync.')
-      window.location.reload()
+      setRows(prevRows)
+      setToast({ text: 'Couldn’t remove that creator — please try again.', kind: 'error' })
     }
   }
 
@@ -208,11 +222,10 @@ export default function VaultPage({ onNavigate }) {
       const parts = [`Added ${added} to ${campaign.name}`]
       if (added < igRows.length) parts.push(`${igRows.length - added} already on it`)
       if (skipped) parts.push(`${skipped} Threads skipped`)
-      setToast(parts.join(' · '))
-      setTimeout(() => setToast(null), 4000)
+      setToast({ text: parts.join(' · '), kind: 'ok' })
     } catch (err) {
       console.error('Attach to campaign failed', err)
-      window.alert(err?.message || 'Failed to attach to campaign — please try again.')
+      setToast({ text: err?.message || 'Failed to attach to campaign — please try again.', kind: 'error' })
     }
   }
 
@@ -248,8 +261,7 @@ export default function VaultPage({ onNavigate }) {
       if (!mountedRef.current) return
       setRows((prev) => [saved, ...prev.filter((r) => r.id !== saved.id)])
       setLookupStatus('idle')
-      setToast(`Saved @${handle} to the vault`)
-      setTimeout(() => setToast(null), 4000)
+      setToast({ text: `Saved @${handle} to the vault`, kind: 'ok' })
     } catch (err) {
       console.error('Vault lookup failed', err)
       if (!mountedRef.current) return
@@ -452,8 +464,12 @@ export default function VaultPage({ onNavigate }) {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-sage text-white px-4 py-2.5 rounded-full shadow-xl text-[13px]">
-          <Check size={14} /> {toast}
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 text-white px-4 py-2.5 rounded-full shadow-xl text-[13px] ${
+            toast.kind === 'error' ? 'bg-rose' : 'bg-sage'
+          }`}
+        >
+          {toast.kind === 'error' ? <AlertCircle size={14} /> : <Check size={14} />} {toast.text}
         </div>
       )}
     </div>

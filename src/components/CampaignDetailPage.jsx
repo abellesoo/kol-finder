@@ -3,7 +3,7 @@ import {
   Loader2, ArrowLeft, ExternalLink, UserPlus, X, RefreshCw, Trash2,
   Truck, CalendarClock, Search, ScanLine, CheckCircle2, Circle, Copy, Check,
   MessageSquarePlus, Info, LayoutList, Table2, ChevronDown, FileSpreadsheet,
-  MapPin, Plus, ChevronRight, Pencil, Sparkles,
+  MapPin, Plus, ChevronRight, Pencil, Sparkles, MoreHorizontal, StickyNote, Send,
 } from 'lucide-react'
 import {
   getCampaign, getCampaignKols, getApprovedKols, attachKols,
@@ -14,6 +14,7 @@ import {
   tierLabel, CONTENT_FORMATS, FORMAT_BADGE_CLS, isAutoVerifiable, setKolFormats,
   getScoringByHandle, getReviewMetaByHandle, buildCampaignSheetValues, updateCampaignSetup, saveDmMessages,
   getBrandById, updateBrandFacts, setCampaignAssignees, listAssignableUsers,
+  getCampaignNotes, addCampaignNote, deleteCampaignNote, currentUser,
 } from '../lib/campaigns'
 import { listSessionsForCampaign } from '../lib/sessionHistory'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
@@ -24,7 +25,7 @@ import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '.
 import { useTableControls } from '../lib/useTableControls'
 import { useUrlParam } from '../lib/useUrlParam'
 import ColumnHeaderCell from './table/ColumnHeaderCell'
-import { formatDate, money } from '../lib/utils'
+import { formatDate, formatDateTime, money } from '../lib/utils'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 
 const RESULT_LIMITS = [100, 200, 500, 1000]
@@ -1155,6 +1156,293 @@ function DmMessagesPanel({ campaign, onSaved }) {
   )
 }
 
+// ── Notes ──────────────────────────────────────────────────────────────────
+// A person is drawn as a small initial-avatar; the hue is derived from their
+// name so the same teammate keeps a stable colour across notes (no stored field).
+const AVATAR_COLORS = ['#8A6A22', '#54707E', '#4A7C59', '#B06070', '#7A6383', '#5C5340']
+function avatarColor(name) {
+  const s = String(name || '?')
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+function initials(name) {
+  const first = String(name || '?').trim().split(/\s+/)[0] || '?'
+  return first[0].toUpperCase()
+}
+// Notes carry a clock (unlike most dates in the app), so show the time for
+// today's notes and the full date+time for older ones.
+function noteTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (d.toDateString() === new Date().toDateString()) {
+    return d.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit' })
+  }
+  return formatDateTime(iso)
+}
+
+function Avatar({ name }) {
+  return (
+    <span
+      className="w-[30px] h-[30px] rounded-full flex-shrink-0 grid place-items-center text-[12px] font-semibold text-white select-none"
+      style={{ background: avatarColor(name) }}>
+      {initials(name)}
+    </span>
+  )
+}
+
+// The Notes tab: a compose box + a running feed of team notes, newest-first.
+// Anyone can add; only your own notes show a delete affordance (and RLS enforces
+// it server-side regardless). ⌘/Ctrl+Enter posts.
+function NotesPanel({ notes, myId, currentName, onAdd, onDelete }) {
+  const [draft, setDraft] = useState('')
+  const [posting, setPosting] = useState(false)
+  const [err, setErr] = useState(null)
+  const taRef = useRef(null)
+
+  const post = async () => {
+    const body = draft.trim()
+    if (!body || posting) return
+    setPosting(true); setErr(null)
+    try {
+      await onAdd(body)
+      setDraft('')
+      taRef.current?.focus()
+    } catch (e) {
+      setErr(e.message || 'Could not post the note')
+    } finally {
+      setPosting(false)
+    }
+  }
+  const onKeyDown = (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); post() }
+  }
+
+  return (
+    <div className="max-w-[720px]">
+      <h3 className="text-[14px] font-semibold text-ink">Notes</h3>
+      <p className="text-[11.5px] text-faint mt-0.5 mb-4">
+        Shared with everyone on the team. Anyone can add — entries are kept with who wrote them and when.
+      </p>
+
+      <div className="flex items-start gap-3 mb-5">
+        <Avatar name={currentName} />
+        <div className="flex-1 min-w-0">
+          <textarea
+            ref={taRef} value={draft} rows={2}
+            onChange={(e) => setDraft(e.target.value)} onKeyDown={onKeyDown}
+            placeholder="Add a note for the team…"
+            className="w-full px-3 py-2 border border-mist rounded-[10px] text-[13px] text-ink bg-white placeholder:text-faint/70 focus:outline-none focus:border-ink/40 resize-y leading-relaxed" />
+          {err && <p className="text-[11px] text-rose mt-1">{err}</p>}
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-[11px] text-faint">⌘↵ to post</span>
+            <button onClick={post} disabled={posting || !draft.trim()}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[9px] bg-ink text-white text-[12.5px] font-medium hover:bg-ink/80 transition-colors disabled:opacity-40">
+              {posting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {posting ? 'Posting…' : 'Post note'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {notes.length === 0 ? (
+        <div className="flex flex-col items-center text-center py-12 border-t border-mist">
+          <StickyNote size={26} className="text-faint mb-3" />
+          <p className="text-[13px] text-muted">No notes yet — add the first one above.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col">
+          {notes.map((n) => {
+            const mine = myId && n.author_id === myId
+            return (
+              <div key={n.id} className="group/note flex gap-3 py-3.5 border-t border-mist first:border-t-0">
+                <Avatar name={n.author_name} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[13px] font-semibold text-ink">{n.author_name || 'Teammate'}</span>
+                    {mine && <span className="text-[9px] font-medium tracking-[.08em] uppercase text-sage">You</span>}
+                    <time className="text-[11px] text-faint">{noteTime(n.created_at)}</time>
+                  </div>
+                  <p className="text-[13.5px] text-body leading-relaxed mt-0.5 whitespace-pre-wrap break-words">{n.body}</p>
+                </div>
+                {mine && (
+                  <button onClick={() => onDelete(n)} title="Delete note"
+                    className="self-start text-faint hover:text-rose transition-colors opacity-0 group-hover/note:opacity-100 focus-visible:opacity-100">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// A compact recent-notes preview for the Overview tab — the two latest notes and
+// a jump to the full Notes tab.
+function NotesPreview({ notes, onOpen }) {
+  return (
+    <div className="px-5 py-4 bg-surface border border-card-edge rounded-[14px]">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-semibold text-ink">
+          Notes {notes.length > 0 && <span className="text-faint font-normal">· {notes.length}</span>}
+        </h3>
+        <button onClick={onOpen} className="text-[12.5px] font-medium text-ink hover:text-accent transition-colors">
+          {notes.length ? 'All notes →' : 'Add a note →'}
+        </button>
+      </div>
+      {notes.length === 0 ? (
+        <p className="text-[12.5px] text-muted">No notes yet — jot the first bit of context for the team.</p>
+      ) : (
+        <div className="flex flex-col">
+          {notes.slice(0, 3).map((n) => (
+            <div key={n.id} className="flex gap-2.5 py-2.5 border-t border-mist first:border-t-0">
+              <Avatar name={n.author_name} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink">{n.author_name || 'Teammate'}</span>
+                  <time className="text-[11px] text-faint">{noteTime(n.created_at)}</time>
+                </div>
+                <p className="text-[12.5px] text-body leading-snug mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">{n.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Headline metrics for the campaign, as a bordered ribbon of cells. The fuller
+// per-status breakdown lives in the KOL board's column headers, so this stays to
+// the numbers worth seeing at a glance. Budget grows to fill and carries a bar.
+function StatCell({ k, grow, children }) {
+  return (
+    <div className={`px-5 py-3.5 border-r border-card-edge last:border-r-0 ${grow ? 'flex-1 min-w-[180px]' : ''}`}>
+      <p className="text-[9px] tracking-[.12em] uppercase text-faint font-semibold">{k}</p>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  )
+}
+function StatRibbon({ total, posted, overdue, fulfillment, spent, budget, budgetUsed, overBudget, targetKols }) {
+  return (
+    <div className="flex flex-wrap items-stretch border border-card-edge rounded-[14px] bg-white overflow-hidden">
+      <StatCell k="Creators">
+        <span className="text-[22px] font-semibold text-ink leading-none tabular-nums">{total}</span>
+        {targetKols != null && <span className="text-[12px] text-faint"> / {targetKols}</span>}
+      </StatCell>
+      <StatCell k="Posted">
+        <span className="text-[22px] font-semibold text-sage leading-none tabular-nums">{posted}</span>
+      </StatCell>
+      {overdue > 0 && (
+        <StatCell k="Overdue">
+          <span className="text-[22px] font-semibold text-rose leading-none tabular-nums">{overdue}</span>
+        </StatCell>
+      )}
+      <StatCell k="Fulfilled">
+        <span className="text-[22px] font-semibold text-ink leading-none tabular-nums">{fulfillment}</span>
+        <span className="text-[12px] text-faint">%</span>
+      </StatCell>
+      {budget != null && (
+        <StatCell k="Budget" grow>
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className={`text-[16px] font-semibold leading-none tabular-nums ${overBudget ? 'text-rose' : 'text-ink'}`}>{money(spent)}</span>
+            <span className="text-[12px] text-faint">/ {money(budget)}{budgetUsed != null ? ` · ${budgetUsed}%` : ''}</span>
+          </div>
+          <div className="h-[7px] rounded-full bg-mist mt-2.5 overflow-hidden">
+            <span className="block h-full rounded-full transition-[width] duration-500"
+              style={{ width: `${Math.min(budgetUsed ?? 0, 100)}%`, background: overBudget ? '#B06070' : '#4A7C59' }} />
+          </div>
+        </StatCell>
+      )}
+    </div>
+  )
+}
+
+// The secondary campaign actions (verify / SF file / sheet / refresh), tucked
+// behind a ⋯ button so the header keeps one primary action (Attach KOLs) rather
+// than a wall of six buttons. Closes on outside-click or Escape.
+function HeaderMenu({ campaign, total, verifying, sheetBusy, sfBusy, onVerify, onSf, onSync, onRefresh }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('mousedown', onDoc)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('mousedown', onDoc); window.removeEventListener('keydown', onKey) }
+  }, [open])
+
+  const Item = ({ icon, label, onClick, disabled }) => (
+    <button role="menuitem" onClick={() => { setOpen(false); onClick?.() }} disabled={disabled}
+      className="flex items-center gap-2.5 w-full text-left px-3 py-2 rounded-[8px] text-[13px] text-ink hover:bg-surface transition-colors disabled:opacity-40">
+      {icon} {label}
+    </button>
+  )
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} title="More actions"
+        className="flex items-center justify-center w-9 h-9 border border-mist rounded-[10px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-11 z-40 min-w-[214px] bg-white border border-card-edge rounded-[12px] shadow-xl p-1.5">
+          <Item disabled={verifying || total === 0} onClick={onVerify}
+            icon={verifying ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
+            label={verifying ? 'Verifying…' : 'Verify posts'} />
+          <Item disabled={sfBusy || total === 0} onClick={onSf}
+            icon={sfBusy ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
+            label="SF bulk file" />
+          <Item disabled={sheetBusy || total === 0} onClick={onSync}
+            icon={sheetBusy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+            label={sheetBusy ? 'Syncing…' : campaign.sheet_url ? 'Sync Google Sheet' : 'Create Google Sheet'} />
+          {campaign.sheet_url && (
+            <a href={campaign.sheet_url} target="_blank" rel="noreferrer" role="menuitem" onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 w-full text-left px-3 py-2 rounded-[8px] text-[13px] text-ink hover:bg-surface transition-colors">
+              <ExternalLink size={14} /> Open sheet
+            </a>
+          )}
+          <div className="h-px bg-mist my-1.5" />
+          <Item onClick={onRefresh} icon={<RefreshCw size={14} />} label="Refresh" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The workspace tabs. Counts are shown where a number aids scanning (KOLs, Notes).
+function TabBar({ tab, setTab, kolCount, noteCount }) {
+  const TABS = [
+    ['overview', 'Overview', null],
+    ['kols', 'KOLs', kolCount],
+    ['cfg', 'Config', null],
+    ['dm', 'Messages', null],
+    ['notes', 'Notes', noteCount],
+  ]
+  return (
+    <div role="tablist" className="flex gap-1 border-b border-mist mb-6 overflow-x-auto">
+      {TABS.map(([id, label, count]) => {
+        const on = tab === id
+        return (
+          <button key={id} role="tab" aria-selected={on} onClick={() => setTab(id)}
+            className={`relative flex items-center gap-2 px-3.5 py-2.5 text-[13.5px] whitespace-nowrap transition-colors ${
+              on ? 'text-ink font-semibold' : 'text-muted hover:text-ink font-medium'}`}>
+            {label}
+            {count != null && count > 0 && (
+              <span className="text-[11px] text-faint bg-surface border border-card-edge rounded-full px-1.5 leading-[1.4] tabular-nums">{count}</span>
+            )}
+            {on && <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-ink rounded-full" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, onNewSession }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -1172,21 +1460,28 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const [renaming, setRenaming] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [assignees, setAssignees] = useState([])
+  const [notes, setNotes] = useState([])
+  const [myId, setMyId] = useState(null)
+  const [myName, setMyName] = useState('')
   const [view, setView] = useUrlParam('campaign_view', 'board') // 'board' | 'table' (shareable via URL)
-  const [setupOpen, setSetupOpen] = useState(null) // null until campaign loads; then false if already configured
+  const [tab, setTab] = useUrlParam('campaign_tab', 'overview') // overview | kols | cfg | dm | notes (shareable)
 
   useEffect(() => {
     listAssignableUsers().then(setAssignees).catch(() => setAssignees([]))
+    currentUser().then(({ id, name }) => { setMyId(id); setMyName(name) }).catch(() => {})
   }, [])
 
-  // Collapse the setup editors by default once a campaign is configured, so the
-  // KOL board is reachable without scrolling past them. Fresh campaigns open
-  // expanded so the user fills them in. Only auto-sets once (null → bool).
+  // Land a not-yet-configured campaign on the Config tab so a fresh campaign opens
+  // ready to fill — unless the URL already pins a tab (a shared link wins). Runs
+  // once per campaign load.
+  const initTabDone = useRef(false)
   useEffect(() => {
-    if (campaign && setupOpen === null) {
-      setSetupOpen(Object.keys(campaign.default_step1 || {}).length === 0)
-    }
-  }, [campaign, setupOpen])
+    if (!campaign || initTabDone.current) return
+    initTabDone.current = true
+    const urlHasTab = new URLSearchParams(window.location.search).has('campaign_tab')
+    const configured = Object.keys(campaign.default_step1 || {}).length > 0
+    if (!urlHasTab && !configured) setTab('cfg')
+  }, [campaign, setTab])
 
   const handleAssign = async (ids) => {
     if (!campaign) return
@@ -1225,14 +1520,18 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     setLoading(true)
     setError(null)
     try {
-      const [c, ks, ss] = await Promise.all([
+      const [c, ks, ss, ns] = await Promise.all([
         getCampaign(campaignId),
         getCampaignKols(campaignId),
         listSessionsForCampaign(campaignId),
+        // Notes degrade gracefully — an unapplied db/campaign_notes.sql just
+        // yields an empty feed rather than breaking the whole page.
+        getCampaignNotes(campaignId).catch(() => []),
       ])
       setCampaign(c)
       setSessions(ss)
       setKols(ks)
+      setNotes(ns)
       const ids = ks.map((k) => k.id)
       const [posts, nudges] = await Promise.all([getVerifiedPostsByKol(ids), getNudgesByKol(ids)])
       setPostsByKol(posts)
@@ -1454,6 +1753,24 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
     }
   }, [])
 
+  const handleAddNote = useCallback(async (body) => {
+    // Not optimistic — we want the server's row (id, created_at, author_name) so
+    // "You"/time render correctly. Prepend keeps the feed newest-first.
+    const saved = await addCampaignNote(campaignId, body)
+    setNotes((prev) => [saved, ...prev])
+  }, [campaignId])
+
+  const handleDeleteNote = useCallback(async (note) => {
+    const prev = notes
+    setNotes((cur) => cur.filter((n) => n.id !== note.id)) // optimistic
+    try {
+      await deleteCampaignNote(note.id)
+    } catch (e) {
+      setNotes(prev)
+      setToast({ type: 'error', message: e.message || 'Could not delete the note' })
+    }
+  }, [notes])
+
   const existingHandles = useMemo(() => kols.map((k) => k.kol_handle), [kols])
   const grouped = useMemo(() => {
     const g = {}
@@ -1481,8 +1798,6 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   // agreement, so counting them against posting would understate the outcome.
   const total = kols.length
   const posted = (grouped.posted || []).length
-  const shipped = (grouped.shipped || []).length
-  const awaiting = (grouped.awaiting_post || []).length
   const overdue = (grouped.overdue || []).length
   const optedOut = (grouped.opted_out || []).length
   const eligible = total - optedOut
@@ -1496,7 +1811,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const overBudget = budget != null && spent > budget
 
   return (
-    <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+    <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${tab === 'kols' && view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
         <ArrowLeft size={14} /> Back to campaigns
       </button>
@@ -1544,8 +1859,68 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {total > 0 && (
-            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5 mr-1">
+          <button onClick={() => setShowAttach(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
+            <UserPlus size={14} /> Attach KOLs
+          </button>
+          <HeaderMenu
+            campaign={campaign} total={total}
+            verifying={verifying} sheetBusy={sheetBusy} sfBusy={sfBusy}
+            onVerify={handleVerify} onSf={() => handleSfExport()} onSync={handleSyncSheet} onRefresh={load}
+          />
+        </div>
+      </div>
+
+      {total > 0 && (
+        <div className="mb-6">
+          <StatRibbon
+            total={total} posted={posted} overdue={overdue} fulfillment={fulfillment}
+            spent={spent} budget={budget} budgetUsed={budgetUsed} overBudget={overBudget} targetKols={targetKols}
+          />
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>
+      )}
+
+      <TabBar tab={tab} setTab={setTab} kolCount={total} noteCount={notes.length} />
+
+      {tab === 'overview' && (
+        <div className="space-y-5">
+          <SessionsPanel
+            sessions={sessions}
+            onOpenSession={(id) => onOpenSession?.(id)}
+            onNewSession={() => onNewSession?.(campaign)}
+          />
+          <NotesPreview notes={notes} onOpen={() => setTab('notes')} />
+        </div>
+      )}
+
+      {tab === 'cfg' && <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />}
+
+      {tab === 'dm' && <DmMessagesPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />}
+
+      {tab === 'notes' && (
+        <NotesPanel notes={notes} myId={myId} currentName={myName}
+          onAdd={handleAddNote} onDelete={handleDeleteNote} />
+      )}
+
+      {tab === 'kols' && (total === 0 ? (
+        <div className="flex flex-col items-center py-20">
+          <UserPlus size={30} className="text-faint mb-4" />
+          <h2 className="text-[16px] font-semibold text-ink mb-2">No KOLs attached yet</h2>
+          <p className="text-[13px] text-muted text-center mb-5">Attach approved KOLs from the Review Queue to start tracking them.</p>
+          <button onClick={() => setShowAttach(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
+            <UserPlus size={14} /> Attach KOLs
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[12px] text-faint">Grouped by status · {total} {total === 1 ? 'KOL' : 'KOLs'}</p>
+            <div className="flex items-center border border-mist rounded-[10px] bg-white p-0.5">
               <button onClick={() => setView('board')} title="Board view"
                 className={`flex items-center justify-center w-8 h-8 rounded-[8px] transition-colors ${
                   view === 'board' ? 'bg-ink text-white' : 'text-faint hover:text-ink'}`}>
@@ -1557,148 +1932,38 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
                 <Table2 size={14} />
               </button>
             </div>
-          )}
-          <button onClick={handleVerify} disabled={verifying || total === 0}
-            title="Scrape awaiting/overdue KOLs and auto-detect campaign posts"
-            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
-            {verifying ? <Loader2 size={14} className="animate-spin" /> : <ScanLine size={14} />}
-            {verifying ? 'Verifying…' : 'Verify posts'}
-          </button>
-          <button onClick={() => handleSfExport()} disabled={sfBusy || total === 0}
-            title="Download the SF Express bulk-shipment Excel (upload it on SF's 批量寄件 page to create all orders at once)"
-            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
-            {sfBusy ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
-            SF bulk file
-          </button>
-          <button onClick={handleSyncSheet} disabled={sheetBusy || total === 0}
-            title={campaign.sheet_url ? 'Push the latest campaign data to its Google Sheet' : 'Create a Google Sheet for this campaign and share it with the team'}
-            className="flex items-center gap-2 px-4 py-2 border border-mist rounded-[10px] text-[13px] text-ink hover:border-ink/40 transition-all bg-white disabled:opacity-40 whitespace-nowrap">
-            {sheetBusy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
-            {sheetBusy ? 'Syncing…' : campaign.sheet_url ? 'Sync sheet' : 'Create sheet'}
-          </button>
-          {campaign.sheet_url && (
-            <a href={campaign.sheet_url} target="_blank" rel="noreferrer" title="Open Google Sheet"
-              className="flex items-center justify-center w-9 h-9 border border-mist rounded-[10px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
-              <ExternalLink size={14} />
-            </a>
-          )}
-          <button onClick={() => setShowAttach(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
-            <UserPlus size={14} /> Attach KOLs
-          </button>
-          <button onClick={load}
-            className="flex items-center gap-2 px-3 py-2 border border-mist rounded-[10px] text-[13px] text-muted hover:border-ink/30 hover:text-ink transition-all bg-white">
-            <RefreshCw size={13} />
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-6 border border-card-edge rounded-[14px] bg-white overflow-hidden">
-        <button
-          onClick={() => setSetupOpen((o) => !o)}
-          aria-expanded={!!setupOpen}
-          className="w-full flex items-center gap-2.5 px-5 py-3.5 text-left hover:bg-surface transition-colors"
-        >
-          <ChevronRight size={16} className={`flex-shrink-0 text-faint transition-transform ${setupOpen ? 'rotate-90' : ''}`} />
-          <span className="font-semibold text-[14px] text-ink">Campaign setup</span>
-          <span className="text-[11.5px] text-faint ml-2">config · DM messages</span>
-          {!setupOpen && <span className="ml-auto text-[11.5px] text-faint">Show</span>}
-        </button>
-        {setupOpen && (
-          <div className="px-4 pb-4 pt-1 border-t border-mist [&>div:last-child]:mb-0">
-            <CampaignSetupPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
-            <DmMessagesPanel campaign={campaign} onSaved={(c) => setCampaign(c)} />
           </div>
-        )}
-      </div>
-      <SessionsPanel
-        sessions={sessions}
-        onOpenSession={(id) => onOpenSession?.(id)}
-        onNewSession={() => onNewSession?.(campaign)}
-      />
-
-      {total > 0 && (
-        <div className="flex items-center flex-wrap gap-x-4 gap-y-1.5 mb-6 px-4 py-3 bg-surface border border-card-edge rounded-[12px]">
-          <p className="text-[12px] font-mono text-muted">{total} {total === 1 ? 'KOL' : 'KOLs'}</p>
-          <span className="text-mist">·</span>
-          <p className="text-[12px] font-mono text-sage">{posted} posted</p>
-          {shipped > 0 && <><span className="text-mist">·</span>
-            <p className="text-[12px] font-mono text-muted">{shipped} shipped</p></>}
-          {awaiting > 0 && <><span className="text-mist">·</span>
-            <p className="text-[12px] font-mono text-muted">{awaiting} awaiting</p></>}
-          {overdue > 0 && <><span className="text-mist">·</span>
-            <p className="text-[12px] font-mono text-rose">{overdue} overdue</p></>}
-          {optedOut > 0 && <><span className="text-mist">·</span>
-            <p className="text-[12px] font-mono text-faint">{optedOut} opted out</p></>}
-          <span className="text-mist">·</span>
-          <p className="text-[12px] font-mono text-ink font-medium" title="posted ÷ (attached − opted out)">
-            {fulfillment}% fulfilled
-          </p>
-          {budget != null && (
-            <>
-              <span className="text-mist">·</span>
-              <p className={`text-[12px] font-mono font-medium ${overBudget ? 'text-rose' : 'text-ink'}`}
-                title="Σ agreed fee + product value across attached KOLs, vs campaign budget">
-                {money(spent)} / {money(budget)}{budgetUsed != null ? ` · ${budgetUsed}%` : ''}
-              </p>
-            </>
+          {view === 'table' ? (
+            <KolTable kols={kols} campaign={campaign} postsByKol={postsByKol}
+              onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onDetach={handleDetach}
+              onConfirmPost={handleConfirmPost} onSetFormats={handleSetFormats} />
+          ) : (
+            <div className="space-y-6">
+              {BOARD_ORDER.map((state) => {
+                const rows = grouped[state]
+                if (!rows || rows.length === 0) return null
+                return (
+                  <div key={state}>
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${STATE_META[state].cls}`}>{STATE_META[state].label}</span>
+                      <span className="text-[11px] font-mono text-faint">{rows.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {rows.map((kol) => (
+                        <KolRow key={kol.id} kol={kol} campaign={campaign}
+                          posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
+                          onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onShipping={handleShipping} onDetach={handleDetach}
+                          onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
+                          onSetFormats={handleSetFormats} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
-          {targetKols != null && (
-            <>
-              <span className="text-mist">·</span>
-              <p className="text-[12px] font-mono text-muted" title="attached KOLs vs target creator count">
-                {total}/{targetKols} creators
-              </p>
-            </>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>
-      )}
-
-      {total === 0 && !error && (
-        <div className="flex flex-col items-center py-20">
-          <UserPlus size={30} className="text-faint mb-4" />
-          <h2 className="text-[16px] font-semibold text-ink mb-2">No KOLs attached yet</h2>
-          <p className="text-[13px] text-muted text-center mb-5">Attach approved KOLs from the Review Queue to start tracking them.</p>
-          <button onClick={() => setShowAttach(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
-            <UserPlus size={14} /> Attach KOLs
-          </button>
-        </div>
-      )}
-
-      {total > 0 && view === 'table' ? (
-        <KolTable kols={kols} campaign={campaign} postsByKol={postsByKol}
-          onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onDetach={handleDetach}
-          onConfirmPost={handleConfirmPost} onSetFormats={handleSetFormats} />
-      ) : (
-        <div className="space-y-6">
-          {BOARD_ORDER.map((state) => {
-            const rows = grouped[state]
-            if (!rows || rows.length === 0) return null
-            return (
-              <div key={state}>
-                <div className="flex items-center gap-2 mb-2.5">
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${STATE_META[state].cls}`}>{STATE_META[state].label}</span>
-                  <span className="text-[11px] font-mono text-faint">{rows.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {rows.map((kol) => (
-                    <KolRow key={kol.id} kol={kol} campaign={campaign}
-                      posts={postsByKol[kol.id] || []} nudges={nudgesByKol[kol.id] || []}
-                      onStateChange={handleStateChange} onOverride={handleOverride} onTracking={handleTracking} onCost={handleCost} onShipping={handleShipping} onDetach={handleDetach}
-                      onConfirmPost={handleConfirmPost} onDraftNudge={handleDraftNudge} onMarkSent={handleMarkSent}
-                      onSetFormats={handleSetFormats} />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+        </>
+      ))}
 
       {showAttach && (
         <AttachModal

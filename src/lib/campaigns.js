@@ -241,6 +241,62 @@ export async function setCampaignStatus(id, status) {
   if (error) throw new Error(error.message)
 }
 
+// ── Notes ────────────────────────────────────────────────────────────────────
+// A running, team-shared log of notes on a campaign (db/campaign_notes.sql).
+// Any teammate can add; a note is deletable only by its author (enforced by RLS).
+// author_name is a snapshot of the writer's display name so the feed renders
+// without joining back to public.users — mirrors App.jsx's displayName.
+function displayNameOf(user) {
+  return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Teammate'
+}
+
+// One campaign's notes, newest-first. Each row carries author_id so the UI can
+// mark "your" notes (deletable) vs teammates'.
+export async function getCampaignNotes(campaignId) {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('campaign_notes')
+    .select('*')
+    .eq('campaign_id', campaignId)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data || []
+}
+
+// Append a note. Stamps the current user as author (id + display-name snapshot);
+// RLS requires author_id = auth.uid(), so this only works when signed in.
+export async function addCampaignNote(campaignId, body) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const text = String(body || '').trim()
+  if (!text) throw new Error('Note is empty')
+  const { data: { user } = {} } = await supabase.auth.getUser()
+  if (!user) throw new Error('Sign in to add a note')
+  const { data, error } = await supabase
+    .from('campaign_notes')
+    .insert({ campaign_id: campaignId, body: text, author_id: user.id, author_name: displayNameOf(user) })
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data
+}
+
+// Delete a note. RLS only permits deleting your own, so a teammate's note fails
+// server-side even if the button were somehow shown.
+export async function deleteCampaignNote(id) {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('campaign_notes').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// The signed-in user's id + display name — so the notes feed can mark which
+// notes are "yours" (deletable) and the compose box shows your avatar. Returns
+// { id: null, name: '' } when unauthenticated / Supabase off.
+export async function currentUser() {
+  if (!supabase) return { id: null, name: '' }
+  const { data: { user } = {} } = await supabase.auth.getUser()
+  return { id: user?.id || null, name: user ? displayNameOf(user) : '' }
+}
+
 // ── Assignment ───────────────────────────────────────────────────────────────
 // Assign a campaign to zero or more teammates. Reviews and ops for the campaign
 // inherit these owners; a campaign is "mine" when the caller is any of them.

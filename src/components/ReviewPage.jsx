@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ExternalLink, Loader2, Check, X, ArrowLeft, Pencil, LayoutGrid, Table2, Bookmark, BookmarkCheck } from 'lucide-react'
+import { ExternalLink, Loader2, Check, X, ArrowLeft, ArrowRight, Pencil, LayoutGrid, Table2, Bookmark, BookmarkCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportToCsv } from '../lib/exportCsv'
 import { mergeReviewEntry, reviewKey, campaignDmDraft, DM_DRAFT_KEY } from '../lib/reviewState'
@@ -527,10 +527,15 @@ function AccountTableRow({ account, reviewEntry, onUpdate, selectedColumns, vaul
   )
 }
 
-export default function ReviewPage({ reviewId, onBack }) {
+export default function ReviewPage({ reviewId, onBack, onOpenCampaign }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [campaignBrief, setCampaignBrief] = useState('')
+  // When a review belongs to a campaign, the brief + seeding criteria are owned
+  // by that campaign (edited on its detail page), so we hide the review-local
+  // editors and link back to the campaign instead of showing empty boxes.
+  const [campaignId, setCampaignId] = useState(null)
+  const [campaignName, setCampaignName] = useState('')
   const [accounts, setAccounts] = useState([])
   const [reviewState, setReviewState] = useState({})
   const [saving, setSaving] = useState(false)
@@ -595,7 +600,7 @@ export default function ReviewPage({ reviewId, onBack }) {
     async function load() {
       const { data, error: err } = await supabase
         .from('shared_results')
-        .select('campaign_brief, accounts, review_state')
+        .select('campaign_brief, campaign_id, accounts, review_state')
         .eq('id', reviewId)
         .single()
       if (err || !data) {
@@ -621,6 +626,12 @@ export default function ReviewPage({ reviewId, onBack }) {
       }
       setDmDraft(draft)
       setCampaignBrief(data.campaign_brief || '')
+      setCampaignId(data.campaign_id || null)
+      if (data.campaign_id) {
+        supabase.from('campaigns').select('name').eq('id', data.campaign_id).single()
+          .then(({ data: c }) => { if (c?.name) setCampaignName(c.name) })
+          .catch(() => {})
+      }
       setCriteria(crit)
       setAccounts(accs)
       setReviewState(accountState)
@@ -825,6 +836,25 @@ export default function ReviewPage({ reviewId, onBack }) {
             <ColumnPicker selected={selectedColumns} onChange={handleColumnsChange} />
           </div>
         </div>
+        {campaignId ? (
+          /* Campaign-linked review: brief + criteria are owned by the campaign,
+             so link back to it instead of showing empty review-local editors. */
+          <button
+            onClick={() => onOpenCampaign?.(campaignId)}
+            className="mt-4 w-full flex items-center justify-between gap-3 px-4 py-3 bg-surface border border-card-edge rounded-[12px] text-left hover:border-ink/30 transition-colors group/camplink"
+          >
+            <div>
+              <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em] mb-0.5">Brief &amp; seeding criteria</p>
+              <p className="text-[13px] text-body">
+                Managed on the campaign{campaignName ? <> · <span className="font-semibold text-ink">{campaignName}</span></> : ''} — edit them there so every session stays in sync.
+              </p>
+            </div>
+            <span className="flex items-center gap-1 text-[12px] font-medium text-ink flex-shrink-0 group-hover/camplink:text-accent transition-colors">
+              Open campaign <ArrowRight size={13} />
+            </span>
+          </button>
+        ) : (
+        <>
         <div className="mt-4 px-4 py-3 bg-surface border border-card-edge rounded-[12px] group/brief">
           <div className="flex items-center justify-between mb-1">
             <p className="text-[9.5px] font-mono text-faint uppercase tracking-[.14em]">Campaign brief</p>
@@ -899,6 +929,8 @@ export default function ReviewPage({ reviewId, onBack }) {
             <p className="text-[13px] text-body whitespace-pre-wrap">{criteria || <span className="text-faint italic">No criteria yet — describe what you're looking for so the AI can learn your taste</span>}</p>
           )}
         </div>
+        </>
+        )}
 
         {/* One DM draft per campaign — generated from the brief and reused for
             every approved account. Editable; never regenerates on its own. */}

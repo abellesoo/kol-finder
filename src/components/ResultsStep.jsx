@@ -11,6 +11,7 @@ import { fetchBatchStats, fetchThreadsProfileItems } from '../lib/apifyApi'
 import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
+import { assembleBrief } from '../lib/brief'
 import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluencers'
 import { updateSessionLiveStats, updateSessionAiScores, updateSessionTriage } from '../lib/sessionHistory'
 import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
@@ -401,6 +402,16 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
   const sessionIdRef = useRef(sessionId)
   useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
+  // The campaign stores its brief decomposed into structured fields (brand
+  // background, products, new product, collab format, brief notes) rather than a
+  // single campaignBrief string — so reassemble it here, with assembleBrief (the
+  // same tidy the campaign editor uses). Without this, both the AI scorer and the
+  // stored review row got an empty brief on every campaign run.
+  const campaignBriefText = useMemo(
+    () => assembleBrief(config || {}) || (config?.campaignBrief || ''),
+    [config],
+  )
+
   const [filterFlag, setFilterFlag] = useState('all')
   const [minScore, setMinScore] = useState(0)
   // Content-format filter — replaces the old Step-2 "require video" scoring
@@ -742,7 +753,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       const scoreMap = await fetchAiScores(
         candidates,
         {
-          campaignBrief: config?.campaignBrief || '',
+          campaignBrief: campaignBriefText,
           targetAudience: config?.targetAudience || '',
           criteria: config?.targetKeywords ? `In-niche signals to reward: ${config.targetKeywords}` : '',
           excludeNiches: config?.excludeKeywords || '',
@@ -820,7 +831,7 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
         .from('shared_results')
         .insert({
           campaign_id: campaignId || null,
-          campaign_brief: config?.campaignBrief || '',
+          campaign_brief: campaignBriefText,
           accounts: accountsToShare,
           review_state: {},
         })

@@ -551,6 +551,7 @@ function MainApp({ user, role, onSignOut }) {
           <ReviewPage
             reviewId={openReviewId}
             onBack={() => { setMode('review_queue'); setOpenReviewId(null) }}
+            onOpenCampaign={handleOpenCampaign}
           />
         )}
         {mode === 'ready_to_send' && <ReadyToSendPage />}

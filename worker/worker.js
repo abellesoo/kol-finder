@@ -424,6 +424,14 @@ async function verifyAuth(request, env) {
   if (!payload) {
     return json({ error: 'Invalid or expired token' }, 401, origin)
   }
+  // Mirror the DB's is_markato() gate: a validly-signed token is not enough —
+  // the caller must be a @markato.com user. Without this, any authenticated
+  // Supabase account (if the Google provider isn't domain-locked) could spend
+  // the paid Apify/DeepSeek keys and hit service_role writes that bypass RLS.
+  const email = String(payload.email || '').toLowerCase()
+  if (!email.endsWith('@markato.com')) {
+    return json({ error: 'Forbidden — not a @markato.com account' }, 403, origin)
+  }
   return null
 }
 

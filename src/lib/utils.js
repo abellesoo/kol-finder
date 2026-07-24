@@ -49,7 +49,12 @@ export function campaignMetrics(c) {
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
   const posted = counts.posted || 0
   const overdue = counts.overdue || 0
-  return { total, posted, overdue, fulfilled: total ? Math.round((posted / total) * 100) : 0 }
+  // Opted-out KOLs are dropped from the denominator so fulfilment reflects who
+  // could still post — matching CampaignDetailPage's header. Otherwise the card
+  // ring and the detail page disagree for any campaign with opt-outs.
+  const optedOut = counts.opted_out || 0
+  const eligible = total - optedOut
+  return { total, posted, overdue, optedOut, eligible, fulfilled: eligible > 0 ? Math.round((posted / eligible) * 100) : 0 }
 }
 
 // Group rows by their campaign (campaigns in listing order, only those with

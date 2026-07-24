@@ -84,17 +84,25 @@ export function aggregatePostItems(rows, brandName = '') {
     const posts = inf.posts
     const n = posts.length
 
-    // Engagement — hidden likes (likesCount === -1 / null) are EXCLUDED from the
-    // average, not counted as 0, so a few hidden posts don't deflate avgLikes.
+    // Engagement — hidden likes (likesCount === -1) and blank/absent cells
+    // (null from defval, or '') are EXCLUDED from the average, not counted as 0,
+    // so a few hidden posts don't deflate avgLikes. Number(null) === 0, so the
+    // null case must be rejected *before* coercion.
     const visibleLikePosts = posts.filter((p) => {
+      if (p.likesCount == null || p.likesCount === '') return false
       const v = Number(p.likesCount)
       return !isNaN(v) && v >= 0
     })
     const totalLikes = visibleLikePosts.reduce((s, p) => s + Number(p.likesCount), 0)
     const avgLikes = visibleLikePosts.length ? Math.round(totalLikes / visibleLikePosts.length) : 0
 
-    // Comments — likewise exclude hidden/negative counts (a -1 would subtract).
-    const visibleCommentPosts = posts.filter((p) => Number(p.commentsCount) >= 0)
+    // Comments — likewise exclude hidden/negative/blank counts (a -1 would
+    // subtract; a null would otherwise coerce to 0 and deflate the average).
+    const visibleCommentPosts = posts.filter((p) => {
+      if (p.commentsCount == null || p.commentsCount === '') return false
+      const v = Number(p.commentsCount)
+      return !isNaN(v) && v >= 0
+    })
     const totalComments = visibleCommentPosts.reduce((s, p) => s + Number(p.commentsCount), 0)
     const avgComments = visibleCommentPosts.length ? Math.round(totalComments / visibleCommentPosts.length) : 0
 
@@ -134,6 +142,7 @@ export function aggregatePostItems(rows, brandName = '') {
     // Export-derived median stats (no date filter; user controls period in Apify).
     // Hidden/invalid likes are EXCLUDED from the median rather than counted as 0.
     const xlsxLikeValues = posts
+      .filter((p) => p['likesCount'] != null && p['likesCount'] !== '')
       .map((p) => Number(p['likesCount']))
       .filter((v) => !isNaN(v) && v >= 0)
     const xlsxViewValues = posts.map(getVideoViews).filter((v) => v > 0)

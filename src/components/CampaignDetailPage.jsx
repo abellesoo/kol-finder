@@ -1219,7 +1219,7 @@ function NotesPanel({ notes, myId, currentName, onAdd, onDelete }) {
   }
 
   return (
-    <div className="max-w-[720px]">
+    <div>
       <h3 className="text-[14px] font-semibold text-ink">Notes</h3>
       <p className="text-[11.5px] text-faint mt-0.5 mb-4">
         Shared with everyone on the team. Anyone can add — entries are kept with who wrote them and when.
@@ -1784,7 +1784,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
 
   if (error && !campaign) {
     return (
-      <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
+      <div className="min-h-screen px-[48px] py-[40px]">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
           <ArrowLeft size={14} /> Back to campaigns
         </button>
@@ -1811,7 +1811,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const overBudget = budget != null && spent > budget
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px]">
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
         <ArrowLeft size={14} /> Back to campaigns
       </button>

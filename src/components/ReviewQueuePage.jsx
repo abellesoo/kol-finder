@@ -116,7 +116,7 @@ export default function ReviewQueuePage({ onOpenReview, onStartCampaign, userId 
   if (loading) return <Loading label="Loading review queue…" />
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px]">
       <PageHeader
         className="mb-8"
         label="Review Queue"

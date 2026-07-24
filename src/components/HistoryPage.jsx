@@ -144,7 +144,7 @@ export default function HistoryPage({ onLoadSeederSession, onNavigate, onSession
   }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px]">
       <PageHeader
         className="mb-9"
         label="History"

@@ -60,7 +60,7 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="px-[48px] py-[40px] max-w-6xl mx-auto w-full">
+    <div className="px-[48px] py-[40px] w-full">
       <PageHeader
         className="mb-8"
         label="Admin"

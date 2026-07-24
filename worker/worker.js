@@ -1219,10 +1219,11 @@ Include every candidate exactly once.`
       let prompt
       if (language === 'zh-HK') {
         prompt = `# 角色
-你係一位香港美妝品牌「${brandTxt}」嘅 Marketing，之前寄咗產品畀 KOL @${kolTxt} 做 seeding，但過咗約定嘅 post 死線都仲未見到帖文。而家要寫一個「溫柔提醒」嘅 Instagram DM follow-up。
+你係一位香港美妝／護膚品牌「${brandTxt}」嘅 Marketing，之前寄咗產品畀 KOL @${kolTxt} 做 seeding，但過咗約定嘅 post 時間都仲未見到帖文。而家要寫一條「溫柔提醒」嘅 Instagram DM。
 
 # 要求
-- 香港口語繁體中文（Cantonese）：我哋、嘅、收到未、方唔方便、啦、㗎。用「你」唔用「您」。English 只夾單字（feature、Feed、Reels、DM）。
+- 香港口語繁體中文（Cantonese）：我哋、嘅、收到未、方唔方便、啦、呀。用「你」唔用「您」。English 只夾單字（feature、Feed、Reels、DM）。
+- 可以用「Hi dear」或親切招呼開頭。
 - 語氣輕鬆、貼心、絕不施壓：先關心佢收到產品未、用得順唔順，再輕輕問幾時方便 feature 一下，畀足彈性。
 - 唔好催、唔好提「死線」「逾期」呢類字眼；營造朋友之間 follow-up 嘅感覺。
 - 全篇約 80–140 字，1–2 個暖 emoji（☺️／💕／🙏）。
@@ -1241,9 +1242,10 @@ Include every candidate exactly once.`
 # 只輸出 DM 內文，不要任何解釋、標題或 markdown 符號。`
       } else {
         prompt = `# Role
-You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted product to the KOL @${kolTxt} for a seeding collaboration, but the agreed posting date has passed and no post has appeared yet. Write a warm, low-pressure Instagram DM follow-up.
+You are the marketing lead for the beauty / skincare brand "${brandTxt}". You sent a gifted product to the KOL @${kolTxt} for a seeding collaboration, but the agreed posting date has passed and no post has appeared yet. Write a warm, low-pressure Instagram DM follow-up.
 
 # Requirements
+- You may open with "Hi dear" or a similarly warm greeting.
 - Friendly, caring, zero pressure: first check the product arrived and they're enjoying it, then gently ask whether they'd have a chance to feature it whenever convenient. Give them full flexibility.
 - Do NOT mention "deadline", "overdue", or chase them; make it feel like a friendly check-in.
 - 60–100 words, 1–2 warm emoji.
@@ -1273,24 +1275,43 @@ You are the marketing lead for the beauty brand "${brandTxt}". You sent a gifted
       if (!DEEPSEEK_KEY) return json({ error: 'DEEPSEEK_API_KEY not configured' }, 500, origin)
       const { campaignId, brief } = await request.json()
       if (!campaignId) return json({ error: 'campaignId required' }, 400, origin)
-      const prompt = `You write influencer product-seeding outreach DMs for a Hong Kong marketing team.
+      const prompt = `你係一位香港美妝／護膚品牌嘅 Marketing，負責寫 IG product-seeding（送禮合作）嘅 outreach DM。以下係今次 campaign 嘅 brief，你要照住入面嘅品牌、產品同賣點嚟寫。
 
 # Campaign brief
-${brief || '(no brief provided — write friendly generic gifting outreach)'}
+${brief || '(未有 brief — 就寫友善、通用嘅送禮 outreach)'}
 
-# Output
-Return ONLY valid JSON, no markdown, in exactly this shape:
-{"initial":{"en":"","zh":""},"reply":{"en":"","zh":""},"followup":{"en":"","zh":""}}
-- initial  = first cold outreach: warm intro, compliment their content, offer to gift the product, ask if they're open to a collab.
-- reply    = the message after the creator says yes: thank them, ask for mailing address, contact number, and IG handle so you can arrange the parcel.
-- followup = a gentle no-pressure nudge if there was no reply.
-- "en" = natural, friendly English. "zh" = Hong Kong-style Traditional Chinese with a natural spoken Cantonese tone (口語化), light emoji ok.
-- Keep each message 2-4 sentences. Use {name} for the creator and {product} for the product where it reads naturally. No markdown, no labels inside the text.`
+# 你要寫三條 DM（每條都要 en + zh 兩個版本）
+- initial  = 第一封 cold outreach：親切打招呼、自我介紹（品牌 Marketing）、一兩句介紹品牌背景同新品、講吓產品主打賣點、提出想送產品畀佢體驗、問吓佢有無興趣 feature（Feed／Reels 都得）。可以用【產品名】做小標題，再用 ✨ 列 1–2 個賣點。呢條可以長啲、有細節。
+- reply    = 對方答應之後嘅跟進：多謝佢、話會盡快安排寄出，順便問攞郵寄地址、聯絡電話同 IG handle 方便安排包裹。2–4 句。
+- followup = 如果無回覆，一條輕鬆、零壓力嘅溫柔提醒。2–3 句。
+
+# 語氣同寫法（好緊要）
+- "zh" 要用香港口語繁體中文（廣東話 flavour）：我哋、嘅、你（唔好用「您」）、想睇下、有無興趣、方唔方便。English 只夾常用單字（Marketing、feature、Feed、Reels、DM，或成分／產品名），唔好成句英文。
+- 語尾助詞每句最多一個，用得自然：啦、喇、呀、~。唔好堆砌。
+- 溫暖、貼心、絕不施壓；似朋友傾偈，唔好似 hard sell。
+- 每段 1–2 個暖 emoji（☺️💕✨💊💧🙏 之類），唔好每句都有。
+- 只可以用 brief 入面提到嘅事實同賣點，唔好自己作數字、成分或功效；唔好用「最」「唯一」「保證」呢類絕對字眼。
+- "en" = 自然、friendly 嘅英文，同 zh 傳達一樣嘅意思（唔係逐字翻譯）。
+- 用 {name} 代表創作者、{product} 代表產品（喺讀得順嘅位先用）。文字入面唔好有 markdown、標籤或解釋。
+
+# 語氣參考（只係示範 tone，唔好照抄下面嘅品牌／產品）
+"""
+Hi dear，你好呀！我係[品牌]嘅 Marketing~
+[品牌背景一句]全新[產品／系列]登陸[通路]喇～主打[主要賣點]！想寄畀你體驗一下，睇下有無興趣 feature 下～（Feed／Reels 都得！）
+【[產品名]✨】
+✨[賣點一]
+✨[賣點二]
+有興趣嘅話，我哋會盡快安排寄出畀你體驗☺️💕
+"""
+
+# 輸出
+只輸出 valid JSON，唔好 markdown，格式一定要係：
+{"initial":{"en":"","zh":""},"reply":{"en":"","zh":""},"followup":{"en":"","zh":""}}`
       try {
         const res = await fetch(DEEPSEEK_API, {
           method: 'POST',
           headers: { Authorization: `Bearer ${DEEPSEEK_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: DEEPSEEK_MODEL, max_tokens: 1200, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
+          body: JSON.stringify({ model: DEEPSEEK_MODEL, max_tokens: 1600, response_format: { type: 'json_object' }, messages: [{ role: 'user', content: prompt }] }),
         })
         if (!res.ok) return json({ error: `DeepSeek error ${res.status}: ${await res.text()}` }, 502, origin)
         const content = (await res.json()).choices?.[0]?.message?.content?.trim() || '{}'

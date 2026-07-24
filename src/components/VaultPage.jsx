@@ -289,7 +289,7 @@ export default function VaultPage({ onNavigate }) {
   }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
       <PageHeader
         className="mb-8"
         label="Creator Vault"

@@ -1784,7 +1784,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
 
   if (error && !campaign) {
     return (
-      <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
+      <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
           <ArrowLeft size={14} /> Back to campaigns
         </button>
@@ -1811,7 +1811,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const overBudget = budget != null && spent > budget
 
   return (
-    <div className={`min-h-screen px-[48px] py-[40px] mx-auto transition-[max-width] ${tab === 'kols' && view === 'table' ? 'max-w-6xl' : 'max-w-3xl'}`}>
+    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
       <button onClick={onBack} className="flex items-center gap-1.5 text-[13px] text-muted hover:text-ink transition-colors mb-6">
         <ArrowLeft size={14} /> Back to campaigns
       </button>

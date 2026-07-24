@@ -184,7 +184,7 @@ export default function ReadyToSendPage() {
   }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-3xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
       <PageHeader
         className="mb-8"
         label="Ready to Send"

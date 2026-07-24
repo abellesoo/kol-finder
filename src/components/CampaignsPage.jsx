@@ -465,7 +465,7 @@ export default function CampaignsPage({ onOpenCampaign, seed, onSeedConsumed, on
   }
 
   return (
-    <div className="min-h-screen px-[48px] py-[40px] max-w-5xl mx-auto">
+    <div className="min-h-screen px-[48px] py-[40px] max-w-6xl mx-auto">
       <PageHeader
         className="mb-6"
         label="Campaigns"

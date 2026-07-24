@@ -1336,11 +1336,9 @@ function StatRibbon({ total, posted, overdue, fulfillment, spent, budget, budget
       <StatCell k="Posted">
         <span className="text-[22px] font-semibold text-sage leading-none tabular-nums">{posted}</span>
       </StatCell>
-      {overdue > 0 && (
-        <StatCell k="Overdue">
-          <span className="text-[22px] font-semibold text-rose leading-none tabular-nums">{overdue}</span>
-        </StatCell>
-      )}
+      <StatCell k="Overdue">
+        <span className={`text-[22px] font-semibold leading-none tabular-nums ${overdue > 0 ? 'text-rose' : 'text-ink'}`}>{overdue}</span>
+      </StatCell>
       <StatCell k="Fulfilled">
         <span className="text-[22px] font-semibold text-ink leading-none tabular-nums">{fulfillment}</span>
         <span className="text-[12px] text-faint">%</span>
@@ -1871,14 +1869,12 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
         </div>
       </div>
 
-      {total > 0 && (
-        <div className="mb-6">
-          <StatRibbon
-            total={total} posted={posted} overdue={overdue} fulfillment={fulfillment}
-            spent={spent} budget={budget} budgetUsed={budgetUsed} overBudget={overBudget} targetKols={targetKols}
-          />
-        </div>
-      )}
+      <div className="mb-6">
+        <StatRibbon
+          total={total} posted={posted} overdue={overdue} fulfillment={fulfillment}
+          spent={spent} budget={budget} budgetUsed={budgetUsed} overBudget={overBudget} targetKols={targetKols}
+        />
+      </div>
 
       {error && (
         <div className="mb-6 px-4 py-3 bg-rose/5 border border-rose/20 rounded-[12px] text-[12px] text-rose">{error}</div>

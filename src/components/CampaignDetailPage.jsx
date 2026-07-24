@@ -19,6 +19,7 @@ import {
 import { listSessionsForCampaign } from '../lib/sessionHistory'
 import { BRAND_CATALOG } from '../lib/brandCatalog'
 import AssigneePicker from './core/AssigneePicker'
+import ImportKolsModal from './ImportKolsModal'
 import { assembleBrief, briefToFields } from '../lib/brief'
 import { runVerification, draftNudge, syncCampaignSheet, parseBrief, generateDmMessages } from '../lib/apifyApi'
 import { exportSfBulkXlsx, getSfSender, saveSfSender, sfSenderComplete } from '../lib/sfBulk'
@@ -1450,6 +1451,7 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
   const [postsByKol, setPostsByKol] = useState({})
   const [nudgesByKol, setNudgesByKol] = useState({})
   const [showAttach, setShowAttach] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [sheetBusy, setSheetBusy] = useState(false)
   const [sfBusy, setSfBusy] = useState(false)
@@ -1861,6 +1863,10 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
             className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all whitespace-nowrap">
             <UserPlus size={14} /> Attach KOLs
           </button>
+          <button onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-mist text-ink rounded-[10px] text-[13px] hover:bg-surface transition-all whitespace-nowrap">
+            <FileSpreadsheet size={14} /> From spreadsheet
+          </button>
           <HeaderMenu
             campaign={campaign} total={total}
             verifying={verifying} sheetBusy={sheetBusy} sfBusy={sfBusy}
@@ -1906,11 +1912,17 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
         <div className="flex flex-col items-center py-20">
           <UserPlus size={30} className="text-faint mb-4" />
           <h2 className="text-[16px] font-semibold text-ink mb-2">No KOLs attached yet</h2>
-          <p className="text-[13px] text-muted text-center mb-5">Attach approved KOLs from the Review Queue to start tracking them.</p>
-          <button onClick={() => setShowAttach(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
-            <UserPlus size={14} /> Attach KOLs
-          </button>
+          <p className="text-[13px] text-muted text-center mb-5">Attach approved KOLs from the Review Queue, or import a creator list from a spreadsheet.</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowAttach(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-ink text-white rounded-[10px] text-[13px] hover:bg-ink/80 transition-all">
+              <UserPlus size={14} /> Attach KOLs
+            </button>
+            <button onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-mist text-ink rounded-[10px] text-[13px] hover:bg-surface transition-all">
+              <FileSpreadsheet size={14} /> From spreadsheet
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -1969,6 +1981,21 @@ export default function CampaignDetailPage({ campaignId, onBack, onOpenSession, 
           onAttached={(n) => {
             setShowAttach(false)
             setToast({ type: 'success', message: n > 0 ? `${n} KOL${n === 1 ? '' : 's'} attached` : 'No new KOLs to attach' })
+            load()
+          }}
+        />
+      )}
+
+      {showImport && (
+        <ImportKolsModal
+          campaignId={campaignId}
+          campaignName={campaign.name}
+          existingHandles={existingHandles}
+          onClose={() => setShowImport(false)}
+          onImported={(result) => {
+            setShowImport(false)
+            const n = result?.kols || 0
+            setToast({ type: 'success', message: n > 0 ? `${n} creator${n === 1 ? '' : 's'} added` : 'No new creators to add' })
             load()
           }}
         />

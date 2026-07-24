@@ -624,6 +624,22 @@ function buildPreserveMap(existing, tab, headerRow) {
   return map
 }
 
+// Reset the managed cell formatting (bold, fills, borders, number formats) on a
+// tab's whole data block before re-writing it. buildTabFormatRequests only adds
+// formatting to the rows it knows about, so without this a row that used to be a
+// section header keeps its bold/border/currency styling once the section shifts.
+// Runs before the value write so USER_ENTERED can re-establish per-cell formats
+// (e.g. a section total's "$0.00") cleanly. Skips columns 0..w only; conditional
+// formats and data validation live elsewhere and are untouched.
+function buildClearFormatRequests(gid, firstDataRow, rowCount, w) {
+  if (!rowCount || rowCount <= firstDataRow) return []
+  const range = { sheetId: gid, startRowIndex: firstDataRow, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: w }
+  return [
+    { repeatCell: { range, cell: {}, fields: 'userEnteredFormat.textFormat.bold,userEnteredFormat.backgroundColor,userEnteredFormat.numberFormat' } },
+    { updateBorders: { range, top: { style: 'NONE' }, bottom: { style: 'NONE' }, innerHorizontal: { style: 'NONE' } } },
+  ]
+}
+
 // All the presentation requests for one tab (header, dropdowns, colour rules,
 // dates, green block, section separators, black bar). Column ranges leave the
 // bottom open so manually added rows inherit dropdowns/formats.
@@ -708,7 +724,7 @@ function buildTabFormatRequests(tab, gid, headerRow, firstDataRow, existingCfCou
 async function writeCampaignWorkbook(token, sheetId, workbook, created) {
   const tabs = workbook.tabs || []
   const desired = tabs.map((t) => t.name)
-  const CF_FIELDS = 'properties.title,sheets(properties(sheetId,title),conditionalFormats)'
+  const CF_FIELDS = 'properties.title,sheets(properties(sheetId,title,gridProperties.rowCount),conditionalFormats)'
 
   // 1. Ensure every desired tab exists (reuse a stray default, else add).
   let meta = await getSpreadsheet(token, sheetId, CF_FIELDS)
@@ -737,6 +753,7 @@ async function writeCampaignWorkbook(token, sheetId, workbook, created) {
 
   // 3. Per-tab: preserve manual cells, write values, format.
   const cfByGid = new Map((meta.sheets || []).map((s) => [s.properties.sheetId, (s.conditionalFormats || []).length]))
+  const rowCountByGid = new Map((meta.sheets || []).map((s) => [s.properties.sheetId, s.properties.gridProperties?.rowCount || 0]))
   for (const tab of tabs) {
     const gid = titles.get(tab.name)
     const hasBar = !!tab.blackBarTop
@@ -755,13 +772,24 @@ async function writeCampaignWorkbook(token, sheetId, workbook, created) {
     ;(tab.rows || []).forEach((r, ri) => {
       const row = padRow(r, w)
       if (preserved && !(tab.sectionRows || []).includes(ri)) {
-        const prev = (tab.keyCol != null && preserved.get(String(row[tab.keyCol]))) || preserved.get(`#${ri}`)
+        // Match manual cells by key (a stable handle/name). Only fall back to
+        // row position for genuinely keyless rows — a positional match on a
+        // keyed row resurrects a previous layout's cells (e.g. an old section
+        // total's "$0.00") after the list grows/shrinks and rows shift under it.
+        const key = tab.keyCol != null ? String(row[tab.keyCol] ?? '') : ''
+        const prev = (key && preserved.get(key)) || (!key && preserved.get(`#${ri}`)) || null
         if (prev) for (const mc of tab.manualCols) if (prev[mc] != null && prev[mc] !== '') row[mc] = prev[mc]
       }
       grid.push(row)
     })
 
     await valuesClear(token, sheetId, `${qtab(tab.name)}!A1:ZZ100000`)
+    // Wipe stale formatting from the prior (differently-sized) layout before the
+    // value write, so shifted rows don't keep a former section header's styling.
+    if (!created) {
+      const clearReqs = buildClearFormatRequests(gid, firstDataRow, rowCountByGid.get(gid) || 0, w)
+      if (clearReqs.length) await sheetsBatchUpdate(token, sheetId, clearReqs)
+    }
     await valuesUpdate(token, sheetId, `${qtab(tab.name)}!A1`, grid)
     await sheetsBatchUpdate(token, sheetId, buildTabFormatRequests(tab, gid, headerRow, firstDataRow, cfByGid.get(gid) || 0))
   }

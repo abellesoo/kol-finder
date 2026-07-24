@@ -12,7 +12,7 @@ import { buildThreadsEnrichment } from '../lib/parseXlsx'
 import { profileUrl } from '../lib/platforms'
 import { fetchAiScores } from '../lib/aiScoring'
 import { computeLiveEngagementScore, computeOverall } from '../lib/scoreInfluencers'
-import { updateSessionLiveStats } from '../lib/sessionHistory'
+import { updateSessionLiveStats, updateSessionAiScores } from '../lib/sessionHistory'
 import { vaultKey, vaultedKeySet, saveToVault, removeFromVaultByHandle } from '../lib/vault'
 import { supabase } from '../lib/supabase'
 import { clickableRow } from '../lib/utils'
@@ -712,6 +712,9 @@ export default function ResultsStep({ results, influencers, config, sessionId, c
       const failed = scoreMap._failed || []
       setAiError(failed.length ? `${failed.length} account(s) couldn't be scored — others updated. Click Re-score to retry.` : null)
       setAiStatus('done')
+      // Persist onto the session so the scores survive a reload. Fire-and-forget,
+      // same as the live-stats write above — the in-memory state is already set.
+      updateSessionAiScores(sessionIdRef.current, scoreMap).catch(console.error)
     } catch (err) {
       setAiError(err.message)
       setAiStatus('error')

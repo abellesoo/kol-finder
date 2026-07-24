@@ -65,6 +65,25 @@ export async function updateSessionLiveStats(id, statsMap, platform = null) {
   await supabase.from('sessions').update({ results }).eq('id', id)
 }
 
+// Persist AI fit scores back onto the session's results so they survive a
+// reload — the counterpart to updateSessionLiveStats. Without this the scores
+// live only in the browser tab and vanish when the session is reopened.
+// scoreMap is keyed by `${platform}:${username}` (the rowKey the UI seeds from),
+// each entry { score, reason }. Non-atomic read-modify-write: last writer wins
+// if two people re-score the same session at once.
+export async function updateSessionAiScores(id, scoreMap) {
+  if (!supabase || !id || !scoreMap) return
+  const { data } = await supabase.from('sessions').select('results').eq('id', id).single()
+  if (!data) return
+  const rowKey = (r) => `${r.platform || 'instagram'}:${r.username}`
+  const results = (data.results || []).map((r) => {
+    const s = scoreMap[rowKey(r)]
+    if (!s) return r
+    return { ...r, aiScore: s.score ?? r.aiScore ?? null, aiReason: s.reason ?? r.aiReason ?? '' }
+  })
+  await supabase.from('sessions').update({ results }).eq('id', id)
+}
+
 export async function loadHistory() {
   if (supabase) {
     const { data, error } = await supabase
